@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using VDRIVE.Structures;
+﻿using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Contracts
 {
