@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.34916.146
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VDRIVE", "VDRIVE\VDRIVE.csproj", "{3FB69295-03E7-4DA3-A85A-F2218046AE77}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VDRIVE_Contracts", "VDRIVE_Contracts\VDRIVE_Contracts.csproj", "{34EC831F-6652-4AF1-8E40-01F3934A15DC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3FB69295-03E7-4DA3-A85A-F2218046AE77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3FB69295-03E7-4DA3-A85A-F2218046AE77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3FB69295-03E7-4DA3-A85A-F2218046AE77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3FB69295-03E7-4DA3-A85A-F2218046AE77}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34EC831F-6652-4AF1-8E40-01F3934A15DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34EC831F-6652-4AF1-8E40-01F3934A15DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34EC831F-6652-4AF1-8E40-01F3934A15DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34EC831F-6652-4AF1-8E40-01F3934A15DC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {732B4416-307C-4AD4-9D07-FB62A04D0B48}
+	EndGlobalSection
+EndGlobal
