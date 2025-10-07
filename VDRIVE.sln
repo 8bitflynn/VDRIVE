@@ -7,16 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VDRIVE", "VDRIVE\VDRIVE.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VDRIVE_Contracts", "VDRIVE_Contracts\VDRIVE_Contracts.csproj", "{34EC831F-6652-4AF1-8E40-01F3934A15DC}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Firmware", "Firmware", "{DD008EFE-71A3-476F-B62E-6BE2F805B8D5}"
-	ProjectSection(SolutionItems) = preProject
-		VDRIVE\Firmware\ESP8266_Firmware.ino = VDRIVE\Firmware\ESP8266_Firmware.ino
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Assembly", "Assembly", "{2751E941-4A01-4BE7-B0D2-3D1E8C568999}"
-	ProjectSection(SolutionItems) = preProject
-		VDRIVE\Assembly\vdrive.asm = VDRIVE\Assembly\vdrive.asm
-	EndProjectSection
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
