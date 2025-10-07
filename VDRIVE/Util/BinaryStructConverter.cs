@@ -11,7 +11,6 @@ namespace VDRIVE.Util
             {
                 int size = Marshal.SizeOf(typeof(T));
                 ptr = Marshal.AllocHGlobal(size);
-                //Marshal.Copy(ptr, bytes, 0, size);
                 Marshal.Copy(bytes, 0, ptr, size);
 
                 object obj = Marshal.PtrToStructure(ptr, typeof(T));

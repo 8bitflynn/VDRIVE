@@ -19,7 +19,7 @@ namespace VDRIVE
             byte[] data = new byte[1];
             if (!networkStream.DataAvailable)
             {
-                Thread.Sleep(50); // avoid tight loop
+                Thread.Sleep(10); // avoid tight loop
                 return;
             }
 
@@ -31,7 +31,7 @@ namespace VDRIVE
 
                 switch (data[0])
                 {
-                    case 0x01:
+                    case 0x01: // LOAD
                         {
                             int size = Marshal.SizeOf<LoadRequest>();
 
@@ -49,7 +49,7 @@ namespace VDRIVE
                         }
                         break;
 
-                    case 0x02:
+                    case 0x02: // SAVE
                         {
                             int size = Marshal.SizeOf<SaveRequest>();
 
@@ -68,15 +68,15 @@ namespace VDRIVE
                         }
                         break;
 
-                    case 0x03:
+                    case 0x03: // MOUNT
                         {
-                            // MOUNT image
+                           
                         }
                         break;
 
-                    case 0x04:
+                    case 0x04: // UNMOUNT
                         {
-                            // UNMOUNT image
+                            
                         }
                         break;
                 }
