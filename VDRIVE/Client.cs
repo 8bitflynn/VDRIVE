@@ -5,19 +5,29 @@ namespace VDRIVE
 {
     public class Client : VDriveBase, IClient
     {
-        public Client(string d64Path)
+        public Client(string imagePath, string ipAddress, int port)
         {
-            this.ImagePath = d64Path;
+            this.ImagePath = imagePath;
+            this.IPAddress = ipAddress;
+            this.Port = port;
         }
+        private readonly string IPAddress;
+        private readonly int Port;
+
         public void Start()
         {
-            if (!File.Exists(ImagePath))
+            if (!File.Exists(this.ImagePath))
             {
-                throw new Exception("D64 path bad Ryan!");
+                throw new Exception("Invalid image path!");
             }
 
-            int port = 80;
-            using (TcpClient tcpClient = new TcpClient("192.168.1.38", port))
+            if (string.IsNullOrEmpty(this.IPAddress))
+            {
+                throw new Exception("Invalid IP address!");
+            }
+
+            
+            using (TcpClient tcpClient = new TcpClient(this.IPAddress, this.Port))
             {
                 tcpClient.NoDelay = true;
                 NetworkStream networkStream = tcpClient.GetStream();

@@ -35,7 +35,7 @@ namespace VDRIVE
                 {
                     if (addr.Address.AddressFamily == AddressFamily.InterNetwork &&
                         !IPAddress.IsLoopback(addr.Address) &&
-                        !addr.Address.IsIPv6LinkLocal) // irrelevant for IPv4 but safe
+                        !addr.Address.IsIPv6LinkLocal)
                     {
                         return addr.Address;
                     }
@@ -74,7 +74,6 @@ namespace VDRIVE
             using (tcpClient)
             using (NetworkStream networkStream = tcpClient.GetStream())
             {
-
                 while (tcpClient.Connected)
                 {
                     this.HandleClient(tcpClient, networkStream);
