@@ -57,7 +57,8 @@ namespace VDRIVE
         {
             TcpListener listener = new TcpListener(this.ListenAddress, Port);
             listener.Start();
-            Console.WriteLine($"Listening on {this.ListenAddress}:{Port}");
+
+            this.Logger.LogMessage($"Listening on {this.ListenAddress}:{Port}");
 
             while (true)
             {
@@ -70,7 +71,9 @@ namespace VDRIVE
         private void HandleClient(TcpClient tcpClient)
         {
             string ip = tcpClient.Client.RemoteEndPoint.ToString();
-            Console.WriteLine($"Client connected: {ip}");
+
+            this.Logger.LogMessage($"Client connected: {ip}");
+            
             using (tcpClient)
             using (NetworkStream networkStream = tcpClient.GetStream())
             {

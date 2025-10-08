@@ -25,8 +25,7 @@ namespace VDRIVE
 
             // firmware is setup as client by default so run this in server mode
             // should allow multiple C64 connections to same disk image but
-            // might need to put some locks in place and I have yet to test
-            // with multiple C64s (should be fun!)
+            // might need to put some locks in place for anything shared access
             Server server = new Server(configuration, floppyResolver, loader, saver, logger);
             server.Start();
 

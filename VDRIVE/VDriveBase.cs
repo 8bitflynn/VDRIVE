@@ -8,8 +8,6 @@ namespace VDRIVE
 {
     public abstract class VDriveBase
     {
-        //protected string C1541Path = "";
-
         protected IConfiguration Configuration;
         protected IFloppyResolver FloppyResolver;
         protected ILoad Loader;
@@ -46,7 +44,7 @@ namespace VDRIVE
                             LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);                       
                             LoadResponse loadResponse = this.Loader.Load(loadRequest, this.FloppyResolver.GetInsertedFloppyPath(), out byte[] payload);
 
-                            this.SendData(tcpClient, networkStream, loadRequest, loadResponse, payload, this.PrintProgress);
+                            this.SendData(tcpClient, networkStream, loadRequest, loadResponse, payload);
                         }
                         break;
 
@@ -62,21 +60,22 @@ namespace VDRIVE
                             SaveRequest saveRequest = BinaryStructConverter.FromByteArray<SaveRequest>(buffer);
 
                             // recv data
-                            byte[] payload = this.ReceiveData(networkStream, saveRequest, this.PrintProgress);
+                            byte[] payload = this.ReceiveData(networkStream, saveRequest);
 
                             this.Saver.Save(saveRequest, this.FloppyResolver.GetInsertedFloppyPath(), payload);                           
                         }
                         break;
 
-                    case 0x03: // MOUNT
-                        {                            
+                    case 0x03: // MOUNT floppy image
+                        {    
+                            // TODO: read path from C64
                             this.FloppyResolver.InsertFloppyByPath("");                           
                         }
                         break;
 
-                    case 0x04: // UNMOUNT
+                    case 0x04: // UNMOUNT floppy image
                         {
-                            
+                            this.FloppyResolver.EjectFloppy();
                         }
                         break;
                 }
@@ -97,11 +96,6 @@ namespace VDRIVE
             return true;
         }        
        
-        protected void PrintProgress(int bytesSent, int totalBytes, int batchesSent, int totalBatches)
-        {
-            Console.WriteLine($"{bytesSent} of {totalBytes} chunk {batchesSent} of {totalBatches}");
-        }
-
         protected byte[] ReceiveData(NetworkStream networkStream, SaveRequest saveRequest, Action<int, int, int, int> progressCallback = null)
         {
             ushort byteCount = (ushort)((saveRequest.ByteCountHi << 8) + saveRequest.ByteCountLo);
@@ -130,8 +124,7 @@ namespace VDRIVE
             }
         }
 
-        protected void SendData(TcpClient tcpClient, NetworkStream networkStream,
-            LoadRequest loadRequest, LoadResponse loadResponse, byte[] payload, Action<int, int, int, int> progressCallback = null)
+        protected void SendData(TcpClient tcpClient, NetworkStream networkStream, LoadRequest loadRequest, LoadResponse loadResponse, byte[] payload)
         {
             DateTime start = DateTime.Now;
             byte[] sendBuffer = new byte[1];
@@ -152,15 +145,15 @@ namespace VDRIVE
                 return;
             }
 
-            this.SendChunks(tcpClient, networkStream, payload, progressCallback, chunkSize);
+            this.SendChunks(tcpClient, networkStream, payload, chunkSize);
 
             DateTime end = DateTime.Now;
-            Console.WriteLine($"TimeTook:{(end - start).TotalMilliseconds / 1000} BytesPerSec:{payload.Length / (end - start).TotalMilliseconds * 1000}");
+            this.Logger.LogMessage($"TimeTook:{(end - start).TotalMilliseconds / 1000} BytesPerSec:{payload.Length / (end - start).TotalMilliseconds * 1000}");
 
             networkStream.Flush();
         }
 
-        private void SendChunks(TcpClient tcpClient, NetworkStream networkStream, byte[] payload, Action<int, int, int, int> progressCallback, short chunkSize)
+        private void SendChunks(TcpClient tcpClient, NetworkStream networkStream, byte[] payload, short chunkSize)
         {
             IList<List<byte>> chunks = payload.ToList().BuildChunks(chunkSize).ToList();
             // stripping the first 2 bytes on first batch sent in header
@@ -168,20 +161,17 @@ namespace VDRIVE
 
             int numOfChunks = chunks.Count();
 
-            int byteSent = 2; // account for mem header
+            int bytesSent = 2; // account for mem header
 
             for (int chunkIndex = 0; chunkIndex < numOfChunks; chunkIndex++)
             {
                 List<byte> chunk = chunks[chunkIndex];
 
-                if (progressCallback != null)
-                {
-                    progressCallback(byteSent, chunk.Count + byteSent, chunkIndex + 1, chunks.Count);
-                }
+                this.Logger.LogMessage($"{bytesSent} of {chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
 
                 networkStream.Write(chunk.ToArray(), 0, chunk.Count);
 
-                byteSent += chunk.Count;
+                bytesSent += chunk.Count;
                 networkStream.FlushAsync();
 
                 if (chunkIndex + 1 == numOfChunks)
@@ -203,7 +193,7 @@ namespace VDRIVE
                 }
                 else if (chunkRequest.Operation == 0x03)
                 {
-                    Console.WriteLine("Canceling send");
+                    this.Logger.LogMessage("Canceling send");
                     return; // cancel this send
                 }
             }
