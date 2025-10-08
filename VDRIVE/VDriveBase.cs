@@ -1,6 +1,5 @@
 ﻿using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using VDRIVE.Drives.Vice;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
@@ -9,9 +8,13 @@ namespace VDRIVE
 {
     public abstract class VDriveBase
     {
-        protected string c1541Path = @"C:\Programming\WinVICE-2.4-x64\c1541.exe"; // TODO: add to config and check if new Vice version works same as old...      
+        //protected string C1541Path = "";
 
-        protected string ImagePath;
+        protected IConfiguration Configuration;
+        protected IFloppyResolver FloppyResolver;
+        protected ILoad Loader;
+        protected ISave Saver;
+        protected ILog Logger;
 
         protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream)
         {
@@ -40,10 +43,8 @@ namespace VDRIVE
 
                             this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
 
-                            LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
-
-                            ILoad loader = new ViceLoad(this.c1541Path); // instance should be injected
-                            LoadResponse loadResponse = loader.Load(loadRequest, this.ImagePath, out byte[] payload);
+                            LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);                       
+                            LoadResponse loadResponse = this.Loader.Load(loadRequest, this.FloppyResolver.GetInsertedFloppyPath(), out byte[] payload);
 
                             this.SendData(tcpClient, networkStream, loadRequest, loadResponse, payload, this.PrintProgress);
                         }
@@ -63,14 +64,13 @@ namespace VDRIVE
                             // recv data
                             byte[] payload = this.ReceiveData(networkStream, saveRequest, this.PrintProgress);
 
-                            ISave saver = new ViceSave(this.c1541Path); // instance should be injected
-                            saver.Save(saveRequest, this.ImagePath, payload);                           
+                            this.Saver.Save(saveRequest, this.FloppyResolver.GetInsertedFloppyPath(), payload);                           
                         }
                         break;
 
                     case 0x03: // MOUNT
-                        {
-                           
+                        {                            
+                            this.FloppyResolver.InsertFloppyByPath("");                           
                         }
                         break;
 
@@ -111,11 +111,12 @@ namespace VDRIVE
             {
                 if (!networkStream.DataAvailable)
                 {
-                    Thread.Sleep(50);
+                    Thread.Sleep(10);
                     continue;
                 }
-                Int32 bytes = networkStream.Read(data, 0, 1);
 
+                // sync byte
+                Int32 bytes = networkStream.Read(data, 0, 1);
                 if (bytes == 1 && data[0] == 0x2b)
                 {
                     byte[] buffer = new byte[byteCount];

@@ -7,11 +7,16 @@ namespace VDRIVE
 {
     public class Server : VDriveBase, IServer
     {
-        public Server(string imagePath, string listenIp = null, int port = 6510)
+        public Server(IConfiguration configuation, IFloppyResolver floppyResolver, ILoad loader, ISave saver, 
+            ILog logger, string listenIp = null, int port = 6510)
         {
-            this.ImagePath = imagePath;
-            this.Port = port;
+            this.Configuration = configuation;
+            this.FloppyResolver = floppyResolver;
+            this.Loader = loader;
+            this.Saver = saver;
+            this.Logger = logger;
 
+            this.Port = port;
             if (!string.IsNullOrWhiteSpace(listenIp))
             {
                 this.ListenAddress = IPAddress.Parse(listenIp);
@@ -50,12 +55,7 @@ namespace VDRIVE
 
         public void Start()
         {
-            if (!File.Exists(ImagePath))
-            {
-                throw new Exception("D64 path bad!");
-            }
-
-            var listener = new TcpListener(this.ListenAddress, Port);
+            TcpListener listener = new TcpListener(this.ListenAddress, Port);
             listener.Start();
             Console.WriteLine($"Listening on {this.ListenAddress}:{Port}");
 

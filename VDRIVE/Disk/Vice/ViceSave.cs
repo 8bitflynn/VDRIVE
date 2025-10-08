@@ -2,16 +2,16 @@
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Drives.Vice
+namespace VDRIVE.Disk.Vice
 {
     public class ViceSave : ISave
     {
         public ViceSave(string c1541Path, string tempPath = "")
         {
-            C1541Path = c1541Path;
+            this.C1541Path = c1541Path;
             if (string.IsNullOrEmpty(tempPath))
             {
-                TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                this.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             }
         }
         private readonly string C1541Path;
@@ -27,11 +27,11 @@ namespace VDRIVE.Drives.Vice
             destPtrFileData[1] = saveRequest.TargetAddressHi;
             payload.CopyTo(destPtrFileData, 2);
 
-            if (!Directory.Exists(TempPath))
-                Directory.CreateDirectory(TempPath);
+            if (!Directory.Exists(this.TempPath))
+                Directory.CreateDirectory(this.TempPath);
 
             string safeName = new string(saveRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
-            string tempPrgPath = Path.Combine(TempPath, safeName);
+            string tempPrgPath = Path.Combine(this.TempPath, safeName);
 
             File.WriteAllBytes(tempPrgPath, destPtrFileData);
 
@@ -58,12 +58,12 @@ namespace VDRIVE.Drives.Vice
             if (success)
             {
                 // TODO: parse errors and return if needed
-                Console.WriteLine($"File written to D64: {safeName}");
+                Console.WriteLine($"File written to Image: {safeName}");
                 File.Delete(tempPrgPath); // cleanup temp file
             }
             else
             {
-                Console.WriteLine($"ERROR: Failed to write {safeName} to D64.");
+                Console.WriteLine($"ERROR: Failed to write {safeName} to Image.");
             }
 
             return saveResponse;

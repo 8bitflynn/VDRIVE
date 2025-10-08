@@ -2,7 +2,7 @@
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Drives.Vice
+namespace VDRIVE.Disk.Vice
 {
     public class ViceLoad : ILoad
     {
@@ -67,23 +67,18 @@ namespace VDRIVE.Drives.Vice
 
         protected byte[] LoadFile(LoadRequest loadRequest, string imagePath, out byte responseCode)
         {
-            // ensure temp directory exists
             if (!Directory.Exists(TempPath))
                 Directory.CreateDirectory(TempPath);
 
-            // name our output PRG after the requested file
-            // (strip illegal chars if needed)
             string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
             string outPrgPath = Path.Combine(TempPath, safeName);
 
-            // delete any stale file
             if (File.Exists(outPrgPath))
                 File.Delete(outPrgPath);
 
             string fileSpec = $"@8:{safeName}";
 
-            // ─── invoke c1541 to read/extract the file ────────────────────────────
-            //    c1541 <disk.d64> -read "<filename>" "<output.prg>"
+            // execute c1541 to extract the file
             var psi = new ProcessStartInfo
             {
                 FileName = C1541Path,
@@ -101,7 +96,7 @@ namespace VDRIVE.Drives.Vice
 
                 if (!c1541Out.StartsWith("Reading file"))
                 {
-                    // TODO: map real codes from c1541.exe
+                    // TODO: map real codes from c1541.exe as they appear to be different?
                     responseCode = 0x04; // file not found
                     return null;
                 }
@@ -124,10 +119,12 @@ namespace VDRIVE.Drives.Vice
 
         protected byte[] LoadDirectory(LoadRequest loadRequest, string imagePath)
         {
+            // TODO: PRG does not need to be written to disk, just return byte array
+            // but its great for debugging so need to make it configurable
             string dirPrgPath = Path.Combine(TempPath, "dir.prg");
 
             // Ensure temp directory exists
-            if (!Directory.Exists(TempPath))
+            if (!Directory.Exists(this.TempPath))
             {
                 Directory.CreateDirectory(TempPath);
             }
@@ -137,11 +134,11 @@ namespace VDRIVE.Drives.Vice
                 File.Delete(dirPrgPath);
             }
 
-            // ─── DROP-IN: Invoke c1541 and capture its output ───────────────────
+            // call c1541 to get text directory listing
             var psi = new ProcessStartInfo
             {
-                FileName = C1541Path,                      // full path to c1541.exe
-                Arguments = $"\"{imagePath}\" -dir",          // remove any “>” redirection
+                FileName = C1541Path,                     
+                Arguments = $"\"{imagePath}\" -dir",    
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true
@@ -150,30 +147,25 @@ namespace VDRIVE.Drives.Vice
             string[] rawLines;
             using (var proc = Process.Start(psi))
             {
-                // Read everything c1541 prints
                 string allOutput = proc.StandardOutput.ReadToEnd();
                 proc.WaitForExit();
 
-                // Split into non-empty lines
                 rawLines = allOutput
                     .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             }
 
-            byte[] dirPrgBytes = this.BuildDirectoryPrg(rawLines); // c1541.exe extracts directory as a text file so this builds the directory PRG
+            // convert text directory to PRG
+            byte[] dirPrgBytes = this.BuildDirectoryPrg(rawLines); 
 
             File.WriteAllBytes(dirPrgPath, dirPrgBytes);
 
-            // Step 4: Confirm PRG creation
-            if (File.Exists(dirPrgPath))
+            if (dirPrgBytes != null && dirPrgBytes.Length > 0)
             {
-                Console.WriteLine("PRG created successfully: " + dirPrgPath);
+                //Console.WriteLine("$ created successfully: " + dirPrgPath);
                 return dirPrgBytes;
             }
-            else
-            {
-                Console.WriteLine("petcat failed—dir.prg not found.");
-                return null;
-            }
+
+            return null;
         }
 
         protected byte[] BuildDirectoryPrg(string[] rawLines, string diskName = "")

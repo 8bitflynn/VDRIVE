@@ -5,9 +5,12 @@ namespace VDRIVE
 {
     public class Client : VDriveBase, IClient
     {
-        public Client(string imagePath, string ipAddress, int port)
+        public Client(string ipAddress, int port, IConfiguration configuration, IFloppyResolver floppyResolver, ILoad loader, ISave saver, ILog logger)
         {
-            this.ImagePath = imagePath;
+            this.FloppyResolver = floppyResolver;
+            this.Loader = loader;
+            this.Saver = saver;
+            this.Logger = logger;
             this.IPAddress = ipAddress;
             this.Port = port;
         }
@@ -16,10 +19,10 @@ namespace VDRIVE
 
         public void Start()
         {
-            if (!File.Exists(this.ImagePath))
-            {
-                throw new Exception("Invalid image path!");
-            }
+            //if (!File.Exists(this.ImagePath))
+            //{
+            //    throw new Exception("Invalid image path!");
+            //}
 
             if (string.IsNullOrEmpty(this.IPAddress))
             {
