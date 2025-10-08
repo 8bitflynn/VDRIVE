@@ -21,7 +21,7 @@ namespace VDRIVE
             ILog logger = new Util.ConsoleLogger();
 
             // HACK until I get the floppy resolver implemented from C64           
-            floppyResolver.InsertFloppyByPath(configuration.SearchPaths.First() + "data4.d64");
+            floppyResolver.InsertFloppyByPath(configuration.SearchPaths.First() + configuration.ImageName);
 
             // firmware is setup as client by default so run this in server mode
             // should allow multiple C64 connections to same disk image but
@@ -48,6 +48,7 @@ namespace VDRIVE
 
             configuration.SearchPaths = configurationBuilder.GetSection("AppSettings:SearchPaths").Get<List<string>>();
             configuration.C1541Path = configurationBuilder.GetSection("AppSettings:C1541Path").Value;
+            configuration.ImageName = configurationBuilder.GetSection("AppSettings:ImageName").Value;
 
             return configuration;
         }
