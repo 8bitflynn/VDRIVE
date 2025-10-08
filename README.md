@@ -38,6 +38,7 @@
 ### 🚧 Known Limitations
 
 - VDRIVE runs @ $C000 so any LOAD that hits that limit will crash VDRIVE. Eventually there will be an option to transfer directly to disk (even full images like D64) to modern SDIEC or other devices.
+- VDRIVE currently has to be re-started to change disk image but only because I have not finished the assembly to request floppy changes and it will soon work as expected.
 
 > 🧠 VDRIVE is functional, but still evolving. Expect rough edges — and feel free to contribute or fork.
 
