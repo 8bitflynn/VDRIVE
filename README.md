@@ -5,6 +5,10 @@
 
 - VDRIVE is a free, open-source tool built for those who want modern flexibility in retro workflows. It reflects months of design, testing, and iteration — not a plug-and-play gimmick. If you prefer original hardware, that’s valid. If you want remote disk access, mount/unmount control, and HTTP support, VDRIVE is here for you.
 
+## 🕹️ VDRIVE Signal
+
+Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
+
 ---
 
 ### ⚙️ Notes
@@ -12,6 +16,7 @@
 - VDRIVE currently uses `c1541.exe` from **VICE 2.4** for all `LOAD`, `SAVE`, and directory requests.
 - VICE 3.9’s version of `c1541.exe` appears incompatible — needs investigation.
 - Eventually, VDRIVE will implement its own `ILoad` / `ISave` interface to eliminate reliance on VICE — but using `c1541.exe` saved a lot of time and allowed faster prototyping.
+- This release is intended for developers and technically inclined users. Setup requires compiling and assembling. Prebuilt binaries will be provided once the project nears completion.
 
 ---
 
@@ -41,6 +46,8 @@
 
 - VDRIVE runs @ $C000 so any LOAD that hits that limit will crash VDRIVE. Eventually there will be an option to transfer directly to disk (even full images like D64) to modern SDIEC or other devices.
 - VDRIVE currently has to be re-started to change disk image but only because I have not finished the assembly to request floppy changes and it will soon work as expected.
+- The `setupwifi` is out of date so for now Wi-Fi setup requires manual configuration in firmware.
+
 
 > 🧠 VDRIVE is functional, but still evolving. Expect rough edges — and feel free to contribute or fork.
 
