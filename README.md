@@ -3,6 +3,8 @@
 
 **Wirelessly LOAD/SAVE data to your Commodore 64!**  
 
+- VDRIVE is a free, open-source tool built for those who want modern flexibility in retro workflows. It reflects months of design, testing, and iteration — not a plug-and-play gimmick. If you prefer original hardware, that’s valid. If you want remote disk access, mount/unmount control, and HTTP support, VDRIVE is here for you.
+
 ---
 
 ### ⚙️ Notes
