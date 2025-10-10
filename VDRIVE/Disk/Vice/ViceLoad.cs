@@ -6,28 +6,25 @@ namespace VDRIVE.Disk.Vice
 {
     public class ViceLoad : ILoad
     {
-        public ViceLoad(string c1541Path, string tempPath = "")
+        public ViceLoad(IConfiguration configuration, ILog logger)
         {
-            this.C1541Path = c1541Path;
-            if (string.IsNullOrEmpty(tempPath))
-            {
-                this.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            }
+            this.Configuration = configuration;
+            this.Logger = logger;          
         }
-        private readonly string C1541Path;
-        private readonly string TempPath;
+        private IConfiguration Configuration;
+        private ILog Logger;
 
-        LoadResponse ILoad.Load(LoadRequest loadRequest, string imagePath, out byte[] payload)
+        LoadResponse ILoad.Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload)
         {
             byte responseCode = 0xff;
             string filename = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray());
             if (filename.StartsWith("$"))
             {
-                payload = LoadDirectory(loadRequest, imagePath);
+                payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value.ImagePath);
             }
             else
             {
-                payload = LoadFile(loadRequest, imagePath, out responseCode);
+                payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value.ImagePath, out responseCode);
             }
 
             LoadResponse loadResponse = BuildLoadResponse(loadRequest, payload, responseCode);
@@ -67,11 +64,11 @@ namespace VDRIVE.Disk.Vice
 
         protected byte[] LoadFile(LoadRequest loadRequest, string imagePath, out byte responseCode)
         {
-            if (!Directory.Exists(TempPath))
-                Directory.CreateDirectory(TempPath);
+            if (!Directory.Exists(this.Configuration.TempPath))
+                Directory.CreateDirectory(this.Configuration.TempPath);
 
             string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
-            string outPrgPath = Path.Combine(TempPath, safeName);
+            string outPrgPath = Path.Combine(this.Configuration.TempPath, safeName);
 
             if (File.Exists(outPrgPath))
                 File.Delete(outPrgPath);
@@ -81,7 +78,7 @@ namespace VDRIVE.Disk.Vice
             // execute c1541 to extract the file
             var psi = new ProcessStartInfo
             {
-                FileName = C1541Path,
+                FileName = this.Configuration.C1541Path,
                 Arguments = $"\"{imagePath}\" -read \"{fileSpec}\" \"{outPrgPath}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -92,7 +89,7 @@ namespace VDRIVE.Disk.Vice
             {
                 string c1541Out = proc.StandardOutput.ReadToEnd();
                 proc.WaitForExit();
-                Console.WriteLine(c1541Out);
+                this.Logger.LogMessage(c1541Out);
 
                 if (!c1541Out.StartsWith("Reading file"))
                 {
@@ -104,29 +101,28 @@ namespace VDRIVE.Disk.Vice
 
             if (File.Exists(outPrgPath))
             {
-                Console.WriteLine($"File extracted: {outPrgPath}");
+                this.Logger.LogMessage($"File extracted: {outPrgPath}");
                 responseCode = 0xff; // success
                 return File.ReadAllBytes(outPrgPath);
             }
             else
             {
-                Console.WriteLine($"ERROR: {safeName}.prg not found in temp directory.");
+                this.Logger.LogMessage($"ERROR: {safeName}.prg not found in temp directory.");
                 responseCode = 0x04; // file not found
                 return null;
             }
         }
 
-
         protected byte[] LoadDirectory(LoadRequest loadRequest, string imagePath)
         {
             // TODO: PRG does not need to be written to disk, just return byte array
             // but its great for debugging so need to make it configurable
-            string dirPrgPath = Path.Combine(TempPath, "dir.prg");
+            string dirPrgPath = Path.Combine(this.Configuration.TempPath, "dir.prg");
 
             // Ensure temp directory exists
-            if (!Directory.Exists(this.TempPath))
+            if (!Directory.Exists(this.Configuration.TempPath))
             {
-                Directory.CreateDirectory(TempPath);
+                Directory.CreateDirectory(this.Configuration.TempPath);
             }
 
             if (File.Exists(dirPrgPath))
@@ -137,7 +133,7 @@ namespace VDRIVE.Disk.Vice
             // call c1541 to get text directory listing
             var psi = new ProcessStartInfo
             {
-                FileName = C1541Path,                     
+                FileName = this.Configuration.C1541Path,                     
                 Arguments = $"\"{imagePath}\" -dir",    
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -161,7 +157,7 @@ namespace VDRIVE.Disk.Vice
 
             if (dirPrgBytes != null && dirPrgBytes.Length > 0)
             {
-                //Console.WriteLine("$ created successfully: " + dirPrgPath);
+                this.Logger.LogMessage($"$ created successfully: {dirPrgPath}");
                 return dirPrgBytes;
             }
 

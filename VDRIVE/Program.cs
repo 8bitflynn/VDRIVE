@@ -15,13 +15,23 @@ namespace VDRIVE
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = program.BuildConfiguration();
 
             // injected dependencies
-            IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration);
-            ILoad loader = new ViceLoad(configuration.C1541Path);
-            ISave saver = new ViceSave(configuration.C1541Path);
             ILog logger = new Util.ConsoleLogger();
+            IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration);
+            ILoad loader = new ViceLoad(configuration, logger);
+            ISave saver = new ViceSave(configuration, logger);           
+           
+            // hack until the search request is coming from C64
+            // search for floppy images in configured search paths
+            SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest()
+            {
+                Description = "data",
+                MediaType = "d64, g64, d71, d81"
+            };
+
+            SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest);
 
             // HACK until I get the floppy resolver implemented from C64           
-            floppyResolver.InsertFloppyByPath(configuration.SearchPaths.First() + configuration.ImageName);
+            floppyResolver.InsertFloppy(searchFloppyResponse.SearchResults.First());
 
             // firmware is setup as client by default so run this in server mode
             // should allow multiple C64 connections to same disk image but
@@ -48,9 +58,14 @@ namespace VDRIVE
 
             configuration.SearchPaths = configurationBuilder.GetSection("AppSettings:SearchPaths").Get<List<string>>();
             configuration.C1541Path = configurationBuilder.GetSection("AppSettings:C1541Path").Value;
-            configuration.ImageName = configurationBuilder.GetSection("AppSettings:ImageName").Value;
+            configuration.TempPath = configurationBuilder.GetSection("AppSettings:TempPath").Value;
+
+            if (string.IsNullOrEmpty(configuration.TempPath))
+            {
+                configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            }
 
             return configuration;
-        }
+        }     
     }
 }

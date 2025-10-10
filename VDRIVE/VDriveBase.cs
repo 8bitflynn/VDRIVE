@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using System.IO;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
@@ -41,8 +42,8 @@ namespace VDRIVE
 
                             this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
 
-                            LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);                       
-                            LoadResponse loadResponse = this.Loader.Load(loadRequest, this.FloppyResolver.GetInsertedFloppyPath(), out byte[] payload);
+                            LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
+                            LoadResponse loadResponse = this.Loader.Load(loadRequest, this.FloppyResolver, out byte[] payload);
 
                             this.SendData(tcpClient, networkStream, loadRequest, loadResponse, payload);
                         }
@@ -59,23 +60,44 @@ namespace VDRIVE
 
                             SaveRequest saveRequest = BinaryStructConverter.FromByteArray<SaveRequest>(buffer);
 
+                            this.Logger.LogMessage($"Save Request: SAVE\"{new string(saveRequest.FileName)}\",{saveRequest.DeviceNum}{(saveRequest.SecondaryAddr != 0 ? "," + saveRequest.SecondaryAddr : "")}");
+
                             // recv data
                             byte[] payload = this.ReceiveData(networkStream, saveRequest);
 
-                            this.Saver.Save(saveRequest, this.FloppyResolver.GetInsertedFloppyPath(), payload);                           
+                            SaveResponse saveResponse = this.Saver.Save(saveRequest, this.FloppyResolver, payload);
                         }
                         break;
 
                     case 0x03: // MOUNT floppy image
-                        {    
+                        {
                             // TODO: read path from C64
-                            this.FloppyResolver.InsertFloppyByPath("");                           
+                            InsertFloppyRequest insertFloppyRequest = new InsertFloppyRequest();
+
+                            FloppyInfo floppyInfo = new FloppyInfo();
+                            floppyInfo.Id = insertFloppyRequest.Id;
+                            floppyInfo.ImagePath = insertFloppyRequest.ImagePath;
+
+                            this.FloppyResolver.InsertFloppy(floppyInfo);
                         }
                         break;
 
                     case 0x04: // UNMOUNT floppy image
                         {
+                            // not sure I need any params here
+                            EjectFloppyRequest ejectFloppyRequest = new EjectFloppyRequest();
+
+                            // TODO: read params from C64
                             this.FloppyResolver.EjectFloppy();
+                        }
+                        break;
+
+                    case 0x05: // search for floppys
+                        {
+                            // TODO: read search params from C64
+                            SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
+
+                            this.FloppyResolver.SearchFloppys(searchFloppiesRequest);
                         }
                         break;
                 }
@@ -94,13 +116,18 @@ namespace VDRIVE
                 read += r;
             }
             return true;
-        }        
-       
-        protected byte[] ReceiveData(NetworkStream networkStream, SaveRequest saveRequest, Action<int, int, int, int> progressCallback = null)
-        {
-            ushort byteCount = (ushort)((saveRequest.ByteCountHi << 8) + saveRequest.ByteCountLo);
+        }
 
-            byte[] data = new byte[1];
+        protected byte[] ReceiveData(NetworkStream networkStream, SaveRequest saveRequest)
+        {
+            int chunkSize = (saveRequest.ChunkSizeHi << 8) | saveRequest.ChunkSizeLo;
+            int totalSize = (saveRequest.ByteCountHi << 8) | saveRequest.ByteCountLo;           
+
+            byte[] buffer = new byte[totalSize];
+            var one = new byte[1];
+            var ack = new byte[] { 0x2B, 0x01 };
+            int received = 0;
+
             while (true)
             {
                 if (!networkStream.DataAvailable)
@@ -109,19 +136,30 @@ namespace VDRIVE
                     continue;
                 }
 
-                // sync byte
-                Int32 bytes = networkStream.Read(data, 0, 1);
-                if (bytes == 1 && data[0] == 0x2b)
-                {
-                    byte[] buffer = new byte[byteCount];
-                    this.ReadNetworkStream(networkStream, buffer, 0, buffer.Length);
-                    return buffer;
-                }
-                else
-                {
-                    // dump the garbage chars
-                }
+                int r = networkStream.Read(one, 0, 1);
+                if (r == 1 && one[0] == 0x2B) break; // sync byte
+
+                // ignore garbage and continue
             }
+
+            int chunksReceived = 0;
+            while (received < totalSize)
+            {
+                int toRead = Math.Min(chunkSize, totalSize - received);
+                ReadNetworkStream(networkStream, buffer, received, toRead);
+
+                received += toRead;
+
+                // ACK this chunk and request next chunk
+                networkStream.Write(ack, 0, ack.Length);
+                networkStream.Flush();
+
+                chunksReceived++;
+
+                this.Logger.LogMessage($"Received {received} of {totalSize} bytes in {chunksReceived} chunks");
+            }           
+
+            return buffer.ToArray();
         }
 
         protected void SendData(TcpClient tcpClient, NetworkStream networkStream, LoadRequest loadRequest, LoadResponse loadResponse, byte[] payload)
@@ -174,27 +212,27 @@ namespace VDRIVE
                 bytesSent += chunk.Count;
                 networkStream.FlushAsync();
 
-                if (chunkIndex + 1 == numOfChunks)
-                {
-                    // transfer done
-                    break;
-                }
-
                 // wait for Chunk request
                 ChunkRequest chunkRequest = this.ReadChunkRequest(tcpClient, networkStream, ref chunkIndex);
-                if (chunkRequest.Operation == 0x01)
+                switch (chunkRequest.Operation)
                 {
-                    //break; // continue to next batch
-                }
-                else if (chunkRequest.Operation == 0x02)
-                {
-                    // NOT implemented - resend last batch
-                    chunkIndex--;
-                }
-                else if (chunkRequest.Operation == 0x03)
-                {
-                    this.Logger.LogMessage("Canceling send");
-                    return; // cancel this send
+                    case 0x01: // next chunk or finished
+                        if (chunkIndex + 1 == numOfChunks)
+                        {
+                            // transfer done successfully
+                            this.Logger.LogMessage("Send complete");
+                            break;
+                        }
+                        break;
+
+                    case 0x02: // resend last chunk
+                        this.Logger.LogMessage("Resending last chunk");
+                        chunkIndex--; 
+                        break;
+
+                    case 0x03: // cancel
+                        this.Logger.LogMessage("Send canceled");
+                        return; // cancel this send                        
                 }
             }
         }

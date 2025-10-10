@@ -1,11 +1,12 @@
-﻿namespace VDRIVE_Contracts.Interfaces
+﻿using VDRIVE_Contracts.Structures;
+
+namespace VDRIVE_Contracts.Interfaces
 {
     public interface IFloppyResolver
     {
-        IList<string> SearchFloppys(string searchPattern);
-        string InsertFloppyById(string id);
-        string InsertFloppyByPath(string path);
-        string GetInsertedFloppyPath();
-        void EjectFloppy();
+        SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest);
+        FloppyInfo? InsertFloppy(FloppyInfo floppyInfo);
+        FloppyInfo? GetInsertedFloppyInfo();
+        FloppyInfo? EjectFloppy();
     }
 }

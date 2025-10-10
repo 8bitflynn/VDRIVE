@@ -4,6 +4,6 @@ namespace VDRIVE_Contracts.Interfaces
 {
     public interface ILoad
     {
-        LoadResponse Load(LoadRequest loadRequest, string imagePath, out byte[] payload);
+        LoadResponse Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload);
     }
 }

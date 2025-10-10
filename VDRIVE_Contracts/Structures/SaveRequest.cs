@@ -18,6 +18,9 @@ namespace VDRIVE_Contracts.Structures
         public byte ByteCountLo;
         public byte ByteCountHi;
 
+        public byte ChunkSizeLo;
+        public byte ChunkSizeHi;
+
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
         public char[] FileName;         // Filename in PETSCII, padded with $20 or $00
     }

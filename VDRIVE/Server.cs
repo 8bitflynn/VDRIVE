@@ -29,6 +29,37 @@ namespace VDRIVE
         private readonly IPAddress ListenAddress;
         private readonly int Port;
 
+        public void Start()
+        {
+            TcpListener listener = new TcpListener(this.ListenAddress, Port);
+            listener.Start();
+
+            this.Logger.LogMessage($"Listening on {this.ListenAddress}:{Port}");
+
+            while (true)
+            {
+                TcpClient client = listener.AcceptTcpClient();
+                client.NoDelay = true;
+                Task.Run(() => this.HandleClient(client));
+            }
+        }
+
+        private void HandleClient(TcpClient tcpClient)
+        {
+            string ip = tcpClient.Client.RemoteEndPoint.ToString();
+
+            this.Logger.LogMessage($"Client connected: {ip}");
+
+            using (tcpClient)
+            using (NetworkStream networkStream = tcpClient.GetStream())
+            {
+                while (tcpClient.Connected)
+                {
+                    this.HandleClient(tcpClient, networkStream);
+                }
+            }
+        }
+
         private IPAddress GetLocalIPv4Address()
         {
             // Prefer a non-loopback, non-linklocal IPv4 address from active network interfaces
@@ -53,35 +84,6 @@ namespace VDRIVE
             return ipv4;
         }
 
-        public void Start()
-        {
-            TcpListener listener = new TcpListener(this.ListenAddress, Port);
-            listener.Start();
-
-            this.Logger.LogMessage($"Listening on {this.ListenAddress}:{Port}");
-
-            while (true)
-            {
-                TcpClient client = listener.AcceptTcpClient();
-                client.NoDelay = true;
-                Task.Run(() => this.HandleClient(client));
-            }
-        }
-
-        private void HandleClient(TcpClient tcpClient)
-        {
-            string ip = tcpClient.Client.RemoteEndPoint.ToString();
-
-            this.Logger.LogMessage($"Client connected: {ip}");
-            
-            using (tcpClient)
-            using (NetworkStream networkStream = tcpClient.GetStream())
-            {
-                while (tcpClient.Connected)
-                {
-                    this.HandleClient(tcpClient, networkStream);
-                }              
-            }
-        }
+       
     }
 }

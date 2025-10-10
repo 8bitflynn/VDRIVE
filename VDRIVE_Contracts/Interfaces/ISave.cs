@@ -4,6 +4,6 @@ namespace VDRIVE_Contracts.Interfaces
 {
     public interface ISave
     {
-        SaveResponse Save(SaveRequest saveRequest, string imagePath, byte[] payload);
+        SaveResponse Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload);
     }
 }

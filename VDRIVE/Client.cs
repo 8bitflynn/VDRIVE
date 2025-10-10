@@ -19,16 +19,10 @@ namespace VDRIVE
 
         public void Start()
         {
-            //if (!File.Exists(this.ImagePath))
-            //{
-            //    throw new Exception("Invalid image path!");
-            //}
-
             if (string.IsNullOrEmpty(this.IPAddress))
             {
                 throw new Exception("Invalid IP address!");
             }
-
             
             using (TcpClient tcpClient = new TcpClient(this.IPAddress, this.Port))
             {

@@ -6,18 +6,15 @@ namespace VDRIVE.Disk.Vice
 {
     public class ViceSave : ISave
     {
-        public ViceSave(string c1541Path, string tempPath = "")
+        public ViceSave(IConfiguration configuration, ILog logger)
         {
-            this.C1541Path = c1541Path;
-            if (string.IsNullOrEmpty(tempPath))
-            {
-                this.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            }
+            this.Configuration = configuration;
+            this.Logger = logger;
         }
-        private readonly string C1541Path;
-        private readonly string TempPath;
+        private IConfiguration Configuration;
+        private ILog Logger;
 
-        SaveResponse ISave.Save(SaveRequest saveRequest, string imagePath, byte[] payload)
+        SaveResponse ISave.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
         {
             SaveResponse saveResponse = new SaveResponse();
             saveResponse.ResponseCode = 0xff;
@@ -27,11 +24,11 @@ namespace VDRIVE.Disk.Vice
             destPtrFileData[1] = saveRequest.TargetAddressHi;
             payload.CopyTo(destPtrFileData, 2);
 
-            if (!Directory.Exists(this.TempPath))
-                Directory.CreateDirectory(this.TempPath);
+            if (!Directory.Exists(this.Configuration.TempPath))
+                Directory.CreateDirectory(this.Configuration.TempPath);
 
             string safeName = new string(saveRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
-            string tempPrgPath = Path.Combine(this.TempPath, safeName);
+            string tempPrgPath = Path.Combine(this.Configuration.TempPath, safeName);
 
             File.WriteAllBytes(tempPrgPath, destPtrFileData);
 
@@ -39,8 +36,8 @@ namespace VDRIVE.Disk.Vice
 
             var psi = new ProcessStartInfo
             {
-                FileName = C1541Path,
-                Arguments = $"\"{imagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
+                FileName = this.Configuration.C1541Path,
+                Arguments = $"\"{floppyResolver.GetInsertedFloppyInfo().Value.ImagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true
@@ -51,19 +48,19 @@ namespace VDRIVE.Disk.Vice
                 string c1541Out = proc.StandardOutput.ReadToEnd();
                 // Writing file -- use this for success check
                 proc.WaitForExit();
-                Console.WriteLine(c1541Out);
+                this.Logger.LogMessage(c1541Out);
             }
 
             bool success = File.Exists(tempPrgPath);
             if (success)
             {
                 // TODO: parse errors and return if needed
-                Console.WriteLine($"File written to Image: {safeName}");
+                this.Logger.LogMessage($"File written to Image: {safeName}");
                 File.Delete(tempPrgPath); // cleanup temp file
             }
             else
             {
-                Console.WriteLine($"ERROR: Failed to write {safeName} to Image.");
+                this.Logger.LogMessage($"ERROR: Failed to write {safeName} to Image.");
             }
 
             return saveResponse;
