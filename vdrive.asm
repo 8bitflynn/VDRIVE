@@ -1,7 +1,7 @@
 ; memory map
 ; $c000 - jmp table
 ; $c200 - up9600 bitbanger/vdrive
-; $c500 - vars and constants
+; $c580 - vars and constants
 ; $c600 - rs232 input buffer
 ; $c700 - rs232 output buffer 
 ; $c800 - up9600
@@ -28,27 +28,29 @@ temp_ptr_hi = $fe
 dest_ptr_lo = $ae ; basic and org iload use these locations
 dest_ptr_hi = $af ; as a pointer to the byte to store the recv'd byte
 
-dest_ptr_lo_save = $c500
-dest_ptr_hi_save = $c501
-byte_count_lo_save = $c502
-byte_count_hi_save = $c503
-chunk_size_lo_save = $c504
-chunk_size_hi_save = $c505
-byte_count_lo = $c506
-byte_count_hi = $c507
-chunk_size_lo = $c508
-chunk_size_hi = $c509
-vdisk_devnum  = $c50a
-spinner_char_save = $c50b
-vdrive_retcode = $c50c
-org_iload_lo   = $c50d
-org_iload_hi   = $c50e
-org_isave_lo   = $c50f
-org_isave_hi   = $c510
-temp_workspace1 = $c520
-temp_workspace2 = $c521
-temp_workspace3 = $c522
-temp_workspace4 = $c523
+dest_ptr_lo_save = $c580
+dest_ptr_hi_save = $c581
+byte_count_lo_save = $c582
+byte_count_mid_save = $c593
+byte_count_hi_save = $c584
+chunk_size_lo_save = $c585
+chunk_size_hi_save = $c586
+byte_count_lo = $c587
+byte_count_mid = $c588
+byte_count_hi = $c589
+chunk_size_lo = $c58a
+chunk_size_hi = $c58b
+vdisk_devnum  = $c58c
+spinner_char_save = $c58d
+vdrive_retcode = $c58e
+org_iload_lo   = $c58f
+org_iload_hi   = $c590
+org_isave_lo   = $c591
+org_isave_hi   = $c592
+temp_workspace1 = $c593
+temp_workspace2 = $c594
+temp_workspace3 = $c595
+temp_workspace4 = $c596
 
 *= $c000
         ; jump table
@@ -291,8 +293,11 @@ setup_save_ptrs
         sec
         sbc $c1
         sta byte_count_lo
+
         lda dest_ptr_hi
         sbc $c2
+        sta byte_count_mid
+        lda #$00 ; high byte not used here
         sta byte_count_hi
 
         ; move pointer to beginning of data
@@ -327,6 +332,8 @@ send_save_request
         jsr send_byte
         lda byte_count_lo
         jsr send_byte 
+        lda byte_count_mid
+        jsr send_byte
         lda byte_count_hi
         jsr send_byte 
         lda chunk_size_lo
@@ -371,6 +378,11 @@ get_byte_count_lo
         jsr recv_byte
         sta byte_count_lo
         sta byte_count_lo_save
+
+get_byte_count_mid
+        jsr recv_byte
+        sta byte_count_mid
+        sta byte_count_mid_save
 
 get_byte_count_hi
         jsr recv_byte
@@ -428,6 +440,9 @@ skip_inc_dst_ptr
         lda byte_count_lo
         sbc #1
         sta byte_count_lo
+        lda byte_count_mid
+        sbc #0
+        sta byte_count_mid
         lda byte_count_hi
         sbc #0
         sta byte_count_hi
@@ -486,6 +501,8 @@ recv_bytes_left_check
         ; based on remaining bytes
         lda byte_count_hi
         bne store_bytes_loop
+        lda byte_count_mid
+        bne store_bytes_loop
         lda byte_count_lo
         bne store_bytes_loop
 
@@ -506,16 +523,19 @@ send_data_loop
         lda (dest_ptr_lo),y ; store at indirect location
         jsr send_byte 
         inc dest_ptr_lo
-        bne send_skip_inc_dst_ptr
+        bne skip_inc_dst_ptr2
         inc dest_ptr_hi; increment high byte to move to next page
         jsr update_spinner
 
-send_skip_inc_dst_ptr
+skip_inc_dst_ptr2
         ; decrement the bytes left
         sec
         lda byte_count_lo
         sbc #1
         sta byte_count_lo
+        lda byte_count_mid
+        sbc #0
+        sta byte_count_mid
         lda byte_count_hi
         sbc #0
         sta byte_count_hi
@@ -531,9 +551,9 @@ send_skip_inc_dst_ptr
 
         ; check if the chunk counter is zero
         lda chunk_size_hi
-        bne send_bytes_left_check
+        bne bytes_left_check2
         lda chunk_size_lo
-        bne send_bytes_left_check
+        bne bytes_left_check2
 
         ; buffer is zero
         ; reset counter
@@ -547,17 +567,19 @@ send_skip_inc_dst_ptr
         jsr get_syncbyte
         jsr recv_byte
         cmp #$01 ; send next chunk or finish
-        beq send_bytes_left_check
+        beq bytes_left_check2
         cmp #$02 ; resend last chunk
         beq adjust_pointers_resend_chunk
         cmp #$01 ; cancel? user cant really do that right now on server side?
 
        ; rts
 
-send_bytes_left_check
+bytes_left_check2
         ; check if there are any more bytes
         ; based on remaining bytes
         lda byte_count_hi
+        bne send_data_loop
+        lda byte_count_mid
         bne send_data_loop
         lda byte_count_lo
         bne send_data_loop
@@ -660,27 +682,6 @@ rotate_chars
 rotate_index
         byte 0
 
-print_bytes_left
-          pha
-
-          ; LEN [space]
-          lda #$4c
-          jsr $ffd2
-          lda #$45
-          jsr $ffd2
-          lda #$4e
-          jsr $ffd2
-          lda #$20
-          jsr $ffd2
-
-          ldx byte_count_lo
-          lda byte_count_hi
-          jsr $bdcd
-          lda #$0d
-          jsr $ffd2
-          
-          pla
-          rts
 
 
 
