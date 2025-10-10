@@ -16,6 +16,7 @@ namespace VDRIVE_Contracts.Structures
         public byte TargetAddressHi;
 
         public byte ByteCountLo;
+        public byte ByteCountMid;
         public byte ByteCountHi;
 
         public byte ChunkSizeLo;

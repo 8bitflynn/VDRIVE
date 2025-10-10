@@ -16,7 +16,7 @@ namespace VDRIVE
 
             // injected dependencies
             ILog logger = new Util.ConsoleLogger();
-            IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration);
+            IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger);
             ILoad loader = new ViceLoad(configuration, logger);
             ISave saver = new ViceSave(configuration, logger);           
            
@@ -24,14 +24,14 @@ namespace VDRIVE
             // search for floppy images in configured search paths
             SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest()
             {
-                Description = "data",
-                MediaType = "d64, g64, d71, d81"
+                Description = "data".ToCharArray(),
+                //MediaType = "d64,g64,d71,d81"
             };
 
             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest);
 
             // HACK until I get the floppy resolver implemented from C64           
-            floppyResolver.InsertFloppy(searchFloppyResponse.SearchResults.First());
+            floppyResolver.InsertFloppy(searchFloppyResponse.SearchResults.ElementAt(0));
 
             // firmware is setup as client by default so run this in server mode
             // should allow multiple C64 connections to same disk image but

@@ -40,10 +40,11 @@ namespace VDRIVE.Disk.Vice
             {
                 loadResponse.SyncByte = (byte)'+';
 
-                // send binary length in 16 bits
+                // send binary length in 24 bits
                 int lengthMinusMemoryPtr = fileBytes.Length - 2;
-                loadResponse.ByteCountLo = (byte)lengthMinusMemoryPtr; ;
-                loadResponse.ByteCountHi = (byte)(lengthMinusMemoryPtr >> 8);
+                loadResponse.ByteCountLo = (byte)(lengthMinusMemoryPtr & 0xFF); // LSB
+                loadResponse.ByteCountMid = (byte)((lengthMinusMemoryPtr >> 8) & 0xFF);
+                loadResponse.ByteCountHi = (byte)((lengthMinusMemoryPtr >> 16) & 0xFF); // MSB
 
                 byte loChunkLength = (byte)chunkSize;
                 byte hiChunkLength = (byte)(chunkSize >> 8);
@@ -89,7 +90,7 @@ namespace VDRIVE.Disk.Vice
             {
                 string c1541Out = proc.StandardOutput.ReadToEnd();
                 proc.WaitForExit();
-                this.Logger.LogMessage(c1541Out);
+                this.Logger.LogMessage(c1541Out.Trim());
 
                 if (!c1541Out.StartsWith("Reading file"))
                 {

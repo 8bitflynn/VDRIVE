@@ -48,7 +48,7 @@ namespace VDRIVE.Disk.Vice
                 string c1541Out = proc.StandardOutput.ReadToEnd();
                 // Writing file -- use this for success check
                 proc.WaitForExit();
-                this.Logger.LogMessage(c1541Out);
+                this.Logger.LogMessage(c1541Out.Trim());
             }
 
             bool success = File.Exists(tempPrgPath);

@@ -121,7 +121,7 @@ namespace VDRIVE
         protected byte[] ReceiveData(NetworkStream networkStream, SaveRequest saveRequest)
         {
             int chunkSize = (saveRequest.ChunkSizeHi << 8) | saveRequest.ChunkSizeLo;
-            int totalSize = (saveRequest.ByteCountHi << 8) | saveRequest.ByteCountLo;           
+            int totalSize =  (saveRequest.ByteCountHi << 16) | (saveRequest.ByteCountMid << 8) | saveRequest.ByteCountLo;           
 
             byte[] buffer = new byte[totalSize];
             var one = new byte[1];

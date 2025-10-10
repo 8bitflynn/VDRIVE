@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace VDRIVE_Contracts.Structures
 {
@@ -9,8 +10,9 @@ namespace VDRIVE_Contracts.Structures
 
         public byte SyncByte;
 
-        // send binary length in 16 bits
+        // send binary length in 24 bits (images can be > 64K)
         public byte ByteCountLo;
+        public byte ByteCountMid;
         public byte ByteCountHi;
 
         public byte ChunkSizeLo;

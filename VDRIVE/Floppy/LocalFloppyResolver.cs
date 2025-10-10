@@ -5,20 +5,24 @@ namespace VDRIVE.Floppy
 {
     public class LocalFloppyResolver : IFloppyResolver
     {
-        public LocalFloppyResolver(IConfiguration configuration)
+        public LocalFloppyResolver(IConfiguration configuration, ILog logger)
         {
             this.Configuration = configuration;
+            this.Logger = logger;
         }
         private IConfiguration Configuration;
+        private ILog Logger;
         private FloppyInfo? InsertedFloppyInfo;
 
         FloppyInfo? IFloppyResolver.InsertFloppy(FloppyInfo floppyInfo)
         {
+            this.Logger.LogMessage("Inserting floppy: " + floppyInfo.ImagePath);
             this.InsertedFloppyInfo = new FloppyInfo() { ImagePath = floppyInfo.ImagePath };
             return this.InsertedFloppyInfo.Value; // should work for now
         }
         FloppyInfo? IFloppyResolver.EjectFloppy()
         {
+            this.Logger.LogMessage(Logger is null ? "Ejecting floppy" : "Ejecting floppy: " + this.InsertedFloppyInfo?.ImagePath);
             this.InsertedFloppyInfo = null;
             return this.InsertedFloppyInfo;
         }
@@ -29,10 +33,12 @@ namespace VDRIVE.Floppy
 
         SearchFloppyResponse IFloppyResolver.SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
         {
+            this.Logger.LogMessage(Logger is null ? "Searching floppy images" : $"Searching floppy images for description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
             SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
             foreach (string searchPath in this.Configuration.SearchPaths)
             {
-                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, searchFloppiesRequest.Description, searchFloppiesRequest.MediaType.Split(','), true);
+                string[]? extensions = (searchFloppiesRequest.MediaType != null ? searchFloppiesRequest.MediaType.Split(',') : null);
+                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, new string(searchFloppiesRequest.Description), extensions, true);
                 if (searchResults != null)
                 {
                     foreach (string searchResult in searchResults)
@@ -47,10 +53,11 @@ namespace VDRIVE.Floppy
                 }
             }
 
+            this.Logger.LogMessage(Logger is null ? $"Found {searchFloppyResponse.SearchResults.Count} floppy images" : $"Found {searchFloppyResponse.SearchResults.Count} floppy images matching description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
             return searchFloppyResponse;
         }
 
-        public IEnumerable<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
+        private IEnumerable<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
         {
             if (string.IsNullOrWhiteSpace(root)) yield break;
             if (!Directory.Exists(root)) yield break;
