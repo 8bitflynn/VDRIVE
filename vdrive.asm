@@ -328,7 +328,11 @@ send_save_request
         lda byte_count_lo
         jsr send_byte 
         lda byte_count_hi
-        jsr send_byte  
+        jsr send_byte 
+        lda chunk_size_lo
+        jsr send_byte
+        lda chunk_size_hi
+        jsr send_byte
 
         ldy #$00
 filename_loop_save
@@ -441,9 +445,9 @@ skip_inc_dst_ptr
         ; and if both are check if its the 
         ; end of the file
         lda chunk_size_hi
-        bne bytes_left_check
+        bne recv_bytes_left_check
         lda chunk_size_lo
-        bne bytes_left_check
+        bne recv_bytes_left_check
 
         ; buffer is zero
         ; reset counter
@@ -469,39 +473,44 @@ skip_inc_dst_ptr
         rts ; return and cleanup
 
         ; send ok to send next round bytes
-        ; future expansion might be to do
-        ; a crc check on bytes and if not
-        ; correct send different byte to
-        ; request send last chunk again
+        ; once checksums are added this 
+        ; might send 2 for resend last        
 send_sync_byte_for_next_chunk
         lda #$2b
         jsr send_byte 
         lda #$01 ; send next chunk
         jsr send_byte
 
-bytes_left_check
+recv_bytes_left_check
         ; check if there are any more bytes
         ; based on remaining bytes
         lda byte_count_hi
         bne store_bytes_loop
         lda byte_count_lo
         bne store_bytes_loop
+
+        ; send last chunk was ok
+        lda #$2b
+        jsr send_byte 
+        lda #$01 ; send next chunk
+        jsr send_byte
+
         rts
 
 send_data        
         lda #$2b ; sync byte
-        jsr send_byte 
+        jsr send_byte         
         
-        ldy #$00
 send_data_loop
+        ldy #$00 ; not using y
         lda (dest_ptr_lo),y ; store at indirect location
         jsr send_byte 
         inc dest_ptr_lo
-        bne skip_inc_dst_ptr2
+        bne send_skip_inc_dst_ptr
         inc dest_ptr_hi; increment high byte to move to next page
         jsr update_spinner
 
-skip_inc_dst_ptr2
+send_skip_inc_dst_ptr
         ; decrement the bytes left
         sec
         lda byte_count_lo
@@ -522,9 +531,9 @@ skip_inc_dst_ptr2
 
         ; check if the chunk counter is zero
         lda chunk_size_hi
-        bne bytes_left_check2
+        bne send_bytes_left_check
         lda chunk_size_lo
-        bne bytes_left_check2
+        bne send_bytes_left_check
 
         ; buffer is zero
         ; reset counter
@@ -535,14 +544,17 @@ skip_inc_dst_ptr2
 
         ; todo: wait for sync byte
         ; which is "send next chunk" for now until i get chunk headers
-;wait_for_sync_byte
-;        jsr recv_byte
-;        cmp #$2b
-;        bne wait_for_sync_byte       
+        jsr get_syncbyte
+        jsr recv_byte
+        cmp #$01 ; send next chunk or finish
+        beq send_bytes_left_check
+        cmp #$02 ; resend last chunk
+        beq adjust_pointers_resend_chunk
+        cmp #$01 ; cancel? user cant really do that right now on server side?
 
        ; rts
 
-bytes_left_check2
+send_bytes_left_check
         ; check if there are any more bytes
         ; based on remaining bytes
         lda byte_count_hi
@@ -550,6 +562,22 @@ bytes_left_check2
         lda byte_count_lo
         bne send_data_loop
 
+        ; last sync byte
+wait_for_sync_byte        
+        jsr recv_byte
+        cmp #$2b
+        bne wait_for_sync_byte   
+        jsr recv_byte
+        cmp #$01 ; last chunk ok
+        beq finished_send
+        cmp #$02 ; send again
+        beq adjust_pointers_resend_chunk     
+        
+        
+finished_send
+        rts
+
+adjust_pointers_resend_chunk ; TODO
         rts
 
 install_up9600
@@ -631,6 +659,28 @@ rotate_chars
         byte $42, $4e, $44, $4d ; | / - \
 rotate_index
         byte 0
+
+print_bytes_left
+          pha
+
+          ; LEN [space]
+          lda #$4c
+          jsr $ffd2
+          lda #$45
+          jsr $ffd2
+          lda #$4e
+          jsr $ffd2
+          lda #$20
+          jsr $ffd2
+
+          ldx byte_count_lo
+          lda byte_count_hi
+          jsr $bdcd
+          lda #$0d
+          jsr $ffd2
+          
+          pla
+          rts
 
 
 
