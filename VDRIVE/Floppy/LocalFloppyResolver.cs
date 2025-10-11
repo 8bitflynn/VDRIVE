@@ -16,7 +16,7 @@ namespace VDRIVE.Floppy
 
         FloppyInfo? IFloppyResolver.InsertFloppy(FloppyInfo floppyInfo)
         {
-            this.Logger.LogMessage("Inserting floppy: " + floppyInfo.ImagePath);
+            this.Logger.LogMessage("Inserting floppy: " + new string(floppyInfo.ImagePath));
             this.InsertedFloppyInfo = new FloppyInfo() { ImagePath = floppyInfo.ImagePath };
             return this.InsertedFloppyInfo.Value; // should work for now
         }
@@ -33,8 +33,9 @@ namespace VDRIVE.Floppy
 
         SearchFloppyResponse IFloppyResolver.SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
         {
-            this.Logger.LogMessage(Logger is null ? "Searching floppy images" : $"Searching floppy images for description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
+            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
             SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
+            List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
             foreach (string searchPath in this.Configuration.SearchPaths)
             {
                 string[]? extensions = (searchFloppiesRequest.MediaType != null ? searchFloppiesRequest.MediaType.Split(',') : null);
@@ -43,17 +44,24 @@ namespace VDRIVE.Floppy
                 {
                     foreach (string searchResult in searchResults)
                     {
-                        FloppyInfo floppyInfo = new FloppyInfo();
-                        floppyInfo.ImagePath = $"{searchResult}";
-                        floppyInfo.Description = Path.GetFileNameWithoutExtension(searchResult);
-                        floppyInfo.MediaType = Path.GetExtension(searchResult).TrimStart('.').ToLowerInvariant();
-                        floppyInfo.WriteProtected = (new FileInfo(searchResult).IsReadOnly) ? "true" : "false";
-                        searchFloppyResponse.SearchResults.Add(floppyInfo);
-                    }                  
+                        FloppyInfo floppyInfo = new FloppyInfo();                       
+                        floppyInfo.ImagePath = searchResult.ToCharArray();
+                        floppyInfo.ImagePathLength = (byte)floppyInfo.ImagePath.Length;
+                        floppyInfo.Description = Path.GetFileNameWithoutExtension(searchResult)?.ToCharArray();
+                        floppyInfo.DescriptionLengthLo = (byte)(floppyInfo.Description?.Length ?? 0);
+                        floppyInfo.DescriptionLengthHi = (byte)((floppyInfo.Description?.Length ?? 0) >> 8);
+                        floppyInfo.MediaType = Path.GetExtension(searchResult).TrimStart('.').ToLowerInvariant().ToCharArray();
+                        floppyInfo.MediaTypeLength = (byte)floppyInfo.MediaType.Length;
+                        // TODO: validate the FloppyInfo fields are within limits
+                        floppyInfos.Add(floppyInfo);                        
+                    }                   
                 }
             }
+            searchFloppyResponse.SearchResults = floppyInfos.ToArray();
+            searchFloppyResponse.ResponseCode = 0xff; // success for now
+            searchFloppyResponse.ResultCount = (byte)searchFloppyResponse.SearchResults.Length;            
 
-            this.Logger.LogMessage(Logger is null ? $"Found {searchFloppyResponse.SearchResults.Count} floppy images" : $"Found {searchFloppyResponse.SearchResults.Count} floppy images matching description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
+            this.Logger.LogMessage($"Found {searchFloppyResponse.SearchResults.Length} floppy images matching description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
             return searchFloppyResponse;
         }
 

@@ -24,8 +24,8 @@ namespace VDRIVE
             // search for floppy images in configured search paths
             SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest()
             {
-                Description = "data".ToCharArray(),
-                //MediaType = "d64,g64,d71,d81"
+                Description = "mario".ToCharArray(),
+                MediaType = "d64"
             };
 
             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest);

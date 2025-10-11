@@ -45,7 +45,7 @@ namespace VDRIVE
                             LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
                             LoadResponse loadResponse = this.Loader.Load(loadRequest, this.FloppyResolver, out byte[] payload);
 
-                            this.SendData(tcpClient, networkStream, loadRequest, loadResponse, payload);
+                            this.SendData(tcpClient, networkStream, loadResponse, payload);
                         }
                         break;
 
@@ -76,7 +76,7 @@ namespace VDRIVE
 
                             FloppyInfo floppyInfo = new FloppyInfo();
                             floppyInfo.Id = insertFloppyRequest.Id;
-                            floppyInfo.ImagePath = insertFloppyRequest.ImagePath;
+                            floppyInfo.ImagePath = insertFloppyRequest.ImagePath.ToCharArray();
 
                             this.FloppyResolver.InsertFloppy(floppyInfo);
                         }
@@ -94,10 +94,20 @@ namespace VDRIVE
 
                     case 0x05: // search for floppys
                         {
-                            // TODO: read search params from C64
-                            SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
+                            int size = Marshal.SizeOf<SearchFloppiesRequest>();
 
-                            this.FloppyResolver.SearchFloppys(searchFloppiesRequest);
+                            byte[] buffer = new byte[size];
+                            buffer[0] = data[0];
+
+                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
+
+                            SearchFloppiesRequest searchFloppiesRequest = BinaryStructConverter.FromByteArray<SearchFloppiesRequest>(buffer);
+
+                            this.Logger.LogMessage("Search Request: " + new string(searchFloppiesRequest.Description) + (searchFloppiesRequest.MediaType != null ? "," + searchFloppiesRequest.MediaType : ""));
+
+                            SearchFloppyResponse searchFloppyResponse = this.FloppyResolver.SearchFloppys(searchFloppiesRequest);
+
+                            //this.SendData(tcpClient, networkStream, searchFloppyResponse, payload);
                         }
                         break;
                 }
@@ -162,7 +172,7 @@ namespace VDRIVE
             return buffer.ToArray();
         }
 
-        protected void SendData(TcpClient tcpClient, NetworkStream networkStream, LoadRequest loadRequest, LoadResponse loadResponse, byte[] payload)
+        protected void SendData<T>(TcpClient tcpClient, NetworkStream networkStream, T header, byte[] payload) where T : struct
         {
             DateTime start = DateTime.Now;
             byte[] sendBuffer = new byte[1];
@@ -174,7 +184,7 @@ namespace VDRIVE
             sendBuffer[0] = (byte)'+';
             networkStream.Write(sendBuffer, 0, 1);
 
-            byte[] headerBytes = BinaryStructConverter.ToByteArray<LoadResponse>(loadResponse);
+            byte[] headerBytes = BinaryStructConverter.ToByteArray<T>(header);
 
             networkStream.Write(headerBytes, 0, headerBytes.Length);
 
