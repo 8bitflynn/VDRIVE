@@ -11,6 +11,7 @@ namespace VDRIVE_Contracts.Structures
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)]
         public char[] ImageName; // name of image only
 
+        // floppy identifier sent back from C64 to insert floppy
         public byte IdLo;
         public byte IdHi;
 

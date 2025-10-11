@@ -1,7 +1,9 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace VDRIVE_Contracts.Structures
 {
+    [DebuggerDisplay("SearchTermLength={SearchTermLength}, SearchTerm={new string(SearchTerm)}, MediaTypeLength={MediaTypeLength}, MediaType={MediaType}")]
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct SearchFloppiesRequest
     {
@@ -11,6 +13,8 @@ namespace VDRIVE_Contracts.Structures
 
         public byte MediaTypeLength;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-        public string MediaType; // D64/D71/D81
+        public string MediaType; // optional - D64/D71/D81
+
+        public byte Flags; // dependent on implementation but can be used for ordering, case sensitivity, etc.
     }
 }

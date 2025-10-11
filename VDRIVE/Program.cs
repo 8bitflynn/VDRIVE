@@ -18,23 +18,24 @@ namespace VDRIVE
             ILog logger = new Util.ConsoleLogger();
             IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger);
             ILoad loader = new ViceLoad(configuration, logger);
-            ISave saver = new ViceSave(configuration, logger);           
-           
+            ISave saver = new ViceSave(configuration, logger);
+
             // hack until the search request is coming from C64
             // search for floppy images in configured search paths
-            SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest()
-            {
-                SearchTerm = "mario".ToCharArray(),
-                MediaType = "d64"
-            };
+            SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
+            searchFloppiesRequest.SearchTerm = "mario".ToCharArray();
+            searchFloppiesRequest.SearchTermLength = (byte)searchFloppiesRequest.SearchTerm.Length;
+            searchFloppiesRequest.MediaType = "d64";
+            searchFloppiesRequest.MediaTypeLength = (byte)searchFloppiesRequest.MediaType.Length;
 
             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest);
            
             // just pick a random disk from the search results
             int randomDisk = Random.Shared.Next(0, searchFloppyResponse.SearchResults.Count() - 1);
 
-            // HACK until I get the floppy resolver implemented from C64           
-            floppyResolver.InsertFloppy(searchFloppyResponse.SearchResults.ElementAt(randomDisk));
+            // HACK until I get the floppy resolver implemented from C64
+            FloppyInfo floppyInfo = searchFloppyResponse.SearchResults.ElementAt(randomDisk);
+            floppyResolver.InsertFloppy(floppyInfo);
 
             // firmware is setup as client mode by default so run this in server mode
             // should allow multiple C64 connections to same disk image but

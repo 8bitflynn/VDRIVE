@@ -15,21 +15,29 @@ namespace VDRIVE.Floppy
         private IConfiguration Configuration;
         private ILog Logger;
         private FloppyInfo? InsertedFloppyInfo; // info returned to C64
-        private FloppyPointer? SelectedFloppyPointer; // join to FloppyInfo.Id for long path
+        private List<FloppyInfo> FloppyInfos = new List<FloppyInfo>();
+        private FloppyPointer? InsertedFloppyPointer; // join to FloppyInfo.Id for long path
         private List<FloppyPointer> FloppyPointers = new List<FloppyPointer>();
        
-        FloppyInfo? IFloppyResolver.InsertFloppy(FloppyInfo floppyInfo)
+        FloppyInfo? IFloppyResolver.InsertFloppy(FloppyIdentifier floppyIdentifier) // called from C64
         {
-            this.Logger.LogMessage("Inserting floppy: " + new string(floppyInfo.ImageName));
-            this.InsertedFloppyInfo = floppyInfo;
-            this.SelectedFloppyPointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == (floppyInfo.IdLo | (floppyInfo.IdHi  << 8)));
+            this.InsertedFloppyInfo = this.FloppyInfos.FirstOrDefault(fi =>  fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
+            this.InsertedFloppyPointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == (floppyIdentifier.IdLo | (floppyIdentifier.IdHi  << 8)));
+            this.Logger.LogMessage("Inserting floppy: " + new string(this.InsertedFloppyInfo.Value.ImageName));
             return this.InsertedFloppyInfo.Value; // should work for now
         }
+
+        public FloppyInfo? InsertFloppy(FloppyInfo floppyInfo) // easier locally
+        {
+            FloppyIdentifier floppyIdentifier = new FloppyIdentifier { IdLo = floppyInfo.IdLo, IdHi = floppyInfo.IdHi };
+            return ((IFloppyResolver)this).InsertFloppy(floppyIdentifier);
+        }
+
         FloppyInfo? IFloppyResolver.EjectFloppy()
         {
             this.Logger.LogMessage(Logger is null ? "Ejecting floppy" : "Ejecting floppy: " + this.InsertedFloppyInfo?.ImageName);
             this.InsertedFloppyInfo = null;
-            this.SelectedFloppyPointer = null;
+            this.InsertedFloppyPointer = null;
             return this.InsertedFloppyInfo;
         }
         
@@ -40,14 +48,15 @@ namespace VDRIVE.Floppy
 
         public FloppyPointer? GetInsertedFloppyPointer()
         {
-            return this.SelectedFloppyPointer;
+            return this.InsertedFloppyPointer;
         }
 
         SearchFloppyResponse IFloppyResolver.SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
         {
             this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
 
-            // clear last results
+            // clear last search results
+            this.FloppyInfos.Clear();
             this.FloppyPointers.Clear();
 
             ushort searchResultIndex = 0;
@@ -79,7 +88,8 @@ namespace VDRIVE.Floppy
 
                         floppyInfos.Add(floppyInfo);   
                         
-                        // results stored in resolver for later use
+                        // results stored in resolver for lookup if "inserted"
+                        this.FloppyInfos.Add(floppyInfo);
                         this.FloppyPointers.Add(floppyPointer);
 
                         searchResultIndex++;
@@ -94,10 +104,12 @@ namespace VDRIVE.Floppy
             return searchFloppyResponse;
         }
 
-        private IEnumerable<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
+        private List<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
         {
-            if (string.IsNullOrWhiteSpace(root)) yield break;
-            if (!Directory.Exists(root)) yield break;
+            var results = new List<string>();
+
+            if (string.IsNullOrWhiteSpace(root)) return results;
+            if (!Directory.Exists(root)) return results;
 
             // Normalize extensions to a set of lower-case strings with leading dot
             HashSet<string> extSet = null;
@@ -118,9 +130,9 @@ namespace VDRIVE.Floppy
             {
                 files = Directory.EnumerateFiles(root);
             }
-            catch (UnauthorizedAccessException) { yield break; }
-            catch (DirectoryNotFoundException) { yield break; }
-            catch (IOException) { yield break; }
+            catch (UnauthorizedAccessException) { return results; }
+            catch (DirectoryNotFoundException) { return results; }
+            catch (IOException) { return results; }
 
             foreach (var file in files)
             {
@@ -134,27 +146,34 @@ namespace VDRIVE.Floppy
                 bool extMatches = extSet == null || extSet.Contains(fileExt);
                 bool descMatches = string.IsNullOrEmpty(desc) || name.IndexOf(desc, StringComparison.OrdinalIgnoreCase) >= 0;
 
-                if (extMatches && descMatches) yield return fi.FullName;
+                if (extMatches && descMatches) results.Add(fi.FullName);
             }
 
-            if (!recurse) yield break;
+            if (!recurse) return results;
 
             IEnumerable<string> subDirs;
             try
             {
                 subDirs = Directory.EnumerateDirectories(root);
             }
-            catch (UnauthorizedAccessException) { yield break; }
-            catch (DirectoryNotFoundException) { yield break; }
-            catch (IOException) { yield break; }
+            catch (UnauthorizedAccessException) { return results; }
+            catch (DirectoryNotFoundException) { return results; }
+            catch (IOException) { return results; }
 
             foreach (var sub in subDirs)
             {
-                foreach (var match in TraverseFolder(sub, description, extSet, recurse: true))
-                    yield return match;
+                try
+                {
+                    var childMatches = TraverseFolder(sub, description, extSet, recurse: true);
+                    if (childMatches != null && childMatches.Count > 0) results.AddRange(childMatches);
+                }
+                catch
+                {
+                    // ignore directory-specific errors and continue
+                }
             }
-        }
 
-       
+            return results;
+        }      
     }
 }

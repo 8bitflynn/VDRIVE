@@ -6,6 +6,7 @@ namespace VDRIVE_Contracts.Interfaces
     {
         SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest);
         FloppyInfo? InsertFloppy(FloppyInfo floppyInfo);
+        FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier);
         FloppyInfo? GetInsertedFloppyInfo();
         FloppyPointer? GetInsertedFloppyPointer();
         FloppyInfo? EjectFloppy();
