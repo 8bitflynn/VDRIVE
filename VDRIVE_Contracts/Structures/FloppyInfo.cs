@@ -1,24 +1,21 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace VDRIVE_Contracts.Structures
 {
+    [DebuggerDisplay("ImageName={new string(ImageName, 0, ImageNameLength)}, Id={(IdLo | IdHi << 8)}, Description={new string(Description, 0, DescriptionLength)}")]
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FloppyInfo
     {
-        public byte ImagePathLength;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 255)]
-        public char[] ImagePath; // full path to image
-        public string Id; // specific to IFloppyResolver implementation
-
-        public byte DescriptionLengthLo;
-        public byte DescriptionLengthHi;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1024)]
-        public char[] Description;
-
-        public byte MediaTypeLength;
+        public byte ImageNameLength;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)]
-        public char[] MediaType; // D64/D71/D81
+        public char[] ImageName; // name of image only
 
-        public byte Flags;         
+        public byte IdLo;
+        public byte IdHi;
+
+        public byte DescriptionLength;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 120)]
+        public char[] Description; // optional description                  
     }
 }

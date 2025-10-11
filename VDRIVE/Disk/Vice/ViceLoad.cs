@@ -20,11 +20,11 @@ namespace VDRIVE.Disk.Vice
             string filename = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray());
             if (filename.StartsWith("$"))
             {
-                payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value);
+                payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value);
             }
             else
             {
-                payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, out responseCode);
+                payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
             }
 
             LoadResponse loadResponse = BuildLoadResponse(loadRequest, payload, responseCode);
@@ -63,7 +63,7 @@ namespace VDRIVE.Disk.Vice
             return loadResponse;
         }
 
-        protected byte[] LoadFile(LoadRequest loadRequest, FloppyInfo floppyInfo, out byte responseCode)
+        protected byte[] LoadFile(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
             if (!Directory.Exists(this.Configuration.TempPath))
                 Directory.CreateDirectory(this.Configuration.TempPath);
@@ -80,7 +80,7 @@ namespace VDRIVE.Disk.Vice
             var psi = new ProcessStartInfo
             {
                 FileName = this.Configuration.C1541Path,
-                Arguments = $"\"{new string (floppyInfo.ImagePath)}\" -read \"{fileSpec}\" \"{outPrgPath}\" -quit",
+                Arguments = $"\"{new string (floppyPointer.ImagePath)}\" -read \"{fileSpec}\" \"{outPrgPath}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true
@@ -114,7 +114,7 @@ namespace VDRIVE.Disk.Vice
             }
         }
 
-        protected byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo)
+        protected byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer)
         {
             // TODO: PRG does not need to be written to disk, just return byte array
             // but its great for debugging so need to make it configurable
@@ -135,7 +135,7 @@ namespace VDRIVE.Disk.Vice
             var psi = new ProcessStartInfo
             {
                 FileName = this.Configuration.C1541Path,                     
-                Arguments = $"\"{new string (floppyInfo.ImagePath)}\" -dir",    
+                Arguments = $"\"{new string (floppyPointer.ImagePath)}\" -dir",    
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true

@@ -1,4 +1,6 @@
-﻿using VDRIVE_Contracts.Interfaces;
+﻿using System.Collections.Concurrent;
+using System.Numerics;
+using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Floppy
@@ -12,48 +14,75 @@ namespace VDRIVE.Floppy
         }
         private IConfiguration Configuration;
         private ILog Logger;
-        private FloppyInfo? InsertedFloppyInfo;
-
+        private FloppyInfo? InsertedFloppyInfo; // info returned to C64
+        private FloppyPointer? SelectedFloppyPointer; // join to FloppyInfo.Id for long path
+        private List<FloppyPointer> FloppyPointers = new List<FloppyPointer>();
+       
         FloppyInfo? IFloppyResolver.InsertFloppy(FloppyInfo floppyInfo)
         {
-            this.Logger.LogMessage("Inserting floppy: " + new string(floppyInfo.ImagePath));
-            this.InsertedFloppyInfo = new FloppyInfo() { ImagePath = floppyInfo.ImagePath };
+            this.Logger.LogMessage("Inserting floppy: " + new string(floppyInfo.ImageName));
+            this.InsertedFloppyInfo = floppyInfo;
+            this.SelectedFloppyPointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == (floppyInfo.IdLo | (floppyInfo.IdHi  << 8)));
             return this.InsertedFloppyInfo.Value; // should work for now
         }
         FloppyInfo? IFloppyResolver.EjectFloppy()
         {
-            this.Logger.LogMessage(Logger is null ? "Ejecting floppy" : "Ejecting floppy: " + this.InsertedFloppyInfo?.ImagePath);
+            this.Logger.LogMessage(Logger is null ? "Ejecting floppy" : "Ejecting floppy: " + this.InsertedFloppyInfo?.ImageName);
             this.InsertedFloppyInfo = null;
+            this.SelectedFloppyPointer = null;
             return this.InsertedFloppyInfo;
         }
+        
         FloppyInfo? IFloppyResolver.GetInsertedFloppyInfo()
         {
             return this.InsertedFloppyInfo;
         }
 
+        public FloppyPointer? GetInsertedFloppyPointer()
+        {
+            return this.SelectedFloppyPointer;
+        }
+
         SearchFloppyResponse IFloppyResolver.SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
         {
-            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
+            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
+
+            // clear last results
+            this.FloppyPointers.Clear();
+
+            ushort searchResultIndex = 0;
+
             SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
             foreach (string searchPath in this.Configuration.SearchPaths)
             {
                 string[]? extensions = (searchFloppiesRequest.MediaType != null ? searchFloppiesRequest.MediaType.Split(',') : null);
-                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, new string(searchFloppiesRequest.Description), extensions, true);
+                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, new string(searchFloppiesRequest.SearchTerm), extensions, true);
                 if (searchResults != null)
                 {
                     foreach (string searchResult in searchResults)
-                    {
-                        FloppyInfo floppyInfo = new FloppyInfo();                       
-                        floppyInfo.ImagePath = searchResult.ToCharArray();
-                        floppyInfo.ImagePathLength = (byte)floppyInfo.ImagePath.Length;
-                        floppyInfo.Description = Path.GetFileNameWithoutExtension(searchResult)?.ToCharArray();
-                        floppyInfo.DescriptionLengthLo = (byte)(floppyInfo.Description?.Length ?? 0);
-                        floppyInfo.DescriptionLengthHi = (byte)((floppyInfo.Description?.Length ?? 0) >> 8);
-                        floppyInfo.MediaType = Path.GetExtension(searchResult).TrimStart('.').ToLowerInvariant().ToCharArray();
-                        floppyInfo.MediaTypeLength = (byte)floppyInfo.MediaType.Length;
+                    { 
+                        // info returned to C64
+                        FloppyInfo floppyInfo = new FloppyInfo();
+                        floppyInfo.IdLo = (byte)searchResultIndex;
+                        floppyInfo.IdHi = (byte)(searchResultIndex >> 8);
+                        floppyInfo.ImageName = Path.GetFileName(searchResult).ToCharArray();
+                        floppyInfo.ImageNameLength = (byte)floppyInfo.ImageName.Length;
+                        floppyInfo.Description = Path.GetFileNameWithoutExtension(searchResult).ToCharArray(); // just use name without extension for now
+                        floppyInfo.DescriptionLength = (byte)(floppyInfo.Description?.Length ?? 0);
                         // TODO: validate the FloppyInfo fields are within limits
-                        floppyInfos.Add(floppyInfo);                        
+
+                        // info stored in resolver with longs paths
+                        FloppyPointer floppyPointer = new FloppyPointer();
+                        floppyPointer.Id = searchResultIndex;
+                        floppyPointer.ImagePath = searchResult;
+
+                        floppyInfos.Add(floppyInfo);   
+                        
+                        // results stored in resolver for later use
+                        this.FloppyPointers.Add(floppyPointer);
+
+                        searchResultIndex++;
                     }                   
                 }
             }
@@ -61,7 +90,7 @@ namespace VDRIVE.Floppy
             searchFloppyResponse.ResponseCode = 0xff; // success for now
             searchFloppyResponse.ResultCount = (byte)searchFloppyResponse.SearchResults.Length;            
 
-            this.Logger.LogMessage($"Found {searchFloppyResponse.SearchResults.Length} floppy images matching description '{new string(searchFloppiesRequest.Description)}' and media type '{searchFloppiesRequest.MediaType}'");
+            this.Logger.LogMessage($"Found {searchFloppyResponse.SearchResults.Length} floppy images matching description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
             return searchFloppyResponse;
         }
 
@@ -125,5 +154,7 @@ namespace VDRIVE.Floppy
                     yield return match;
             }
         }
+
+       
     }
 }

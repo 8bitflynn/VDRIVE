@@ -30,7 +30,6 @@ namespace VDRIVE
             {
                 // operation byte
                 offset = networkStream.Read(data, 0, data.Length);
-
                 switch (data[0])
                 {
                     case 0x01: // LOAD
@@ -75,8 +74,8 @@ namespace VDRIVE
                             InsertFloppyRequest insertFloppyRequest = new InsertFloppyRequest();
 
                             FloppyInfo floppyInfo = new FloppyInfo();
-                            floppyInfo.Id = insertFloppyRequest.Id;
-                            floppyInfo.ImagePath = insertFloppyRequest.ImagePath.ToCharArray();
+                           // floppyInfo.Id = insertFloppyRequest.Id;
+                           // floppyInfo.ImageName = insertFloppyRequest.ImagePath.ToCharArray();
 
                             this.FloppyResolver.InsertFloppy(floppyInfo);
                         }
@@ -103,7 +102,7 @@ namespace VDRIVE
 
                             SearchFloppiesRequest searchFloppiesRequest = BinaryStructConverter.FromByteArray<SearchFloppiesRequest>(buffer);
 
-                            this.Logger.LogMessage("Search Request: " + new string(searchFloppiesRequest.Description) + (searchFloppiesRequest.MediaType != null ? "," + searchFloppiesRequest.MediaType : ""));
+                            this.Logger.LogMessage("Search Request: " + new string(searchFloppiesRequest.SearchTerm) + (searchFloppiesRequest.MediaType != null ? "," + searchFloppiesRequest.MediaType : ""));
 
                             SearchFloppyResponse searchFloppyResponse = this.FloppyResolver.SearchFloppys(searchFloppiesRequest);
 
