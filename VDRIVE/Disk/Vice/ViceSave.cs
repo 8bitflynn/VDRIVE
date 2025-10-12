@@ -37,7 +37,7 @@ namespace VDRIVE.Disk.Vice
             var psi = new ProcessStartInfo
             {
                 FileName = this.Configuration.C1541Path,
-                Arguments = $"\"{floppyResolver.GetInsertedFloppyInfo().Value.ImageName}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
+                Arguments = $"\"{floppyResolver.GetInsertedFloppyPointer().Value.ImagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true

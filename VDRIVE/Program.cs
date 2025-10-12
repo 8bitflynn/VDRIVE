@@ -16,14 +16,14 @@ namespace VDRIVE
 
             // injected dependencies
             ILog logger = new Util.ConsoleLogger();
-            IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger);
+            IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger);// new LocalFloppyResolver(configuration, logger);
             ILoad loader = new ViceLoad(configuration, logger);
             ISave saver = new ViceSave(configuration, logger);
 
             // hack until the search request is coming from C64
             // search for floppy images in configured search paths
             SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
-            searchFloppiesRequest.SearchTerm = "mario".ToCharArray();
+            searchFloppiesRequest.SearchTerm = "assembler".ToCharArray();
             searchFloppiesRequest.SearchTermLength = (byte)searchFloppiesRequest.SearchTerm.Length;
             searchFloppiesRequest.MediaType = "d64";
             searchFloppiesRequest.MediaTypeLength = (byte)searchFloppiesRequest.MediaType.Length;
@@ -66,7 +66,7 @@ namespace VDRIVE
 
             if (string.IsNullOrEmpty(configuration.TempPath))
             {
-                configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + @"\C64Temp\";
             }
 
             return configuration;

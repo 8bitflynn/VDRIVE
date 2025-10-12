@@ -5,53 +5,15 @@ using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Floppy
 {
-    public class LocalFloppyResolver : IFloppyResolver
+    public class LocalFloppyResolver : FloppyResolverBase, IFloppyResolver
     {
         public LocalFloppyResolver(IConfiguration configuration, ILog logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
         }
-        private IConfiguration Configuration;
-        private ILog Logger;
-        private FloppyInfo? InsertedFloppyInfo; // info returned to C64
-        private List<FloppyInfo> FloppyInfos = new List<FloppyInfo>();
-        private FloppyPointer? InsertedFloppyPointer; // join to FloppyInfo.Id for long path
-        private List<FloppyPointer> FloppyPointers = new List<FloppyPointer>();
-       
-        FloppyInfo? IFloppyResolver.InsertFloppy(FloppyIdentifier floppyIdentifier) // called from C64
-        {
-            this.InsertedFloppyInfo = this.FloppyInfos.FirstOrDefault(fi =>  fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
-            this.InsertedFloppyPointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == (floppyIdentifier.IdLo | (floppyIdentifier.IdHi  << 8)));
-            this.Logger.LogMessage("Inserting floppy: " + new string(this.InsertedFloppyInfo.Value.ImageName));
-            return this.InsertedFloppyInfo.Value; // should work for now
-        }
 
-        public FloppyInfo? InsertFloppy(FloppyInfo floppyInfo) // easier locally
-        {
-            FloppyIdentifier floppyIdentifier = new FloppyIdentifier { IdLo = floppyInfo.IdLo, IdHi = floppyInfo.IdHi };
-            return ((IFloppyResolver)this).InsertFloppy(floppyIdentifier);
-        }
-
-        FloppyInfo? IFloppyResolver.EjectFloppy()
-        {
-            this.Logger.LogMessage(Logger is null ? "Ejecting floppy" : "Ejecting floppy: " + this.InsertedFloppyInfo?.ImageName);
-            this.InsertedFloppyInfo = null;
-            this.InsertedFloppyPointer = null;
-            return this.InsertedFloppyInfo;
-        }
-        
-        FloppyInfo? IFloppyResolver.GetInsertedFloppyInfo()
-        {
-            return this.InsertedFloppyInfo;
-        }
-
-        public FloppyPointer? GetInsertedFloppyPointer()
-        {
-            return this.InsertedFloppyPointer;
-        }
-
-        SearchFloppyResponse IFloppyResolver.SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
+        public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
         {
             this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
 
@@ -59,7 +21,7 @@ namespace VDRIVE.Floppy
             this.FloppyInfos.Clear();
             this.FloppyPointers.Clear();
 
-            ushort searchResultIndex = 0;
+            ushort searchResultIndex = 1;
 
             SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
