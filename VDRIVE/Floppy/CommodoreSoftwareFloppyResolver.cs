@@ -90,29 +90,36 @@ namespace VDRIVE.Floppy
                     }
 
                     this.Logger.LogMessage($"Extracting: {entry.FullName} {entry.Length} bytes");
-              
+
+                    // Skip directories
+                    if (string.IsNullOrEmpty(entry.Name))
+                        continue;
+
+                    // Build full output path
                     string fullFilePath = Path.Combine(this.Configuration.TempPath, entry.FullName);
 
-                    using (var entryStream = entry.Open())
-                    using (var outputFile = File.Create(fullFilePath))
+                    // Ensure directory exists
+                    if (!Directory.Exists(Path.GetDirectoryName(fullFilePath)))
                     {
-                        entryStream.CopyTo(outputFile);
-                        outputFile.Flush();
+                        Directory.CreateDirectory(Path.GetDirectoryName(fullFilePath));
+                    }
 
-                        if (this.InsertedFloppyPointer.HasValue)
+                    // Extract file
+                    entry.ExtractToFile(fullFilePath, overwrite: true);
+
+                    if (this.InsertedFloppyPointer.HasValue)
+                    {
+                        if (!ValidImageExtensions.Any(ir => fullFilePath.ToLower().EndsWith(ir)))
                         {
-                            if (!ValidImageExtensions.Any(ir => fullFilePath.ToLower().EndsWith(ir)))
-                            {
-                                continue;
-                            }
-
-                            FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer.Value;
-                            tempFloppyPointer.ImagePath = fullFilePath;                           
-                            this.InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path
+                            continue;
                         }
+
+                        FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer.Value;
+                        tempFloppyPointer.ImagePath = fullFilePath;
+                        this.InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path
                     }
                 }
-            }
+            }           
 
             return;
         }

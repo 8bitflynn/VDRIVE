@@ -24,15 +24,18 @@ namespace VDRIVE
             // hack until the search request is coming from C64
             // search for floppy images in configured search paths
             SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
-            searchFloppiesRequest.SearchTerm = "station wagon".ToCharArray();
+            searchFloppiesRequest.SearchTerm = "Burp con".ToCharArray();
             searchFloppiesRequest.SearchTermLength = (byte)searchFloppiesRequest.SearchTerm.Length;
             searchFloppiesRequest.MediaType = "d64";
             searchFloppiesRequest.MediaTypeLength = (byte)searchFloppiesRequest.MediaType.Length;
 
             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest);
-           
+
+            if (searchFloppyResponse.SearchResults.Count() == 0)
+                throw new Exception("No floppy images found!");
+
             // just pick a random disk from the search results
-            int randomDisk = Random.Shared.Next(0, searchFloppyResponse.SearchResults.Count() - 1);
+            int randomDisk = Random.Shared.Next(0, searchFloppyResponse.SearchResults.Count() - 1);           
 
             // HACK until I get the floppy resolver implemented from C64
             FloppyInfo floppyInfo = searchFloppyResponse.SearchResults.ElementAt(randomDisk);
