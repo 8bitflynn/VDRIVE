@@ -16,14 +16,15 @@ namespace VDRIVE
 
             // injected dependencies
             ILog logger = new Util.ConsoleLogger();
-            IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger);// new LocalFloppyResolver(configuration, logger);
+            //IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger); // search local paths
+            IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger); // search commodoresoftware.com
             ILoad loader = new ViceLoad(configuration, logger);
             ISave saver = new ViceSave(configuration, logger);
 
             // hack until the search request is coming from C64
             // search for floppy images in configured search paths
             SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
-            searchFloppiesRequest.SearchTerm = "assembler".ToCharArray();
+            searchFloppiesRequest.SearchTerm = "station wagon".ToCharArray();
             searchFloppiesRequest.SearchTermLength = (byte)searchFloppiesRequest.SearchTerm.Length;
             searchFloppiesRequest.MediaType = "d64";
             searchFloppiesRequest.MediaTypeLength = (byte)searchFloppiesRequest.MediaType.Length;

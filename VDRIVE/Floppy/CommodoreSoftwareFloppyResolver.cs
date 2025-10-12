@@ -15,7 +15,10 @@ namespace VDRIVE.Floppy
         }
 
         // TODO: move to configuraiton
-        List<string> IgnoredSearchKeywords = new List<string> { "manual", "firmware", "documentation", "guide", "instruction" };
+        List<string> IgnoredSearchKeywords = new List<string> { "manual", "firmware", "documentation", "guide", "instruction", "tutorial", 
+         "c128", "dos" };
+
+        List<string> ValidImageExtensions = new List<string> { ".d64", ".d81", ".d71", ".g64", ".t64", ".prg", ".p00", ".zip" };
 
       
         public override FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier)
@@ -80,6 +83,12 @@ namespace VDRIVE.Floppy
             {
                 foreach (ZipArchiveEntry entry in archive.Entries)
                 {
+                    // directory (may not be C64 software)
+                    if (string.IsNullOrEmpty(entry.Name))
+                    {
+                        continue;
+                    }
+
                     this.Logger.LogMessage($"Extracting: {entry.FullName} {entry.Length} bytes");
               
                     string fullFilePath = Path.Combine(this.Configuration.TempPath, entry.FullName);
@@ -92,9 +101,14 @@ namespace VDRIVE.Floppy
 
                         if (this.InsertedFloppyPointer.HasValue)
                         {
-                            var temp = this.InsertedFloppyPointer.Value;
-                            temp.ImagePath = fullFilePath;
-                            this.InsertedFloppyPointer = temp; // update to extracted file path
+                            if (!ValidImageExtensions.Any(ir => fullFilePath.ToLower().EndsWith(ir)))
+                            {
+                                continue;
+                            }
+
+                            FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer.Value;
+                            tempFloppyPointer.ImagePath = fullFilePath;                           
+                            this.InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path
                         }
                     }
                 }

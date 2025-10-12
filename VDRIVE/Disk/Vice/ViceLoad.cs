@@ -145,6 +145,10 @@ namespace VDRIVE.Disk.Vice
             using (var proc = Process.Start(psi))
             {
                 string allOutput = proc.StandardOutput.ReadToEnd();
+                // TODO: check for errors
+                // Unknown disk image
+                // etc...
+
                 proc.WaitForExit();
 
                 rawLines = allOutput
