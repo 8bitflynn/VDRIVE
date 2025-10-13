@@ -149,7 +149,8 @@ namespace VDRIVE.Floppy
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
         {
             // clear previous search results
-            this.EjectFloppy();
+            this.FloppyInfos.Clear();
+            this.FloppyPointers.Clear();
 
             if (string.IsNullOrWhiteSpace(searchFloppiesRequest.MediaType))
             {

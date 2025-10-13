@@ -22,6 +22,16 @@ namespace VDRIVE.Disk.Vice
             {
                 payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value);
             }
+            else if (filename.StartsWith("*"))
+            {
+                string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer().Value);
+
+                string lineWithFirstFile = rawLines[1];
+                string[] tokens = lineWithFirstFile.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                loadRequest.FileName = (tokens[1].Replace("\"", "")).ToCharArray();
+                loadRequest.FileNameLength = (byte)loadRequest.FileName.Length;
+                payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
+            }
             else
             {
                 payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
@@ -131,11 +141,29 @@ namespace VDRIVE.Disk.Vice
                 File.Delete(dirPrgPath);
             }
 
+            string[] rawLines = LoadRawDirectoryLines(floppyPointer);
+
+            // convert text directory to PRG
+            byte[] dirPrgBytes = this.BuildDirectoryPrg(rawLines);
+
+            File.WriteAllBytes(dirPrgPath, dirPrgBytes);
+
+            if (dirPrgBytes != null && dirPrgBytes.Length > 0)
+            {
+                this.Logger.LogMessage($"$ created successfully: {dirPrgPath}");
+                return dirPrgBytes;
+            }
+
+            return null;
+        }
+
+        private string[] LoadRawDirectoryLines(FloppyPointer floppyPointer)
+        {
             // call c1541 to get text directory listing
             var psi = new ProcessStartInfo
             {
-                FileName = this.Configuration.C1541Path,                     
-                Arguments = $"\"{new string (floppyPointer.ImagePath)}\" -dir",    
+                FileName = this.Configuration.C1541Path,
+                Arguments = $"\"{new string(floppyPointer.ImagePath)}\" -dir",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true
@@ -155,18 +183,7 @@ namespace VDRIVE.Disk.Vice
                     .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             }
 
-            // convert text directory to PRG
-            byte[] dirPrgBytes = this.BuildDirectoryPrg(rawLines); 
-
-            File.WriteAllBytes(dirPrgPath, dirPrgBytes);
-
-            if (dirPrgBytes != null && dirPrgBytes.Length > 0)
-            {
-                this.Logger.LogMessage($"$ created successfully: {dirPrgPath}");
-                return dirPrgBytes;
-            }
-
-            return null;
+            return rawLines;
         }
 
         protected byte[] BuildDirectoryPrg(string[] rawLines, string diskName = "")
