@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.Text;
+using System.Text.RegularExpressions;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
@@ -18,7 +20,7 @@ namespace VDRIVE.Disk.Vice
         {
             byte responseCode = 0xff;
             string filename = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray());
-            if (filename.StartsWith("$"))
+            if (filename.StartsWith("$")) // TODO: implement wildcards / filtering
             {
                 payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value);
             }
@@ -27,10 +29,22 @@ namespace VDRIVE.Disk.Vice
                 string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer().Value);
 
                 string lineWithFirstFile = rawLines[1];
-                string[] tokens = lineWithFirstFile.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                loadRequest.FileName = (tokens[1].Replace("\"", "")).ToCharArray();
-                loadRequest.FileNameLength = (byte)loadRequest.FileName.Length;
-                payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
+
+                // Match anything inside double quotes, including spaces
+                Match match = Regex.Match(lineWithFirstFile, "\"([^\"]*)\"");
+                if (match.Success)
+                {
+                    string extracted = match.Groups[1].Value;
+
+                    string[] tokens = lineWithFirstFile.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    loadRequest.FileName = extracted.ToCharArray();
+                    loadRequest.FileNameLength = (byte)extracted.Length;
+                    payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
+                }
+                else
+                {
+                    payload = null;
+                }
             }
             else
             {
@@ -41,17 +55,17 @@ namespace VDRIVE.Disk.Vice
             return loadResponse;
         }
 
-        protected LoadResponse BuildLoadResponse(LoadRequest loadRequest, byte[] fileBytes, byte responseCode, int chunkSize = 1024)
+        protected LoadResponse BuildLoadResponse(LoadRequest loadRequest, byte[] payload, byte responseCode, int chunkSize = 1024)
         {
             LoadResponse loadResponse = new LoadResponse();
             loadResponse.ResponseCode = responseCode;
 
-            if (fileBytes != null)
+            if (payload != null)
             {
                 loadResponse.SyncByte = (byte)'+';
 
                 // send binary length in 24 bits
-                int lengthMinusMemoryPtr = fileBytes.Length - 2;
+                int lengthMinusMemoryPtr = payload.Length - 2;
                 loadResponse.ByteCountLo = (byte)(lengthMinusMemoryPtr & 0xFF); // LSB
                 loadResponse.ByteCountMid = (byte)((lengthMinusMemoryPtr >> 8) & 0xFF);
                 loadResponse.ByteCountHi = (byte)((lengthMinusMemoryPtr >> 16) & 0xFF); // MSB
@@ -61,10 +75,10 @@ namespace VDRIVE.Disk.Vice
                 loadResponse.ChunkSizeLo = loChunkLength;
                 loadResponse.ChunkSizeHi = hiChunkLength;
 
-                int memoryLocation = (fileBytes[1] << 8) + fileBytes[0];
+                int memoryLocation = (payload[1] << 8) + payload[0];
 
-                byte loDestPtr = fileBytes[0];
-                byte hiDestPtr = fileBytes[1];
+                byte loDestPtr = payload[0];
+                byte hiDestPtr = payload[1];
 
                 loadResponse.DestPtrLo = loDestPtr;
                 loadResponse.DestPtrHi = hiDestPtr;
@@ -79,7 +93,12 @@ namespace VDRIVE.Disk.Vice
                 Directory.CreateDirectory(this.Configuration.TempPath);
 
             string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
+
+            //safeName = safeName.Replace('/', '_').Replace('\\', '_').Replace(' ', '_').Replace('"', '_').Replace('*', '_');
+            //safeName = EscapeForC1541(safeName);
             string outPrgPath = Path.Combine(this.Configuration.TempPath, safeName);
+
+            outPrgPath = outPrgPath.Replace(@"/", "_");
 
             if (File.Exists(outPrgPath))
                 File.Delete(outPrgPath);
@@ -122,6 +141,23 @@ namespace VDRIVE.Disk.Vice
                 responseCode = 0x04; // file not found
                 return null;
             }
+        }
+
+        private string EscapeForC1541(string input)
+        {
+            var sb = new StringBuilder();
+            foreach (char c in input)
+            {
+                switch (c)
+                {
+                    case '/': sb.Append("\\/"); break;
+                    case '"': sb.Append("\\\""); break;
+                    case ' ': sb.Append("\\ "); break;
+                    case '\\': sb.Append("\\\\"); break;
+                    default: sb.Append(c); break;
+                }
+            }
+            return sb.ToString();
         }
 
         protected byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer)
@@ -238,7 +274,7 @@ namespace VDRIVE.Disk.Vice
                     content = content.TrimStart();
 
                     var quoteSplit = content.Split('\"');
-                    content = $"\"{quoteSplit[1]?.Trim()}\"";
+                    content = $"\"{quoteSplit[1]}\"";
 
                     int neededSpaces = 19 - content.Length;
                     for (int sp = 0; sp < neededSpaces; sp++)

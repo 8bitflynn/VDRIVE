@@ -1,8 +1,12 @@
-﻿namespace VDRIVE_Contracts.Structures
+﻿using System.Runtime.InteropServices;
+
+namespace VDRIVE_Contracts.Structures
 {
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct InsertFloppyRequest
-    { 
-        public string Id; // specific to IFloppyResolver
-        public string ImagePath; // full path to image       
+    {
+        // floppy identifier
+        public byte IdLo;
+        public byte IdHi;         
     }
 }

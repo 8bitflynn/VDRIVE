@@ -44,6 +44,6 @@ namespace VDRIVE.Floppy
             return this.InsertedFloppyPointer;
         }
 
-        public abstract SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest);
+        public abstract SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
     }
 }

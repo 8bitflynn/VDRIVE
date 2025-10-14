@@ -146,26 +146,29 @@ namespace VDRIVE.Floppy
             return;
         }
 
-        public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
+        public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
             // clear previous search results
             this.FloppyInfos.Clear();
             this.FloppyPointers.Clear();
 
-            if (string.IsNullOrWhiteSpace(searchFloppiesRequest.MediaType))
+            string mediaType = searchFloppiesRequest.MediaType != null ? new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()) : string.Empty;
+            string searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
+
+            if (string.IsNullOrWhiteSpace(mediaType))
             {
                 this.MediaExtensionsAllowed = this.DefaultMediaExtensionsAllowed;
             }
             else
             {
-                this.MediaExtensionsAllowed = searchFloppiesRequest.MediaType.Split(',').ToList();
+                this.MediaExtensionsAllowed = mediaType.Split(',').ToList();
             }
+
+            //[MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)]
+            //FloppyInfo[] SearchResults;
 
             using (HttpClient client = new HttpClient())
             {
-                string searchTerm = new string(searchFloppiesRequest.SearchTerm);
-                string mediaType = new string(searchFloppiesRequest.MediaType);
-
                 string searchUrl = this.BuildCommodoreSoftwareSearchUrl(searchTerm, mediaType);
 
                 this.Logger.LogMessage($"Searching Commodore Software for '{searchTerm}' with media type '{mediaType}'");
@@ -175,13 +178,16 @@ namespace VDRIVE.Floppy
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
-                    SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
-                    searchFloppyResponse.ResponseCode = 0x00; // success
-
                     IEnumerable<FloppyInfo> floppyInfos = this.ScrapeResults(html);
-                    searchFloppyResponse.SearchResults = floppyInfos.ToArray();
 
-                    this.Logger.LogMessage($"Found {floppyInfos.Count()} results for '{searchTerm}'");
+                    SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff: (byte)0x04), (byte)floppyInfos.Count()); // more follows
+                   
+
+                                
+
+                    foundFloppyInfos = floppyInfos.ToArray();
+
+                    this.Logger.LogMessage($"Found {floppyInfos.Count()} results for '{searchTerm}'");                  
 
                     return searchFloppyResponse;
                 }
@@ -190,9 +196,43 @@ namespace VDRIVE.Floppy
                     this.Logger.LogMessage(@"Failed to search {searchTerm}: " + httpResponseMessage.StatusCode);
                 }
             }
-
+            foundFloppyInfos = null;
             return default(SearchFloppyResponse);
-        }       
+        }
+
+        protected SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount, ushort chunkSize = 1024)
+        {
+            SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
+            searchFloppyResponse.ResponseCode = responseCode;
+
+            if (resultCount > 0)
+            {
+                searchFloppyResponse.SyncByte = (byte)'+';               
+                searchFloppyResponse.ResultCount = resultCount;
+
+                // filled in later
+                // send binary length in 24 bits
+                //int lengthMinusMemoryPtr = payload.Length - 2;
+                //searchFloppyResponse.ByteCountLo = (byte)(lengthMinusMemoryPtr & 0xFF); // LSB
+                //searchFloppyResponse.ByteCountMid = (byte)((lengthMinusMemoryPtr >> 8) & 0xFF);
+                //searchFloppyResponse.ByteCountHi = (byte)((lengthMinusMemoryPtr >> 16) & 0xFF); // MSB
+
+                byte loChunkLength = (byte)chunkSize;
+                byte hiChunkLength = (byte)(chunkSize >> 8);
+                searchFloppyResponse.ChunkSizeLo = loChunkLength;
+                searchFloppyResponse.ChunkSizeHi = hiChunkLength;
+
+               // int memoryLocation = (payload[1] << 8) + payload[0];
+
+                byte loDestPtr = (byte)destPtr;
+                byte hiDestPtr = (byte)(destPtr >> 8);
+
+                searchFloppyResponse.DestPtrLo = loDestPtr;
+                searchFloppyResponse.DestPtrHi = hiDestPtr;
+            }
+
+            return searchFloppyResponse;
+        }
 
         private IEnumerable<FloppyInfo> ScrapeResults(string html)
         {
@@ -214,16 +254,26 @@ namespace VDRIVE.Floppy
                 FloppyInfo floppyInfo = new FloppyInfo();
                 floppyInfo.IdLo = (byte)searchResultIndex;
                 floppyInfo.IdHi = (byte)(searchResultIndex >> 8);
-                floppyInfo.ImageName = match.Groups[2].Value.Trim().ToCharArray();
-                floppyInfo.ImageNameLength = (byte)floppyInfo.ImageName.TakeWhile(c => c != '\0').Count();
+
+                //string imageName = Path.GetFileName(searchResult);
+
+                if (imageName.Length > 64)
+                {
+                    imageName = imageName.Substring(0, 64);
+                }
+                floppyInfo.ImageNameLength = (byte)imageName.Length;
+                floppyInfo.ImageName = new char[64];
+                imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
+
                 // strip html
                 string description = Regex.Replace(match.Groups[3].Value, @"<.*?>", "").Trim();
                 // strip non-ascii
                 description = Regex.Replace(description, @"[^\x20-\x7E]", "");
                 // strip multiple spaces
-                description = Regex.Replace(new string(floppyInfo.Description), @"\s{2,}", " ");
-                floppyInfo.Description = description.ToCharArray();
-                floppyInfo.DescriptionLength = (byte)floppyInfo.Description.TakeWhile(c => c != '\0').Count();  
+                //description = Regex.Replace(new string(floppyInfo.Description), @"\s{2,}", " ");
+                //floppyInfo.DescriptionLength = (byte)description.Length;
+                //floppyInfo.Description = new char[255];
+                //description.ToUpper().ToCharArray().CopyTo(floppyInfo.Description, 0);              
                 floppyInfos.Add(floppyInfo);
 
                 // floppy pointers hold Id and long path and are looked up when "inserted"

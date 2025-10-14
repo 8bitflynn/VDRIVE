@@ -15,8 +15,8 @@ namespace VDRIVE_Contracts.Structures
         public byte IdLo;
         public byte IdHi;
 
-        public byte DescriptionLength;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 255)]
-        public char[] Description; // optional description                  
+        //public byte DescriptionLength;
+       // [MarshalAs(UnmanagedType.ByValArray, SizeConst = 255)]
+       // public char[] Description; // optional description                  
     }
 }

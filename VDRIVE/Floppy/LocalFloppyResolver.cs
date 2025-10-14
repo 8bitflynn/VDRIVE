@@ -1,6 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Numerics;
-using VDRIVE_Contracts.Interfaces;
+﻿using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Floppy
@@ -13,7 +11,7 @@ namespace VDRIVE.Floppy
             this.Logger = logger;
         }
 
-        public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest)
+        public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
             this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
 
@@ -21,14 +19,17 @@ namespace VDRIVE.Floppy
             this.FloppyInfos.Clear();
             this.FloppyPointers.Clear();
 
+            string mediaType = searchFloppiesRequest.MediaType != null ? new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()) : string.Empty;
+            string searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
+
             ushort searchResultIndex = 1;
 
-            SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
+           // SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
             foreach (string searchPath in this.Configuration.SearchPaths)
             {
-                string[]? extensions = (searchFloppiesRequest.MediaType != null ? searchFloppiesRequest.MediaType.Split(',') : null);
-                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, new string(searchFloppiesRequest.SearchTerm), extensions, true);
+                string[]? extensions = (searchFloppiesRequest.MediaType != null ? mediaType.Split(',') : null);
+                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, searchTerm, extensions, true);
                 if (searchResults != null)
                 {
                     foreach (string searchResult in searchResults)
@@ -37,10 +38,16 @@ namespace VDRIVE.Floppy
                         FloppyInfo floppyInfo = new FloppyInfo();
                         floppyInfo.IdLo = (byte)searchResultIndex;
                         floppyInfo.IdHi = (byte)(searchResultIndex >> 8);
-                        floppyInfo.ImageName = Path.GetFileName(searchResult).ToCharArray();
-                        floppyInfo.ImageNameLength = (byte)floppyInfo.ImageName.Length;
-                        floppyInfo.Description = Path.GetFileNameWithoutExtension(searchResult).ToCharArray(); // just use name without extension for now
-                        floppyInfo.DescriptionLength = (byte)(floppyInfo.Description?.Length ?? 0);
+
+                        string imageName = Path.GetFileName(searchResult);
+                        floppyInfo.ImageNameLength = (byte)imageName.Length;
+                        floppyInfo.ImageName = new char[64];
+                        imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);                      
+
+                        //string description = Path.GetFileNameWithoutExtension(searchResult); // just use name without extension for now
+                       // floppyInfo.DescriptionLength = (byte)description.Length;
+                       // floppyInfo.Description = new char[255];
+                       // description.ToUpper().ToCharArray().CopyTo(floppyInfo.Description, 0);
                         // TODO: validate the FloppyInfo fields are within limits
 
                         // info stored in resolver with longs paths
@@ -58,11 +65,50 @@ namespace VDRIVE.Floppy
                     }                   
                 }
             }
-            searchFloppyResponse.SearchResults = floppyInfos.ToArray();
-            searchFloppyResponse.ResponseCode = 0xff; // success for now
-            searchFloppyResponse.ResultCount = (byte)searchFloppyResponse.SearchResults.Length;            
+            foundFloppyInfos = floppyInfos.ToArray();
+           // searchFloppyResponse.ResponseCode = 0xff; // success for now
+          //  searchFloppyResponse.ResultCount = (byte)floppyInfos.Count;
 
-            this.Logger.LogMessage($"Found {searchFloppyResponse.SearchResults.Length} floppy images matching description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
+            SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)floppyInfos.Count()); 
+
+
+
+
+            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
+            return searchFloppyResponse;
+        }
+
+        protected SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount, ushort chunkSize = 1024)
+        {
+            SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
+            searchFloppyResponse.ResponseCode = responseCode;
+
+            if (resultCount > 0)
+            {
+                searchFloppyResponse.SyncByte = (byte)'+';
+                searchFloppyResponse.ResultCount = resultCount;
+
+                // filled in later
+                // send binary length in 24 bits
+                //int lengthMinusMemoryPtr = payload.Length - 2;
+                //searchFloppyResponse.ByteCountLo = (byte)(lengthMinusMemoryPtr & 0xFF); // LSB
+                //searchFloppyResponse.ByteCountMid = (byte)((lengthMinusMemoryPtr >> 8) & 0xFF);
+                //searchFloppyResponse.ByteCountHi = (byte)((lengthMinusMemoryPtr >> 16) & 0xFF); // MSB
+
+                byte loChunkLength = (byte)chunkSize;
+                byte hiChunkLength = (byte)(chunkSize >> 8);
+                searchFloppyResponse.ChunkSizeLo = loChunkLength;
+                searchFloppyResponse.ChunkSizeHi = hiChunkLength;
+
+                // int memoryLocation = (payload[1] << 8) + payload[0];
+
+                byte loDestPtr = (byte)destPtr;
+                byte hiDestPtr = (byte)(destPtr >> 8);
+
+                searchFloppyResponse.DestPtrLo = loDestPtr;
+                searchFloppyResponse.DestPtrHi = hiDestPtr;
+            }
+
             return searchFloppyResponse;
         }
 
