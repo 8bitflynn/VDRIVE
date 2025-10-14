@@ -18,9 +18,7 @@ namespace VDRIVE.Floppy
 
         // TODO: move to config...
         List<string> IgnoredSearchKeywords = new List<string> { "manual", "firmware", "documentation", "guide", "instruction", "tutorial", 
-         "c128", "dos", "128" };
-
-        List<string> DefaultMediaExtensionsAllowed = new List<string> { ".d64", ".g64", ".d81", ".d71", ".d80", ".d82", ".tap", ".t64", ".prg", ".p00" };
+         "c128", "dos", "128" };        
         
         // set when searching disk
         List<string> MediaExtensionsAllowed = new List<string>();

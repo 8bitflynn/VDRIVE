@@ -19,17 +19,24 @@ namespace VDRIVE.Floppy
             this.FloppyInfos.Clear();
             this.FloppyPointers.Clear();
 
-            string mediaType = searchFloppiesRequest.MediaType != null ? new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()) : string.Empty;
+            string[] mediaTypes = null;
+            string mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray());
+            if (string.IsNullOrWhiteSpace(mediaTypeCSV))
+            {
+                 mediaTypes = DefaultMediaExtensionsAllowed.Select(x => x.ToString()).ToArray();
+            }
+            else
+            {
+                mediaTypes = mediaTypeCSV.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
             string searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
-
             ushort searchResultIndex = 1;
 
-           // SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
             foreach (string searchPath in this.Configuration.SearchPaths)
             {
-                string[]? extensions = (searchFloppiesRequest.MediaType != null ? mediaType.Split(',') : null);
-                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, searchTerm, extensions, true);
+                //string[]? extensions = mediaType.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, searchTerm, mediaTypes, true);
                 if (searchResults != null)
                 {
                     foreach (string searchResult in searchResults)

@@ -12,6 +12,8 @@ namespace VDRIVE.Floppy
         protected FloppyPointer? InsertedFloppyPointer; // join to FloppyInfo.Id for long path
         protected List<FloppyPointer> FloppyPointers = new List<FloppyPointer>();
 
+        protected List<string> DefaultMediaExtensionsAllowed = new List<string> { ".d64", ".g64", ".d81", ".d71", ".d80", ".d82" };
+
         public virtual FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier) // called from C64
         {
             this.InsertedFloppyInfo = this.FloppyInfos.FirstOrDefault(fi => fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
