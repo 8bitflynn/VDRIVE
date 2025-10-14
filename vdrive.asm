@@ -1,7 +1,7 @@
 ; memory map
 ; $c000 - jmp table
-; $c200 - up9600 bitbanger/vdrive
-; $c580 - vars and constants
+; $c374 - up9600 bitbanger/vdrive
+; $c5e5 - vars and constants
 ; $c600 - rs232 input buffer
 ; $c700 - rs232 output buffer 
 ; $c800 - up9600
@@ -28,36 +28,44 @@ temp_ptr_hi = $fe
 dest_ptr_lo = $ae ; basic and org iload use these locations
 dest_ptr_hi = $af ; as a pointer to the byte to store the recv'd byte
 
-dest_ptr_lo_save = $c580
-dest_ptr_hi_save = $c581
-byte_count_lo_save = $c582
-byte_count_mid_save = $c593
-byte_count_hi_save = $c584
-chunk_size_lo_save = $c585
-chunk_size_hi_save = $c586
-byte_count_lo = $c587
-byte_count_mid = $c588
-byte_count_hi = $c589
-chunk_size_lo = $c58a
-chunk_size_hi = $c58b
-vdisk_devnum  = $c58c
-spinner_char_save = $c58d
-vdrive_retcode = $c58e
-org_iload_lo   = $c58f
-org_iload_hi   = $c590
-org_isave_lo   = $c591
-org_isave_hi   = $c592
-temp_workspace1 = $c593
-temp_workspace2 = $c594
-temp_workspace3 = $c595
-temp_workspace4 = $c596
+dest_ptr_lo_save      = $c5e5
+dest_ptr_hi_save      = $c5e6
+byte_count_lo_save    = $c5e7
+byte_count_mid_save   = $c5e8
+byte_count_hi_save    = $c5e9
+chunk_size_lo_save    = $c5ea
+chunk_size_hi_save    = $c5eb
+byte_count_lo         = $c5ec
+byte_count_mid        = $c5ed
+byte_count_hi         = $c5ee
+chunk_size_lo         = $c5ef
+chunk_size_hi         = $c5f0
+vdisk_devnum          = $c5f1
+spinner_char_save     = $c5f2
+vdrive_retcode        = $c5f3
+org_iload_lo          = $c5f4
+org_iload_hi          = $c5f5
+org_isave_lo          = $c5f6
+org_isave_hi          = $c5f7
+temp_workspace1       = $c5f8
+temp_workspace2       = $c5f9
+temp_workspace3       = $c5fa
+temp_workspace4       = $c5fb
+save_d015             = $c5fc
+pad_count             = $c5fd
+temp_workspace5       = $c5fe
+search_result_count   = $c5ff
+
+
 
 *= $c000
-        ; jump table
         jmp enable_vdrive
 ; $c003
         jmp disable_vdrive
-        rts
+; $c006  
+        jmp vdrive_search
+; $c009
+        jmp mount_floppy_request
    
 enable_vdrive
         ; install before hooking vectors 
@@ -111,18 +119,18 @@ disable_vdrive
 
 iload_handler  
         sta temp_workspace1
-        stx temp_workspace2 ; should be same as $C3
-        sty temp_workspace3 ; should be same as $C4
+        stx temp_workspace2 ; should be same as $c3
+        sty temp_workspace3 ; should be same as $c4
         php             
         pla            
         sta temp_workspace4 
         lda vdisk_devnum
-        cmp devnum ; compare with number from LOAD and if different, call original ILOAD
+        cmp devnum ; compare with number from load and if different, call original iload
         beq vdrive_load  
         jsr disable_up9600 ; just in case          
         lda temp_workspace4 ; original status
         pha ; push status onto stack
-        plp ; pull status into CPU status reg            
+        plp ; pull status into cpu status reg            
         clc   
         lda org_iload_lo
         sta temp_ptr_lo
@@ -150,7 +158,7 @@ vdrive_load
 
         jsr send_load_request
 
-        lda #$00 ; bit 6 eoi (had $40 here bit 6 for EOI)
+        lda #$00 ; bit 6 eoi (had $40 here bit 6 for eoi)
         sta $90 ; kernal i/o status word
         lda #$00
         sta $93 ; 0=loading and 1=verifying msg
@@ -164,7 +172,7 @@ vdrive_load
         sta spinner_char_save 
 
         jsr recv_load_response
-        ; A has lvdrive_retcode
+        ; a has lvdrive_retcode
         cmp #$ff
         bne return_init
 
@@ -173,12 +181,16 @@ recv_payload
         jsr recv_data
 
         lda spinner_char_save
-        sta $07e7
-
-        ; turn off up9600
-        jsr disable_up9600     
+        sta $07e7      
 
 return_init
+
+         ; turn off up9600
+        jsr disable_up9600  
+
+        ; restore state to original
+        jsr restore_up9600_timing_issue_state
+
         lda vdrive_retcode ; holds any error or break message
         cmp #$ff
         beq return_success
@@ -244,14 +256,14 @@ recv_load_response
 isave_handler
         lda vdisk_devnum 
         cmp devnum 
-        beq vdisk_save
+        beq vdrive_save
         lda org_isave_lo
         sta temp_ptr_lo
         lda org_isave_hi
         sta temp_ptr_hi
         jmp (org_isave_lo)
 
-vdisk_save
+vdrive_save
 
         ; setup save pointers
         jsr setup_save_ptrs
@@ -279,7 +291,10 @@ vdisk_save
         sta $07e7
 
          ; turn off up9600
-        jsr disable_up9600    
+        jsr disable_up9600   
+        
+        ; restore state to original
+        jsr restore_up9600_timing_issue_state
 
         ; return success
         clc
@@ -363,8 +378,264 @@ filename_pad_loop_save
 no_padding_save
         rts
 
+; search entry
+vdrive_search 
+        jsr clear_up9600_timing_issues 
+        jsr enable_up9600   
+
+        jsr get_search_term
+     
+        jsr send_search_request 
+
+        lda #$ff ; ff = success
+        sta vdrive_retcode 
+
+        lda $07e7
+        sta spinner_char_save      
+
+        jsr recv_search_response ; header         
+        cmp #$ff
+        bne search_return_init
+
+search_recv_payload   
+
+        ; bitbanger/vdisk receiver entry
+        jsr recv_data
+
+        lda spinner_char_save
+        sta $07e7       
+
+        jsr printfilenames
+
+search_return_init
+
+        jsr disable_up9600 
+        jsr restore_up9600_timing_issue_state       
+
+        rts
+
+get_search_term
+        ldy #0
+readchar
+        jsr $ffcf           ; chrin — waits for real input
+        cmp #$0d            ; return?
+        beq done
+        sta temp_search_term,y
+        iny
+        bne readchar        ; loop until y wraps
+
+done
+        sty fnlen
+        rts
+
+send_search_request
+        lda #$2b ; sync
+        jsr send_byte
+        lda #$05 ; operation - search
+        jsr send_byte
+
+        lda #<temp_search_term
+        sta temp_ptr_lo
+        lda #>temp_search_term
+        sta temp_ptr_hi
+
+        lda fnlen
+        jsr send_byte
+
+        ldx #$00                 ; use x as index
+search_loop_x
+        lda temp_search_term,x
+        jsr send_byte
+        inx
+        cpx fnlen
+        bne search_loop_x
+
+        lda #$73 ; pad rest
+        sec
+        sbc fnlen
+        sta pad_count            ; zero-page pad counter
+        beq no_padding_search        
+
+pad_send_loop
+        lda #$00        
+        jsr send_byte
+        dec pad_count
+        bne pad_send_loop
+
+no_padding_search
+        lda #$ff ; flags
+        jsr send_byte
+        rts
+
+recv_search_response
+       
+        jsr get_syncbyte   
+        jsr recv_byte 
+        sta vdrive_retcode   
+        jsr recv_byte 
+        sta search_result_count
+
+        ;jsr print_accum
+
+        ; fixme
+        lda vdrive_retcode       
+        
+        rts
+
+mount_floppy_request
+
+        jsr clear_up9600_timing_issues 
+        jsr enable_up9600  
+         
+        jsr get_search_term ; reuse to get id of floppy for now
+        cmp fnlen
+        beq mount_floppy_exit
+
+        lda #$2b ; sync
+        jsr send_byte
+        lda #$03 ; operation - insert floppy
+        jsr send_byte
+
+        jsr parse_floppy_id ; turn entered text into 16 bit floppy id
+        lda temp_workspace1
+        jsr send_byte
+        lda temp_workspace2
+        jsr send_byte         
+        
+mount_floppy_exit
+
+        jsr disable_up9600 
+        jsr restore_up9600_timing_issue_state   
+
+        rts
+
+
+parse_floppy_id
+
+        ldx #0
+        lda #0
+        sta temp_workspace1
+        sta temp_workspace2
+
+parse_loop
+        cpx fnlen
+        beq done_parse
+
+        lda temp_search_term,x
+        sec
+        sbc #$30           ; ascii to digit
+        sta temp_workspace5 ;digit
+
+        ; multiply result by 10
+        lda temp_workspace1; result_lo
+        asl a
+        sta temp_workspace3; temp_lo
+        lda temp_workspace2; result_hi
+        rol a
+        sta temp_workspace4 ; temp_hi        ; result × 2
+
+        lda temp_workspace1 ;result_lo
+        asl a
+        asl a
+        asl a
+        clc
+        adc temp_workspace3;temp_lo
+        sta temp_workspace1;result_lo
+        lda temp_workspace2;result_hi
+        rol a
+        rol a
+        rol a
+        adc temp_workspace4;temp_hi
+        sta temp_workspace2;result_hi      ; result × 10
+
+        ; add digit
+        clc
+        lda temp_workspace1;result_lo
+        adc temp_workspace5;digit
+        sta temp_workspace1;result_lo
+        bcc skip_inc_parse
+        inc temp_workspace2;result_hi
+skip_inc_parse
+        inx
+        jmp parse_loop
+
+done_parse
+      rts
+
+printfilenames
+    lda #13
+    jsr $ffd2
+
+    lda #$00
+    sta temp_workspace1     ; ensure counter starts at 0 (optional if already 0)
+
+    lda dest_ptr_lo_save
+    sta temp_ptr_lo
+    lda dest_ptr_hi_save
+    sta temp_ptr_hi
+
+printloop
+    lda search_result_count
+    beq done_print
+
+    ; ---- increment and print line counter (temp_workspace1) ----
+    inc temp_workspace1
+    lda temp_workspace1
+    cmp #10
+    bcc .ones_only       ; 1..9 -> only ones
+
+    ; tens = '1' for 10..19
+    lda #$31
+    jsr $ffd2
+
+    lda temp_workspace1
+    sec
+    sbc #10              ; A = ones digit for 10..19
+
+.ones_only
+    ora #$30             ; convert 0..9 to PETSCII
+    jsr $ffd2
+
+    lda #$20
+    jsr $ffd2            ; space after number
+
+    ; ---- print description (reads length at offset 0) ----
+    ldy #0
+    lda (temp_ptr_lo),y  ; A = imagenamelength
+    tax                  ; X = length for name loop
+    beq printemptyname
+
+    ldy #1
+printnamechar
+    lda (temp_ptr_lo),y
+    jsr $ffd2
+    iny
+    dex
+    bne printnamechar
+
+printemptyname
+    lda #13
+    jsr $ffd2
+
+    ; ---- advance pointer by structsize (67) ----
+    clc
+    lda temp_ptr_lo
+    adc #$43
+    sta temp_ptr_lo
+    lda temp_ptr_hi
+    adc #0
+    sta temp_ptr_hi
+
+    dec search_result_count
+    jmp printloop
+
+done_print
+    rts
+
+
+
 ; bitbanger/vdisk chunked transfer
-*= $c200
+*= $c374
 
 recv_data
 
@@ -434,6 +705,7 @@ store_bytes_loop
         bne skip_inc_dst_ptr
         inc dest_ptr_hi; increment high byte to move to next page
         jsr update_spinner
+        
 skip_inc_dst_ptr
         ; decrement the bytes left
         sec
@@ -472,7 +744,7 @@ skip_inc_dst_ptr
         sta chunk_size_hi
 
         ; run stop check
-        ; emulating so it does not close the channels
+        ; emulating instead of calling $ffe1 so it does not close the channels
         ;jsr $ffe1
         lda $91
         cmp #$7f
@@ -599,7 +871,7 @@ wait_for_sync_byte
 finished_send
         rts
 
-adjust_pointers_resend_chunk ; TODO
+adjust_pointers_resend_chunk ; todo
         rts
 
 install_up9600
@@ -644,7 +916,7 @@ delay_inner
         jsr $c809
         rts
 
-send_byte ; assumes a holds byte to send        
+send_byte ; assumes a holds byte to send
         jsr $c80c             
         rts
 
@@ -661,8 +933,15 @@ get_syncbyte
         rts
 
 clear_up9600_timing_issues
+        lda $d015
+        sta save_d015
         lda #$00
-        sta $d015 ; turn sprites off - causes corruption
+        sta $d015 ; turn sprites off - causes timing issues with up9600?
+        rts
+
+restore_up9600_timing_issue_state
+        lda save_d015
+        sta $d015 ; restore sprite state
         rts
 
 update_spinner
@@ -681,6 +960,12 @@ rotate_chars
         byte $42, $4e, $44, $4d ; | / - \
 rotate_index
         byte 0
+
+temp_search_term
+        text ""
+
+
+
 
 
 
