@@ -1,11 +1,7 @@
-; 10/13/2008
-; added restore for up9600 timing 
-
-
 ; memory map
 ; $c000 - jmp table
-; $c400 - up9600 bitbanger/vdrive
-; $c580 - vars and constants
+; $c374 - up9600 bitbanger/vdrive
+; $c5e5 - vars and constants
 ; $c600 - rs232 input buffer
 ; $c700 - rs232 output buffer 
 ; $c800 - up9600
