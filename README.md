@@ -1,7 +1,7 @@
 ## 🧠 VDRIVE
 <img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
 
-**Wirelessly SEARCH for images and LOAD/SAVE data to/from your Commodore 64!**  
+**Wirelessly SEARCH/MOUNT disk images and LOAD/SAVE data to/from your Commodore 64!**  
 
 - VDRIVE is a free, open-source tool built for those who want modern flexibility in retro workflows. It reflects months of design, testing, and iteration — not a plug-and-play gimmick. If you prefer original hardware, that’s valid. If you want remote disk access, mount/unmount control, and HTTP support, VDRIVE is here for you.
 
@@ -27,7 +27,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
 
 2. **Assemble the C64 Client**  
-   Compile `vdrive.asm` using **CBM Studio** (6510 assembly flavor).
+   Compile `vdrive.asm` using **CBM Studio**.
 
 3. **Configure the Server**  
    Edit `appsettings.json` to point to your disk images.
