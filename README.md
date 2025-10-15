@@ -42,7 +42,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    a. LOAD "vdrive.prg" from regular disk.  
    b. SYS 49152 enable VDRIVE .  
    c. SYS 49158 search for disk images (results include sequence 1,2,3,4 and the description or filename).   
-   d. MOUNT SYS 49161 (enter the sequence number from search).   
+   d. SYS 49161 mount floppy disk (enter the sequence number from search).   
    e. LOAD/SAVE from VDRIVE.
    
 ---
