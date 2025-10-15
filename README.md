@@ -30,8 +30,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    Compile `vdrive.asm` using **CBM Studio** (6510 assembly flavor).
 
 3. **Configure the Server**  
-   Edit `appsettings.json` to point to your disk image.  
-   🔁 Restart required to change disks (until this is fixed).
+   Edit `appsettings.json` to point to your disk images.
 
 4. **Run the VDRIVE Server**  
    Launch the C# .NET Core server.
