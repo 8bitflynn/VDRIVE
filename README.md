@@ -1,7 +1,7 @@
 ## 🧠 VDRIVE
 <img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
 
-**Wirelessly LOAD/SAVE data to your Commodore 64!**  
+**Wirelessly SEARCH for images and LOAD/SAVE data to/from your Commodore 64!**  
 
 - VDRIVE is a free, open-source tool built for those who want modern flexibility in retro workflows. It reflects months of design, testing, and iteration — not a plug-and-play gimmick. If you prefer original hardware, that’s valid. If you want remote disk access, mount/unmount control, and HTTP support, VDRIVE is here for you.
 
@@ -37,15 +37,19 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    Launch the C# .NET Core server.
 
 5. **Test on Real Hardware**  
-   Try `LOAD` / `SAVE` from your Commodore 64!
+   Test VDRIVE from your Commdore 64!
 
-
+   a. LOAD "vdrive.prg" from regular disk.  
+   b. SYS 49152 enable VDRIVE .  
+   c. SYS 49158 search for disk images (results include sequence 1,2,3,4 and the description or filename).   
+   d. MOUNT SYS 49161 (enter the sequence number from search).   
+   e. LOAD/SAVE from VDRIVE.
+   
 ---
 
 ### 🚧 Known Limitations
 
 - VDRIVE runs @ $C000 so any LOAD that hits that limit will crash VDRIVE. Eventually there will be an option to transfer directly to disk (even full images like D64) to modern SDIEC or other devices.
-- VDRIVE currently has to be re-started to change disk image but only because I have not finished the assembly to request floppy changes and it will soon work as expected.
 - The `setupwifi` is out of date so for now Wi-Fi setup requires manual configuration in firmware.
 
 
