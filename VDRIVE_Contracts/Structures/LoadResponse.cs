@@ -1,16 +1,15 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace VDRIVE_Contracts.Structures
 {
-    [DebuggerDisplay("ResponseCode={ResponseCode}, DeviceNum={DeviceNum}")]
+    [DebuggerDisplay("ResponseCode={ResponseCode}")]
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct LoadResponse
     {
         public byte ResponseCode;          // 0x00 = success, # = error number to show
 
-        public byte SyncByte;
+        public byte SyncByte; // bit banger transfer header here down
 
         // send binary length in 24 bits (images can be > 64K)
         public byte ByteCountLo;

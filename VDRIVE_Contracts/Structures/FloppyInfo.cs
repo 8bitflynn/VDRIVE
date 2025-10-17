@@ -13,10 +13,6 @@ namespace VDRIVE_Contracts.Structures
 
         public byte ImageNameLength;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)]
-        public char[] ImageName; // name of image only
-
-        //public byte DescriptionLength;
-       // [MarshalAs(UnmanagedType.ByValArray, SizeConst = 255)]
-       // public char[] Description; // optional description                  
+        public char[] ImageName; // name of image / description           
     }
 }

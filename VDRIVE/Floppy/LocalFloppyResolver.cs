@@ -13,7 +13,7 @@ namespace VDRIVE.Floppy
 
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
-            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
+            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{new string (searchFloppiesRequest.MediaType)}'");
 
             // clear last search results
             this.FloppyInfos.Clear();
@@ -62,16 +62,11 @@ namespace VDRIVE.Floppy
                         floppyInfo.IdHi = (byte)(searchResultIndex >> 8);
 
                         string imageName = Path.GetFileName(searchResult);
+                        imageName = imageName.Length > 64 ? imageName.Substring(0, 64) : imageName; // truncate if needed
                         floppyInfo.ImageNameLength = (byte)imageName.Length;
                         floppyInfo.ImageName = new char[64];
-                        imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);                      
-
-                        //string description = Path.GetFileNameWithoutExtension(searchResult); // just use name without extension for now
-                       // floppyInfo.DescriptionLength = (byte)description.Length;
-                       // floppyInfo.Description = new char[255];
-                       // description.ToUpper().ToCharArray().CopyTo(floppyInfo.Description, 0);
-                        // TODO: validate the FloppyInfo fields are within limits
-
+                        imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);                   
+                     
                         // info stored in resolver with longs paths
                         FloppyPointer floppyPointer = new FloppyPointer();
                         floppyPointer.Id = searchResultIndex;
@@ -90,16 +85,9 @@ namespace VDRIVE.Floppy
             // foundFloppyInfos = floppyInfos.ToArray();
             foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
 
-
-            // searchFloppyResponse.ResponseCode = 0xff; // success for now
-            //  searchFloppyResponse.ResultCount = (byte)floppyInfos.Count;
-
             SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)floppyInfos.Count()); 
 
-
-
-
-            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{searchFloppiesRequest.MediaType}'");
+            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{new string (searchFloppiesRequest.MediaType)}'");
             return searchFloppyResponse;
         }
 

@@ -10,7 +10,7 @@ namespace VDRIVE
         /// 
         /// CURRENT TESTING
         /// SYS 49152 - enable
-        /// SYS 49158 - search floppyies (will prompt for search term in C64)
+        /// SYS 49158 - search floppies (will prompt for search term in C64)
         /// SYS 49161 - insert floppy (will prompt for ID in C64)
         /// </summary>
         /// <param name="args"></param>
@@ -23,8 +23,8 @@ namespace VDRIVE
 
             // injected dependencies to be moved into server so each client can have their own instance
             ILog logger = new Util.ConsoleLogger();
-            //IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger); // search local paths
-            IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger); // search commodoresoftware.com
+            IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger); // search local paths
+            //IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger); // search commodoresoftware.com
             //IFloppyResolver floppyResolver = new C64FloppyResolverFloppyResolver(configuration, logger);
             ILoad loader = new ViceLoad(configuration, logger);
             ISave saver = new ViceSave(configuration, logger);         

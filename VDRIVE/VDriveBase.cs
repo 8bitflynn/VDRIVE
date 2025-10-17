@@ -83,26 +83,21 @@ namespace VDRIVE
                         }
                         break;
 
-                    case 0x03: // MOUNT floppy image
+                    case 0x03: // INSERT/MOUNT floppy image
                         {
                             int size = Marshal.SizeOf<InsertFloppyRequest>();
 
                             byte[] buffer = new byte[size];
-                            //buffer[0] = data[0];
 
                             this.ReadNetworkStream(networkStream, buffer, 0, size);
 
-                            InsertFloppyRequest insertFloppyRequest = BinaryStructConverter.FromByteArray<InsertFloppyRequest>(buffer);
+                            FloppyIdentifier insertFloppyRequest = BinaryStructConverter.FromByteArray<FloppyIdentifier>(buffer);
 
                             FloppyIdentifier floppyIdentifier = new FloppyIdentifier();
                             floppyIdentifier.IdLo = insertFloppyRequest.IdLo;
                             floppyIdentifier.IdHi = insertFloppyRequest.IdHi;
 
-                            // HACK until I get the floppy resolver implemented from C64
                             FloppyInfo? floppyInfo = this.FloppyResolver.InsertFloppy(floppyIdentifier);
-                            //  FloppyInfo? insertedFloppy = this.FloppyResolver.InsertFloppy(floppyInfo);
-
-
 
                             this.Logger.LogMessage("Insert Request: ID=" + (floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8)) + ", Name=\"" + (floppyInfo != null ? new string(floppyInfo.Value.ImageName) : "Not Found") + "\"");
                         }
@@ -110,8 +105,9 @@ namespace VDRIVE
 
                     case 0x04: // UNMOUNT floppy image
                         {
-                            // not sure I need any params here
-                            //EjectFloppyRequest ejectFloppyRequest = new EjectFloppyRequest();
+                            // TODO: not sure I will implement this as I do not really see a need to?
+                            // the only reason one would eject a floppy is to insert another one
+                            // and that is handled by the insert command
 
                             // TODO: read params from C64
                             this.FloppyResolver.EjectFloppy();

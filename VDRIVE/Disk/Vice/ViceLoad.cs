@@ -21,8 +21,6 @@ namespace VDRIVE.Disk.Vice
         {
             try
             {
-               
-
                 byte responseCode = 0xff;
                 string filename = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray());
 
@@ -36,15 +34,15 @@ namespace VDRIVE.Disk.Vice
                     payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().Value.ImagePath);
 
                     // build a temp D64 image with just this file in it
-                    string tempImagePath = this.BuildImageForPRG(filename, Path.Combine(this.Configuration.TempPath, "tempdisk.d64"));
+                    //string tempImagePath = this.BuildImageForPRG(filename, Path.Combine(this.Configuration.TempPath, "tempdisk.d64"));
 
-                    FloppyPointer? currentFloppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
-                    FloppyPointer newFloppyPointer = new FloppyPointer
-                    {
-                        Id = currentFloppyPointer.Value.Id,
-                        ImagePath = tempImagePath
-                    };
-                    floppyResolver.SetInsertedFloppyPointer(newFloppyPointer); // set the floppy pointer to newly created image
+                    //FloppyPointer? currentFloppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
+                    //FloppyPointer newFloppyPointer = new FloppyPointer
+                    //{
+                    //    Id = currentFloppyPointer.Value.Id,
+                    //    ImagePath = tempImagePath
+                    //};
+                    //floppyResolver.SetInsertedFloppyPointer(newFloppyPointer); // set the floppy pointer to newly created image
                 }
                 else if (filename.StartsWith("$")) // TODO: implement wildcards / filtering
                 {
@@ -406,7 +404,7 @@ namespace VDRIVE.Disk.Vice
 
         private string BuildImageForPRG(string prgPath, string imagePath)
         {
-            return null;
+            return Path.Combine(imagePath, prgPath);
         }
     }
 }
