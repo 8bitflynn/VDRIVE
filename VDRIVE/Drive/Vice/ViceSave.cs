@@ -2,7 +2,7 @@
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Disk.Vice
+namespace VDRIVE.Drive.Vice
 {
     public class ViceSave : ISave
     {

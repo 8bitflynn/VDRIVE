@@ -1,4 +1,4 @@
-﻿using VDRIVE.Disk.Vice;
+﻿using VDRIVE.Drive.Vice;
 using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
 
@@ -21,18 +21,12 @@ namespace VDRIVE
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new Configuration.ConfigurationBuilder();
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
 
-            // injected dependencies to be moved into server so each client can have their own instance
             ILog logger = new Util.ConsoleLogger();
-            IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger); // search local paths
-            //IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger); // search commodoresoftware.com
-            //IFloppyResolver floppyResolver = new C64FloppyResolverFloppyResolver(configuration, logger);
-            ILoad loader = new ViceLoad(configuration, logger);
-            ISave saver = new ViceSave(configuration, logger);         
 
             // firmware is setup as client mode by default so run this in server mode
             // should allow multiple C64 connections to same disk image but
             // might need to put some locks in place for anything shared access         
-            Server server = new Server(configuration, floppyResolver, loader, saver, logger);
+            Server server = new Server(configuration, logger);
             server.Start();
 
             // client mode is nice if you cannot change firewall settings as ESP8266 does not have a firewall!

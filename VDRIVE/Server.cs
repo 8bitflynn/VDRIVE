@@ -1,19 +1,18 @@
 ﻿using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using VDRIVE.Drive.Vice;
+using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
+using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE
 {
     public class Server : VDriveBase, IServer
     {
-        public Server(IConfiguration configuation, IFloppyResolver floppyResolver, ILoad loader, ISave saver, 
-            ILog logger, string listenIp = null, int port = 6510)
+        public Server(IConfiguration configuation, ILog logger, string listenIp = null, int port = 6510)
         {
             this.Configuration = configuation;
-            this.FloppyResolver = floppyResolver;
-            this.Loader = loader;
-            this.Saver = saver;
             this.Logger = logger;
 
             this.Port = port;
@@ -46,6 +45,12 @@ namespace VDRIVE
 
         private void HandleClient(TcpClient tcpClient)
         {
+            this.FloppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger); // search local paths
+            //IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger); // search commodoresoftware.com
+            //IFloppyResolver floppyResolver = new C64FloppyResolverFloppyResolver(configuration, logger);
+            this.Loader = new ViceLoad(this.Configuration, this.Logger);
+            this.Saver = new ViceSave(this.Configuration, this.Logger);
+
             string ip = tcpClient.Client.RemoteEndPoint.ToString();
 
             this.Logger.LogMessage($"Client connected: {ip}");

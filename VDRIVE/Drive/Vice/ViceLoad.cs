@@ -1,11 +1,9 @@
-﻿using System.ComponentModel;
-using System.Diagnostics;
-using System.Text;
+﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Disk.Vice
+namespace VDRIVE.Drive.Vice
 {
     public class ViceLoad : ILoad
     {
