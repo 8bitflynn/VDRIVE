@@ -1,6 +1,6 @@
 ; memory map
 ; $c000 - jmp table
-; $c374 - up9600 bitbanger/vdrive
+; $c380 - up9600 bitbanger/vdrive
 ; $c5e5 - vars and constants
 ; $c600 - rs232 input buffer
 ; $c700 - rs232 output buffer 
@@ -395,7 +395,7 @@ vdrive_search
 
         jsr recv_search_response ; header         
         cmp #$ff
-        bne search_return_init
+        bne exit_search
 
 search_recv_payload   
 
@@ -405,12 +405,15 @@ search_recv_payload
         lda spinner_char_save
         sta $07e7       
 
+        lda search_result_count ; print filenames wipes this out
+        beq exit_search
         jsr printfilenames
 
-search_return_init
-
+search_return_init      
+        jsr mount_floppy_request
+exit_search
         jsr disable_up9600 
-        jsr restore_up9600_timing_issue_state       
+        jsr restore_up9600_timing_issue_state   
 
         rts
 
@@ -564,48 +567,40 @@ done_parse
 
 printfilenames
     lda #13
-    jsr $ffd2
+    jsr $ffd2              ; print initial newline
 
-    lda #$00
-    sta temp_workspace1     ; ensure counter starts at 0 (optional if already 0)
+    ;lda #$01
+   ; sta temp_workspace1    ; line counter = 0
 
     lda dest_ptr_lo_save
     sta temp_ptr_lo
     lda dest_ptr_hi_save
     sta temp_ptr_hi
 
-printloop
     lda search_result_count
     beq done_print
+    
+printloop 
+    ldy #0
+    lda (temp_ptr_lo),y ; lo byte of floppy id
+    tax
+    ldy #1
+    lda (temp_ptr_lo),y ; hi byte of floppy Id
 
-    ; ---- increment and print line counter (temp_workspace1) ----
-    inc temp_workspace1
-    lda temp_workspace1
-    cmp #10
-    bcc .ones_only       ; 1..9 -> only ones
-
-    ; tens = '1' for 10..19
-    lda #$31
-    jsr $ffd2
-
-    lda temp_workspace1
-    sec
-    sbc #10              ; A = ones digit for 10..19
-
-.ones_only
-    ora #$30             ; convert 0..9 to PETSCII
-    jsr $ffd2
+   ; lda temp_workspace1     ; A = line number
+   ; jsr $ba8c               ; move A into FAC
+    jsr $bdcd               ; print FAC as decimal
 
     lda #$20
-    jsr $ffd2            ; space after number
+    jsr $ffd2               ; print space
 
-    ; ---- print description (reads length at offset 0) ----
-    ldy #0
-    lda (temp_ptr_lo),y  ; A = imagenamelength
-    tax                  ; X = length for name loop
+    ; ---- print filename ----
+    ldy #2
+    lda (temp_ptr_lo),y     ; length byte
+    tax
     beq printemptyname
 
-    ldy #1
+    ldy #3
 printnamechar
     lda (temp_ptr_lo),y
     jsr $ffd2
@@ -615,9 +610,9 @@ printnamechar
 
 printemptyname
     lda #13
-    jsr $ffd2
+    jsr $ffd2               ; carriage return
 
-    ; ---- advance pointer by structsize (67) ----
+    ; ---- advance pointer by struct size (67 bytes) ----
     clc
     lda temp_ptr_lo
     adc #$43
@@ -626,16 +621,17 @@ printemptyname
     adc #0
     sta temp_ptr_hi
 
+    ;inc temp_workspace1     ; increment line counter
     dec search_result_count
-    jmp printloop
+    bne printloop
 
 done_print
     rts
 
-
+ 
 
 ; bitbanger/vdisk chunked transfer
-*= $c374
+*= $c380
 
 recv_data
 
