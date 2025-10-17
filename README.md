@@ -17,6 +17,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 - VICE 3.9’s version of `c1541.exe` appears incompatible — needs investigation.
 - Eventually, VDRIVE will implement its own `ILoad` / `ISave` interface to eliminate reliance on VICE — but using `c1541.exe` saved a lot of time and allowed faster prototyping.
 - This release is intended for developers and technically inclined users. Setup requires compiling and assembling. Prebuilt binaries will be provided once the project nears completion.
+- The simple PRG support (no disk) will be fixed soon but for now if PRG is included in results, mount it and any loaded after that will be the PRG. Future version will just wrap it in D64.
 
 ---
 
@@ -40,8 +41,8 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 
    a. LOAD "vdrive.prg" from regular disk.  
    b. SYS 49152 enable VDRIVE .  
-   c. SYS 49158 search for disk images (results include sequence 1,2,3,4 and the description or filename).   
-   d. SYS 49161 mount floppy disk (enter the sequence number from search).   
+   c. SYS 49158 search for disk images (results include sequence 1,2,3,4 and the description or filename), enter number to mount.
+   d. SYS 49161 mount floppy disk (enter the sequence number from search). Any floppy result from search can be changed to by using this and entering in number without searching again.
    e. LOAD/SAVE from VDRIVE.
    
 ---
