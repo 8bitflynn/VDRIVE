@@ -6,5 +6,6 @@
         List<string> SearchPaths { get; set; }
         string TempPath { get; set; } // path to use for temp files or leave empty to use system temp
         ushort ChunkSize { get; set; } // when sending data to C64, use this chunk size in bytes
+        ushort MaxSearchResults { get; set; }
     }
 }

@@ -8,5 +8,6 @@ namespace VDRIVE_Contracts.Structures
         public List<string> SearchPaths { get; set; } = new List<string>();  
         public string TempPath { get; set; }
         public ushort ChunkSize { get; set; }
+        public ushort MaxSearchResults { get; set; }
     }
 }

@@ -1,8 +1,6 @@
-﻿using Microsoft.Extensions.Configuration;
-using VDRIVE.Disk.Vice;
+﻿using VDRIVE.Disk.Vice;
 using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
-using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE
 {
@@ -20,12 +18,14 @@ namespace VDRIVE
         {
             Program program = new Program();
 
-            VDRIVE_Contracts.Interfaces.IConfiguration configuration = program.BuildConfiguration();
+            VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new Configuration.ConfigurationBuilder();
+            VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
 
-            // injected dependencies
+            // injected dependencies to be moved into server so each client can have their own instance
             ILog logger = new Util.ConsoleLogger();
             //IFloppyResolver floppyResolver = new LocalFloppyResolver(configuration, logger); // search local paths
             IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger); // search commodoresoftware.com
+            //IFloppyResolver floppyResolver = new C64FloppyResolverFloppyResolver(configuration, logger);
             ILoad loader = new ViceLoad(configuration, logger);
             ISave saver = new ViceSave(configuration, logger);         
 
@@ -41,36 +41,6 @@ namespace VDRIVE
 
             //Client client = new Client(ipAddress, port, configuration, floppyResolver, loader, saver, logger);
             //client.Start();
-        }       
-
-        VDRIVE_Contracts.Interfaces.IConfiguration BuildConfiguration()
-        {
-            VDRIVE_Contracts.Interfaces.IConfiguration configuration = new Configuration();
-
-            var configurationBuilder = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json")
-                .Build();
-
-            configuration.SearchPaths = configurationBuilder.GetSection("AppSettings:SearchPaths").Get<List<string>>();
-            configuration.C1541Path = configurationBuilder.GetSection("AppSettings:C1541Path").Value;
-            configuration.TempPath = configurationBuilder.GetSection("AppSettings:TempPath").Value;
-            if (ushort.TryParse(configurationBuilder.GetSection("AppSettings:ChunkSize").Value, out ushort chunkSize))
-            {
-                configuration.ChunkSize = chunkSize;
-            }
-            else
-            {
-                configuration.ChunkSize = 1024; // default to 1k
-            }
-
-
-            if (string.IsNullOrEmpty(configuration.TempPath))
-            {
-                configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + @"\C64Temp\";
-            }
-
-            return configuration;
-        }
+        }   
     }
 }

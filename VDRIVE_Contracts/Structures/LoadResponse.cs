@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace VDRIVE_Contracts.Structures
 {
+    [DebuggerDisplay("ResponseCode={ResponseCode}, DeviceNum={DeviceNum}")]
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct LoadResponse
     {

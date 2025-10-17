@@ -6,20 +6,15 @@ using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Floppy
 {
-    public class CommodoreSoftwareFloppyResolver : FloppyResolverBase, IFloppyResolver
+    public class C64FloppyResolverFloppyResolver : FloppyResolverBase, IFloppyResolver
     {
-        public CommodoreSoftwareFloppyResolver(IConfiguration configuration, ILog logger)
+        public C64FloppyResolverFloppyResolver(IConfiguration configuration, ILog logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
-
             this.MediaExtensionsAllowed = this.DefaultMediaExtensionsAllowed;
         }
 
-        // TODO: move to config...
-        List<string> IgnoredSearchKeywords = new List<string> { "manual", "firmware", "documentation", "guide", "instruction", "tutorial", 
-         "c128", "dos", "128" };        
-      
         public override FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier)
         {
             FloppyInfo? floppyInfo = base.InsertFloppy(floppyIdentifier);
@@ -28,30 +23,15 @@ namespace VDRIVE.Floppy
             {
                 using (HttpClient client = new HttpClient())
                 {
-                    string downloadPageUrl = this.BuildFullCommodoreSoftwarePath(this.InsertedFloppyPointer.Value.ImagePath);
-                    HttpResponseMessage httpResponseMessage = client.PostAsync(downloadPageUrl, null).Result;
-                    string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
+                    string downloadUrl = "https://www.c64.com/games/" + this.InsertedFloppyPointer.Value.ImagePath;
 
-                    if (httpResponseMessage.IsSuccessStatusCode)
+                    byte[] zippedFile = this.DownloadFile(downloadUrl);
+                    if (zippedFile == null)
                     {
-                        var match = Regex.Match(html, @"([^""]+)""\s+aria-label=""Start download process""");
-
-                        if (match.Success)
-                        {
-                            string rawHref = match.Groups[1].Value;
-                            string decodedHref = WebUtility.HtmlDecode(rawHref);
-
-                            this.Logger.LogMessage("Extracted link: " + decodedHref);
-
-                            byte[] zippedFile = this.DownloadFile(decodedHref);
-                            if (zippedFile == null)
-                            {
-                                this.Logger.LogMessage("Failed to download file.");
-                                return null;
-                            }
-                            this.Decompress(zippedFile);
-                        }
+                        this.Logger.LogMessage("Failed to download file.");
+                        return null;
                     }
+                    this.Decompress(zippedFile);                
                 }
             }
             catch (Exception exception)
@@ -59,7 +39,7 @@ namespace VDRIVE.Floppy
                 this.Logger.LogMessage("Failed to insert floppy: " + exception.Message);
                 return null;
             }
-            
+
             return floppyInfo;
         }
 
@@ -70,12 +50,11 @@ namespace VDRIVE.Floppy
                 try
                 {
                     string decodedUrl = WebUtility.HtmlDecode(url);
-                    string downloadUrl = this.BuildFullCommodoreSoftwarePath(decodedUrl);
 
-                    HttpResponseMessage httpResponseMessage = httpClient.GetAsync(downloadUrl).GetAwaiter().GetResult();
+                    HttpResponseMessage httpResponseMessage = httpClient.GetAsync(decodedUrl).GetAwaiter().GetResult();
                     httpResponseMessage.EnsureSuccessStatusCode();
 
-                    byte[] fileBytes = httpResponseMessage.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();                 
+                    byte[] fileBytes = httpResponseMessage.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
                     this.Logger.LogMessage($"Download complete ({(fileBytes != null ? fileBytes.Length : 0)} bytes): " + new string(this.InsertedFloppyInfo.Value.ImageName));
 
                     return fileBytes;
@@ -120,8 +99,8 @@ namespace VDRIVE.Floppy
                     entry.ExtractToFile(fullFilePath, overwrite: true);
 
                     if (this.InsertedFloppyPointer.HasValue)
-                    { 
-                        
+                    {
+
                         if (!this.MediaExtensionsAllowed.Any(ir => fullFilePath.ToLower().EndsWith(ir)))
                         {
                             continue;
@@ -131,12 +110,12 @@ namespace VDRIVE.Floppy
                         tempFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
                         this.InsertedFloppyInfo = tempFloppyInfo; // update to extracted file name
 
-                        FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer.Value;                       
+                        FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer.Value;
                         tempFloppyPointer.ImagePath = fullFilePath;
                         this.InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path                        
                     }
                 }
-            }           
+            }
 
             return;
         }
@@ -161,24 +140,33 @@ namespace VDRIVE.Floppy
 
             using (HttpClient client = new HttpClient())
             {
-                string searchUrl = this.BuildCommodoreSoftwareSearchUrl(searchTerm, mediaType);
+                string searchUrl = this.BuildC64SearchUrl(searchTerm, mediaType);
 
-                this.Logger.LogMessage($"Searching Commodore Software for '{searchTerm}' with media type '{mediaType}'");
+                this.Logger.LogMessage($"Searching C64.com for '{searchTerm}' with media type '{mediaType}'");
 
-                HttpResponseMessage httpResponseMessage = client.PostAsync(searchUrl, null).Result;
+                var fields = new Dictionary<string, string>
+                {
+                    ["searchtype"] = "0",
+                    ["searchfor"] = searchTerm,
+                    ["main"] = "1",
+                };
+
+                using var content = new FormUrlEncodedContent(fields);
+                HttpResponseMessage httpResponseMessage = client.PostAsync(searchUrl, content).Result;
                 string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
                     IEnumerable<FloppyInfo> floppyInfos = this.ScrapeResults(html);
 
-                    SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff: (byte)0x04), (byte)floppyInfos.Count()); // more follows
+                    SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)floppyInfos.Count()); // more follows
 
-                    // foundFloppyInfos = floppyInfos.ToArray();
+
+                    //foundFloppyInfos = floppyInfos.ToArray();
                     foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
-                    searchFloppyResponse.ResultCount = (byte)foundFloppyInfos.Length;
 
-                    this.Logger.LogMessage($"Found {floppyInfos.Count()} results for '{searchTerm}'");                  
+
+                    this.Logger.LogMessage($"Found {floppyInfos.Count()} results for '{searchTerm}'");
 
                     return searchFloppyResponse;
                 }
@@ -189,7 +177,7 @@ namespace VDRIVE.Floppy
             }
             foundFloppyInfos = null;
             return default(SearchFloppyResponse);
-        }
+        }       
 
         protected SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount, ushort chunkSize = 1024)
         {
@@ -198,7 +186,7 @@ namespace VDRIVE.Floppy
 
             if (resultCount > 0)
             {
-                searchFloppyResponse.SyncByte = (byte)'+';               
+                searchFloppyResponse.SyncByte = (byte)'+';
                 searchFloppyResponse.ResultCount = resultCount;
 
                 // filled in later
@@ -213,7 +201,7 @@ namespace VDRIVE.Floppy
                 searchFloppyResponse.ChunkSizeLo = loChunkLength;
                 searchFloppyResponse.ChunkSizeHi = hiChunkLength;
 
-               // int memoryLocation = (payload[1] << 8) + payload[0];
+                // int memoryLocation = (payload[1] << 8) + payload[0];
 
                 byte loDestPtr = (byte)destPtr;
                 byte hiDestPtr = (byte)(destPtr >> 8);
@@ -229,62 +217,63 @@ namespace VDRIVE.Floppy
         {
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
 
-            // Match each result block
-            string pattern = @"<dt class=""result-title"">.*?<a href=""(.*?)"".*?>(.*?)</a>.*?</dt>.*?<dd class=""result-text"">.*?>(.*?)</dd>";
-            var matches = Regex.Matches(html, pattern, RegexOptions.Singleline);
+            var nameRegex = new Regex(@"<b>(?<name>[^<]+)</b>", RegexOptions.IgnoreCase);
+            var linkRegex = new Regex(@"href\s*=\s*[""'](?<url>[^""']*download\.php\?[^""']*)[""']", RegexOptions.IgnoreCase);
+
+            var nameMatches = nameRegex.Matches(html);
+            var linkMatches = linkRegex.Matches(html);
+
+           // var results = new List<(string name, string url)>();
 
             ushort searchResultIndex = 1;
-            foreach (Match match in matches)
+            foreach (Match nameMatch in nameMatches)
             {
-                string imageName = match.Groups[2].Value.Trim();
-                if (IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
+                int nameIndex = nameMatch.Index;
+                string imageName = nameMatch.Groups["name"].Value;
+
+                // Find the first link that appears after this name
+                Match linkMatch = linkMatches
+                    .Cast<Match>()
+                    .FirstOrDefault(l => l.Index > nameIndex);
+
+                if (linkMatch != null)
                 {
-                    continue;
+                    string url = linkMatch.Groups["url"].Value;
+                    //  results.Add((name, url));
+
+                    FloppyInfo floppyInfo = new FloppyInfo();
+                    floppyInfo.IdLo = (byte)searchResultIndex;
+                    floppyInfo.IdHi = (byte)(searchResultIndex >> 8);
+
+                    if (imageName.Length > 64)
+                    {
+                        imageName = imageName.Substring(0, 64);
+                    }
+                    floppyInfo.ImageNameLength = (byte)imageName.Length;
+                    floppyInfo.ImageName = new char[64];
+                    imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
+                    floppyInfos.Add(floppyInfo);
+
+                    // floppy pointers hold Id and long path and are looked up when "inserted"
+                    FloppyPointer floppyPointer = new FloppyPointer();
+                    floppyPointer.Id = searchResultIndex;
+                    floppyPointer.ImagePath = url;
+
+                    // results stored in resolver for lookup if "inserted"
+                    this.FloppyInfos.Add(floppyInfo);
+                    this.FloppyPointers.Add(floppyPointer);
+
+                    searchResultIndex++;
                 }
-
-                FloppyInfo floppyInfo = new FloppyInfo();
-                floppyInfo.IdLo = (byte)searchResultIndex;
-                floppyInfo.IdHi = (byte)(searchResultIndex >> 8);
-
-                //string imageName = Path.GetFileName(searchResult);
-
-                if (imageName.Length > 64)
-                {
-                    imageName = imageName.Substring(0, 64);
-                }
-                floppyInfo.ImageNameLength = (byte)imageName.Length;
-                floppyInfo.ImageName = new char[64];
-                imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
-
-                // strip html
-                string description = Regex.Replace(match.Groups[3].Value, @"<.*?>", "").Trim();
-                // strip non-ascii
-                description = Regex.Replace(description, @"[^\x20-\x7E]", "");
-                // strip multiple spaces
-                //description = Regex.Replace(new string(floppyInfo.Description), @"\s{2,}", " ");
-                //floppyInfo.DescriptionLength = (byte)description.Length;
-                //floppyInfo.Description = new char[255];
-                //description.ToUpper().ToCharArray().CopyTo(floppyInfo.Description, 0);              
-                floppyInfos.Add(floppyInfo);
-
-                // floppy pointers hold Id and long path and are looked up when "inserted"
-                FloppyPointer floppyPointer = new FloppyPointer();
-                floppyPointer.Id = searchResultIndex;
-                floppyPointer.ImagePath = match.Groups[1].Value.Trim();
-
-                // results stored in resolver for lookup if "inserted"
-                this.FloppyInfos.Add(floppyInfo);
-                this.FloppyPointers.Add(floppyPointer);
-
-                searchResultIndex++;
             }
+        
 
             return floppyInfos;
         }
 
-        private string BuildCommodoreSoftwareSearchUrl(string searchTerm, string mediaType)
+        private string BuildC64SearchUrl(string searchTerm, string mediaType)
         {
-            string baseUrl = this.BuildFullCommodoreSoftwarePath("/search/search?");
+            string baseUrl = this.BuildFullC64Path("/search/search?");
             var queryParams = new Dictionary<string, string>
             {
                 { "searchword", searchTerm },
@@ -300,9 +289,9 @@ namespace VDRIVE.Floppy
             return baseUrl + queryString;
         }
 
-        private string BuildFullCommodoreSoftwarePath(string relativePath)
+        private string BuildFullC64Path(string relativePath)
         {
-            return "https://commodore.software" + relativePath;
+            return "https://www.c64.com/games/no-frame.php" + relativePath;
         }
     }
 }

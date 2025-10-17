@@ -12,7 +12,10 @@ namespace VDRIVE.Floppy
         protected FloppyPointer? InsertedFloppyPointer; // join to FloppyInfo.Id for long path
         protected List<FloppyPointer> FloppyPointers = new List<FloppyPointer>();
 
-        protected List<string> DefaultMediaExtensionsAllowed = new List<string> { ".d64", ".g64", ".d81", ".d71", ".d80", ".d82" };
+        protected List<string> DefaultMediaExtensionsAllowed = new List<string> { ".d64", ".g64", ".d81", ".d71", ".d80", ".d82", ".prg" };
+
+        // set when searching disk
+        protected List<string> MediaExtensionsAllowed = new List<string>();
 
         public virtual FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier) // called from C64
         {
@@ -47,5 +50,11 @@ namespace VDRIVE.Floppy
         }
 
         public abstract SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
+
+        public FloppyPointer? SetInsertedFloppyPointer(FloppyPointer floppyPointer)
+        {
+            this.InsertedFloppyPointer = floppyPointer;
+            return this.InsertedFloppyPointer;
+        }
     }
 }

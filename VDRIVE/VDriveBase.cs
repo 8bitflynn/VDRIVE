@@ -44,11 +44,19 @@ namespace VDRIVE
                             LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
                             LoadResponse loadResponse = this.Loader.Load(loadRequest, this.FloppyResolver, out byte[] payload);
 
-                            byte[] dest_ptr_bytes = payload.Take(2).ToArray();
-                            ushort dest_ptr = (ushort)(dest_ptr_bytes[0] | (dest_ptr_bytes[1] << 8));
-                            this.Logger.LogMessage($"Destination Address: 0x{dest_ptr:X4}");
+                            if (payload != null)
+                            {
+                                byte[] dest_ptr_bytes = payload.Take(2).ToArray();
+                                ushort dest_ptr = (ushort)(dest_ptr_bytes[0] | (dest_ptr_bytes[1] << 8));
+                                this.Logger.LogMessage($"Destination Address: 0x{dest_ptr:X4}");
 
-                            payload = payload.Skip(2).ToArray(); // skip destination pointer                          
+                                payload = payload.Skip(2).ToArray(); // skip destination pointer     
+                            }
+                            else
+                            {
+                                // FIX move to loader if it it works
+                                loadResponse.ResponseCode = 0x04; // file not found
+                            }
 
                             this.SendData(tcpClient, networkStream, loadResponse, payload);
                         }
@@ -125,9 +133,8 @@ namespace VDRIVE
 
                             SearchFloppyResponse searchFloppyResponse = this.FloppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
 
-
+                            // build the payload
                             List<byte> payload = new List<byte>();
-
                             foreach (FloppyInfo foundFloppyInfo in foundFloppyInfos)
                             {
                                 byte[] serilizedFoundFloppyInfo = BinaryStructConverter.ToByteArray<FloppyInfo>(foundFloppyInfo);

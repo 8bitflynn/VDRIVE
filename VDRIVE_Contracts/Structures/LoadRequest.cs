@@ -1,7 +1,9 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace VDRIVE_Contracts.Structures
 {
+    [DebuggerDisplay("ImageName={new string(FileName, 0, FileNameLength)}, DeviceNum={DeviceNum}")]
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct LoadRequest
     {

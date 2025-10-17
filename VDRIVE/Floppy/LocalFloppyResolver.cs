@@ -40,7 +40,22 @@ namespace VDRIVE.Floppy
                 if (searchResults != null)
                 {
                     foreach (string searchResult in searchResults)
-                    { 
+                    {
+                        //if (searchResult.ToLower().EndsWith(".prg"))
+                        //{
+                        //    // build a temp D64 image with just this file in it
+                        //    string tempImagePath = this.BuildImageForPRG(filename, Path.Combine(this.Configuration.TempPath, "tempdisk.d64"));
+
+                        //    FloppyPointer? currentFloppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
+                        //    FloppyPointer newFloppyPointer = new FloppyPointer
+                        //    {
+                        //        Id = currentFloppyPointer.Value.Id,
+                        //        ImagePath = tempImagePath
+                        //    };
+                        //    floppyResolver.SetInsertedFloppyPointer(newFloppyPointer); // set the floppy pointer to newly created image
+                        //}
+
+
                         // info returned to C64
                         FloppyInfo floppyInfo = new FloppyInfo();
                         floppyInfo.IdLo = (byte)searchResultIndex;
@@ -72,9 +87,12 @@ namespace VDRIVE.Floppy
                     }                   
                 }
             }
-            foundFloppyInfos = floppyInfos.ToArray();
-           // searchFloppyResponse.ResponseCode = 0xff; // success for now
-          //  searchFloppyResponse.ResultCount = (byte)floppyInfos.Count;
+            // foundFloppyInfos = floppyInfos.ToArray();
+            foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
+
+
+            // searchFloppyResponse.ResponseCode = 0xff; // success for now
+            //  searchFloppyResponse.ResultCount = (byte)floppyInfos.Count;
 
             SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)floppyInfos.Count()); 
 
