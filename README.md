@@ -26,18 +26,19 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 
 1. **Flash the ESP8266**  
    Burn `ESP8266_Firmware.ino` to your WiFi modem. For now configuration has to be hard coded but included WifiSetup.BAS will be fixed soon so that configuration can be done on C64 directly.
+   
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
 
-2. **Assemble the C64 Client**  
+3. **Assemble the C64 Client**  
    Compile `vdrive.asm` using **CBM Studio**.
 
-3. **Configure the Server**  
+4. **Configure the Server**  
    Edit `appsettings.json` to point to your disk images.
 
-4. **Run the VDRIVE Server**  
+5. **Run the VDRIVE Server**  
    Launch the C# .NET Core server.
 
-5. **Test on Real Hardware**  
+6. **Test on Real Hardware**  
    From your Commodore 64:
 
    - **a.** `LOAD "vdrive.prg"` from regular disk  
