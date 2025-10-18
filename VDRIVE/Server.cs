@@ -9,12 +9,11 @@ namespace VDRIVE
 {
     public class Server : VDriveBase, IServer
     {
-        public Server(IConfiguration configuation, ILog logger, string listenIp = null, int port = 6510)
+        public Server(IConfiguration configuation, ILog logger, string listenIp = null, int port = -1)
         {
             this.Configuration = configuation;
             this.Logger = logger;
-
-            this.Port = port;
+            
             if (!string.IsNullOrWhiteSpace(listenIp))
             {
                 this.ListenAddress = IPAddress.Parse(listenIp);
@@ -22,6 +21,12 @@ namespace VDRIVE
             else
             {
                 this.ListenAddress = GetLocalIPv4Address() ?? IPAddress.Any;
+            }
+
+            this.Port = port;
+            if (this.Port == -1)
+            {
+                this.Port = this.Configuration.ServerPort.Value;
             }
         }
         private readonly IPAddress ListenAddress;
@@ -41,15 +46,11 @@ namespace VDRIVE
 
                 Task.Run(() =>
                 {
-                    // for now change in code which floppy resovler to use...
-                    IFloppyResolver floppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger);
-                    //IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
-
+                    IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
                     ILoad loader = new ViceLoad(this.Configuration, this.Logger);
                     ISave saver = new ViceSave(this.Configuration, this.Logger);
 
                     this.HandleClient(client, floppyResolver, loader, saver);
-
                 });
             }
         }

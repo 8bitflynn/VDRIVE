@@ -1,6 +1,9 @@
-﻿using VDRIVE_Contracts.Interfaces;
+﻿using VDRIVE;
+using VDRIVE.Configuration;
+using VDRIVE_Contracts.Interfaces;
+using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE
+namespace VDRIVE_Host
 {
     public class Program
     {
@@ -16,10 +19,10 @@ namespace VDRIVE
         {
             Program program = new Program();
 
-            VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new Configuration.ConfigurationBuilder();
+            VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder();
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
 
-            ILog logger = new Util.ConsoleLogger();
+            ILog logger = new VDRIVE.Util.ConsoleLogger();
 
             // firmware is setup as client mode by default so run this in server mode
             // should allow multiple C64 connections to same disk image but
@@ -33,6 +36,6 @@ namespace VDRIVE
 
             //Client client = new Client(ipAddress, port, configuration, logger);
             //client.Start();
-        }   
+        }
     }
 }

@@ -24,11 +24,12 @@ namespace VDRIVE.Drive.Vice
             destPtrFileData[1] = saveRequest.TargetAddressHi;
             payload.CopyTo(destPtrFileData, 2);
 
-            if (!Directory.Exists(this.Configuration.TempPath))
-                Directory.CreateDirectory(this.Configuration.TempPath);
+            string fullPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder);
+            if (!Directory.Exists(fullPath))
+                Directory.CreateDirectory(fullPath);
 
             string safeName = new string(saveRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
-            string tempPrgPath = Path.Combine(this.Configuration.TempPath, safeName);
+            string tempPrgPath = Path.Combine(fullPath, safeName);
 
             File.WriteAllBytes(tempPrgPath, destPtrFileData);
 

@@ -21,45 +21,29 @@ namespace VDRIVE.Floppy
 
             string[] mediaTypes = null;
             string mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray());
-            if (string.IsNullOrWhiteSpace(mediaTypeCSV))
-            {
-                 mediaTypes = DefaultMediaExtensionsAllowed.Select(x => x.ToString()).ToArray();
-            }
-            else
+            if (!string.IsNullOrWhiteSpace(mediaTypeCSV))
             {
                 mediaTypes = mediaTypeCSV.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             }
+            else
+            {
+                mediaTypes = this.Configuration.MediaExtensionAllowed.Split(',');
+            }
             string searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
-            ushort searchResultIndex = 1;
+            ushort searchResultIndexId = 1; // used to select floppy on C64 side 
 
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
             foreach (string searchPath in this.Configuration.SearchPaths)
             {
-                //string[]? extensions = mediaType.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 IEnumerable<string> searchResults = this.TraverseFolder(searchPath, searchTerm, mediaTypes, true);
                 if (searchResults != null)
                 {
                     foreach (string searchResult in searchResults)
                     {
-                        //if (searchResult.ToLower().EndsWith(".prg"))
-                        //{
-                        //    // build a temp D64 image with just this file in it
-                        //    string tempImagePath = this.BuildImageForPRG(filename, Path.Combine(this.Configuration.TempPath, "tempdisk.d64"));
-
-                        //    FloppyPointer? currentFloppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
-                        //    FloppyPointer newFloppyPointer = new FloppyPointer
-                        //    {
-                        //        Id = currentFloppyPointer.Value.Id,
-                        //        ImagePath = tempImagePath
-                        //    };
-                        //    floppyResolver.SetInsertedFloppyPointer(newFloppyPointer); // set the floppy pointer to newly created image
-                        //}
-
-
                         // info returned to C64
                         FloppyInfo floppyInfo = new FloppyInfo();
-                        floppyInfo.IdLo = (byte)searchResultIndex;
-                        floppyInfo.IdHi = (byte)(searchResultIndex >> 8);
+                        floppyInfo.IdLo = (byte)searchResultIndexId;
+                        floppyInfo.IdHi = (byte)(searchResultIndexId >> 8);
 
                         string imageName = Path.GetFileName(searchResult);
                         imageName = imageName.Length > 64 ? imageName.Substring(0, 64) : imageName; // truncate if needed
@@ -69,7 +53,7 @@ namespace VDRIVE.Floppy
                      
                         // info stored in resolver with longs paths
                         FloppyPointer floppyPointer = new FloppyPointer();
-                        floppyPointer.Id = searchResultIndex;
+                        floppyPointer.Id = searchResultIndexId;
                         floppyPointer.ImagePath = searchResult;
 
                         floppyInfos.Add(floppyInfo);   
@@ -78,52 +62,17 @@ namespace VDRIVE.Floppy
                         this.FloppyInfos.Add(floppyInfo);
                         this.FloppyPointers.Add(floppyPointer);
 
-                        searchResultIndex++;
+                        searchResultIndexId++;
                     }                   
                 }
             }
-            // foundFloppyInfos = floppyInfos.ToArray();
             foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
 
             SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)foundFloppyInfos.Count()); 
 
             this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{new string (searchFloppiesRequest.MediaType)}'");
             return searchFloppyResponse;
-        }
-
-        protected SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount, ushort chunkSize = 1024)
-        {
-            SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
-            searchFloppyResponse.ResponseCode = responseCode;
-
-            if (resultCount > 0)
-            {
-                searchFloppyResponse.SyncByte = (byte)'+';
-                searchFloppyResponse.ResultCount = resultCount;
-
-                // filled in later
-                // send binary length in 24 bits
-                //int lengthMinusMemoryPtr = payload.Length - 2;
-                //searchFloppyResponse.ByteCountLo = (byte)(lengthMinusMemoryPtr & 0xFF); // LSB
-                //searchFloppyResponse.ByteCountMid = (byte)((lengthMinusMemoryPtr >> 8) & 0xFF);
-                //searchFloppyResponse.ByteCountHi = (byte)((lengthMinusMemoryPtr >> 16) & 0xFF); // MSB
-
-                byte loChunkLength = (byte)chunkSize;
-                byte hiChunkLength = (byte)(chunkSize >> 8);
-                searchFloppyResponse.ChunkSizeLo = loChunkLength;
-                searchFloppyResponse.ChunkSizeHi = hiChunkLength;
-
-                // int memoryLocation = (payload[1] << 8) + payload[0];
-
-                byte loDestPtr = (byte)destPtr;
-                byte hiDestPtr = (byte)(destPtr >> 8);
-
-                searchFloppyResponse.DestPtrLo = loDestPtr;
-                searchFloppyResponse.DestPtrHi = hiDestPtr;
-            }
-
-            return searchFloppyResponse;
-        }
+        }        
 
         private List<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
         {

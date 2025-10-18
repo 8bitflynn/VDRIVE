@@ -19,53 +19,44 @@ namespace VDRIVE.Drive.Vice
         {
             try
             {
-                byte responseCode = 0xff;
+                byte responseCode = 0xff; // success
                 string filename = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray());
-
-                // hack to allow loading of PRG files directly for now 
-                // need to instead create a temp D64 wrapper disk first and then treat it as a normal file load
-                // but this will work for now
-                FloppyPointer? floppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
-
-                if (floppyPointer.Value.ImagePath.ToLower().EndsWith(".prg"))
-                {
-                    payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().Value.ImagePath);
-
-                    // build a temp D64 image with just this file in it
-                    //string tempImagePath = this.BuildImageForPRG(filename, Path.Combine(this.Configuration.TempPath, "tempdisk.d64"));
-
-                    //FloppyPointer? currentFloppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
-                    //FloppyPointer newFloppyPointer = new FloppyPointer
-                    //{
-                    //    Id = currentFloppyPointer.Value.Id,
-                    //    ImagePath = tempImagePath
-                    //};
-                    //floppyResolver.SetInsertedFloppyPointer(newFloppyPointer); // set the floppy pointer to newly created image
-                }
-                else if (filename.StartsWith("$")) // TODO: implement wildcards / filtering
+                
+                if (filename.StartsWith("$")) // TODO: implement wildcards / filtering
                 {
                     payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value);
                 }
                 else if (filename.StartsWith("*"))
                 {
-                    string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer().Value);
-
-                    string lineWithFirstFile = rawLines[1];
-
-                    // Match anything inside double quotes, including spaces
-                    Match match = Regex.Match(lineWithFirstFile, "\"([^\"]*)\"");
-                    if (match.Success)
+                    // hack to allow loading of PRG files directly for now 
+                    // by just mounting the PRG and loading with "*"
+                    // thought about wrapping in D64 but seems unnecessary overhead
+                    // and its less steps for user
+                    FloppyPointer? floppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
+                    if (floppyPointer.Value.ImagePath.ToLower().EndsWith(".prg"))
                     {
-                        string extracted = match.Groups[1].Value;
-
-                        string[] tokens = lineWithFirstFile.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                        loadRequest.FileName = extracted.ToCharArray();
-                        loadRequest.FileNameLength = (byte)extracted.Length;
-                        payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
+                        payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().Value.ImagePath);
                     }
                     else
                     {
-                        payload = null;
+                        string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer().Value);
+                        string lineWithFirstFile = rawLines[1];
+
+                        // Match anything inside double quotes, including spaces
+                        Match match = Regex.Match(lineWithFirstFile, "\"([^\"]*)\"");
+                        if (match.Success)
+                        {
+                            string extracted = match.Groups[1].Value;
+
+                            string[] tokens = lineWithFirstFile.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            loadRequest.FileName = extracted.ToCharArray();
+                            loadRequest.FileNameLength = (byte)extracted.Length;
+                            payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
+                        }
+                        else
+                        {
+                            payload = null;
+                        }
                     }
                 }
                 else
@@ -81,11 +72,11 @@ namespace VDRIVE.Drive.Vice
                 this.Logger.LogMessage(@"ERROR: " + exception.Message);
 
                 payload = null;
-                return BuildLoadResponse(loadRequest, payload, 0x04); 
+                return BuildLoadResponse(loadRequest, payload, 0x04); // TODO: map to "device not found" to match stock c64 behavior
             }
         }
 
-        protected LoadResponse BuildLoadResponse(LoadRequest loadRequest, byte[] payload, byte responseCode, int chunkSize = 1024)
+        protected LoadResponse BuildLoadResponse(LoadRequest loadRequest, byte[] payload, byte responseCode)
         {
             LoadResponse loadResponse = new LoadResponse();
             loadResponse.ResponseCode = responseCode;
@@ -100,8 +91,8 @@ namespace VDRIVE.Drive.Vice
                 loadResponse.ByteCountMid = (byte)((lengthMinusMemoryPtr >> 8) & 0xFF);
                 loadResponse.ByteCountHi = (byte)((lengthMinusMemoryPtr >> 16) & 0xFF); // MSB
 
-                byte loChunkLength = (byte)chunkSize;
-                byte hiChunkLength = (byte)(chunkSize >> 8);
+                byte loChunkLength = (byte)this.Configuration.ChunkSize;
+                byte hiChunkLength = (byte)(this.Configuration.ChunkSize >> 8);
                 loadResponse.ChunkSizeLo = loChunkLength;
                 loadResponse.ChunkSizeHi = hiChunkLength;
 
@@ -119,15 +110,13 @@ namespace VDRIVE.Drive.Vice
 
         protected byte[] LoadFile(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
-            if (!Directory.Exists(this.Configuration.TempPath))
-                Directory.CreateDirectory(this.Configuration.TempPath);
+            string fullPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder);
+            if (!Directory.Exists(fullPath));
+                Directory.CreateDirectory(fullPath);
 
             string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
-
-            string outPrgPath = Path.Combine(this.Configuration.TempPath, safeName).Trim();
-
+            string outPrgPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder, safeName).Trim();
             outPrgPath = outPrgPath.Replace(@"/", "_");
-
             if (File.Exists(outPrgPath))
                 File.Delete(outPrgPath);
 
@@ -173,14 +162,13 @@ namespace VDRIVE.Drive.Vice
 
         protected byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer)
         {
-            // TODO: PRG does not need to be written to disk, just return byte array
-            // but its great for debugging so need to make it configurable
-            string dirPrgPath = Path.Combine(this.Configuration.TempPath, "dir.prg");
+            string fullPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder);
+            string dirPrgPath = Path.Combine(fullPath, "dir.prg");
 
-            // Ensure temp directory exists
-            if (!Directory.Exists(this.Configuration.TempPath))
+            // Ensure temp directory exists          
+            if (!Directory.Exists(fullPath))
             {
-                Directory.CreateDirectory(this.Configuration.TempPath);
+                Directory.CreateDirectory(fullPath);
             }
 
             if (File.Exists(dirPrgPath))
@@ -359,50 +347,6 @@ namespace VDRIVE.Drive.Vice
             if (c >= 'A' && c <= 'Z') return (byte)(c);           // PETSCII uppercase = ASCII uppercase
             if (c >= 'a' && c <= 'z') return (byte)(c - 0x20 + 0x80); // PETSCII lowercase = ASCII lowercase + 0x40
             return (byte)c; // fallback for digits and punctuation
-        }
-
-
-        public string BuildImage(string outputPathToImage, string imageType)
-        {
-            //c1541 - format "DISKNAME",id "C:\path\to\newimage.d64" - write "C:\path\to\program.prg" @8:PROGRAM - quit
-
-            // string imagePath = Path.Combine(this.Configuration.TempPath, "tempdisk.d64");
-
-            // call c1541 to get text directory listing
-            var psi = new ProcessStartInfo
-            {
-                FileName = this.Configuration.C1541Path,
-                Arguments = $"\"format \"TEMPDISK\" {outputPathToImage} -quit",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            string[] rawLines;
-            using (var proc = Process.Start(psi))
-            {
-                string allOutput = proc.StandardOutput.ReadToEnd();
-                // TODO: check for errors
-                // Unknown disk image
-                // etc...
-
-                proc.WaitForExit();
-
-                rawLines = allOutput
-                    .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-            }
-
-            return null;
-        }
-
-        public bool AddFileToImage(string imagePath, string filePathInImage, byte[] fileData, bool overwrite)
-        {
-            throw new NotImplementedException();
-        }
-
-        private string BuildImageForPRG(string prgPath, string imagePath)
-        {
-            return Path.Combine(imagePath, prgPath);
-        }
+        }       
     }
 }

@@ -1,8 +1,5 @@
 ﻿using System.Net.Sockets;
-using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
-using VDRIVE.Drive.Vice;
-using VDRIVE.Floppy;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
@@ -49,6 +46,11 @@ namespace VDRIVE
                                 ushort dest_ptr = (ushort)(dest_ptr_bytes[0] | (dest_ptr_bytes[1] << 8));
                                 this.Logger.LogMessage($"Destination Address: 0x{dest_ptr:X4}");
 
+                                if (dest_ptr == 0xEA38) 
+                                {
+                                    this.Logger.LogMessage("Warning: IRQ vector for load address");
+                                }
+
                                 payload = payload.Skip(2).ToArray(); // skip destination pointer     
                             }                            
 
@@ -79,17 +81,13 @@ namespace VDRIVE
 
                     case 0x03: // INSERT/MOUNT floppy image
                         {
-                            int size = Marshal.SizeOf<InsertFloppyRequest>();
+                            int size = Marshal.SizeOf<FloppyIdentifier>();
 
                             byte[] buffer = new byte[size];
 
                             this.ReadNetworkStream(networkStream, buffer, 0, size);
 
-                            FloppyIdentifier insertFloppyRequest = BinaryStructConverter.FromByteArray<FloppyIdentifier>(buffer);
-
-                            FloppyIdentifier floppyIdentifier = new FloppyIdentifier();
-                            floppyIdentifier.IdLo = insertFloppyRequest.IdLo;
-                            floppyIdentifier.IdHi = insertFloppyRequest.IdHi;
+                            FloppyIdentifier floppyIdentifier = BinaryStructConverter.FromByteArray<FloppyIdentifier>(buffer);
 
                             FloppyInfo? floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);
 
@@ -116,12 +114,13 @@ namespace VDRIVE
                             int size = Marshal.SizeOf<SearchFloppiesRequest>();
 
                             byte[] buffer = new byte[size];
-                            buffer[0] = data[0];
+                            buffer[0] = data[0]; // operation byte - fix
 
                             this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
 
                             SearchFloppiesRequest searchFloppiesRequest = BinaryStructConverter.FromByteArray<SearchFloppiesRequest>(buffer);
 
+                            // TODO: move to floppy resolver?
                             this.Logger.LogMessage("Search Request: " + new string(searchFloppiesRequest.SearchTerm) + (searchFloppiesRequest.MediaType != null ? "," + new string(searchFloppiesRequest.MediaType) : ""));
 
                             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
@@ -214,7 +213,6 @@ namespace VDRIVE
             networkStream.Write(sendBuffer, 0, 1);
 
             byte[] headerBytes = BinaryStructConverter.ToByteArray<T>(header);
-
             networkStream.Write(headerBytes, 0, headerBytes.Length);
 
             if (payload == null) // file not found or similar
@@ -232,25 +230,28 @@ namespace VDRIVE
 
         private void SendChunks(TcpClient tcpClient, NetworkStream networkStream, byte[] payload, ushort chunkSize)
         {
+            // TODO: some binaries start with the IRQ vector so that is where the first bytes hit presumably because
+            // it turns it on later? - maybe can store those bytes last so IRQ is not hit during transfer?
+            // very interesting case...
+
             IList<List<byte>> chunks = payload.ToList().BuildChunks(chunkSize).ToList();
-
             int numOfChunks = chunks.Count();
-
-            int bytesSent = 0; // account for mem header
+            int bytesSent = 0;
 
             for (int chunkIndex = 0; chunkIndex < numOfChunks; chunkIndex++)
             {
                 List<byte> chunk = chunks[chunkIndex];
+               
+                // TODO: add memory address range loading chunk to
+                this.Logger.LogMessage($"{bytesSent}-{chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
 
-                this.Logger.LogMessage($"{bytesSent} of {chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
-
-                networkStream.Write(chunk.ToArray(), 0, chunk.Count);
+                networkStream.Write(chunk.ToArray(), 0, chunk.Count); // write whole chunk
 
                 bytesSent += chunk.Count;
                 networkStream.FlushAsync();
 
                 // wait for Chunk request from C64
-                ChunkRequest chunkRequest = this.ReadChunkRequest(tcpClient, networkStream, ref chunkIndex);
+                ChunkRequest chunkRequest = this.ReadChunkRequest(tcpClient, networkStream);
                 switch (chunkRequest.Operation)
                 {
                     case 0x01: // next chunk or finished
@@ -274,7 +275,7 @@ namespace VDRIVE
             }
         }
 
-        private ChunkRequest ReadChunkRequest(TcpClient tcpClient, NetworkStream networkStream, ref int chunkIndex)
+        private ChunkRequest ReadChunkRequest(TcpClient tcpClient, NetworkStream networkStream)
         {
             byte[] data = new byte[1];
             while (tcpClient.Connected)

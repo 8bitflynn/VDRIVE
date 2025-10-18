@@ -8,14 +8,9 @@ namespace VDRIVE.Floppy
         protected IConfiguration Configuration;
         protected ILog Logger;
         protected FloppyInfo? InsertedFloppyInfo; // info returned to C64
-        protected List<FloppyInfo> FloppyInfos = new List<FloppyInfo>();
+        protected List<FloppyInfo> FloppyInfos = new List<FloppyInfo>(); // C64 friendly floppy info
         protected FloppyPointer? InsertedFloppyPointer; // join to FloppyInfo.Id for long path
-        protected List<FloppyPointer> FloppyPointers = new List<FloppyPointer>();
-
-        protected List<string> DefaultMediaExtensionsAllowed = new List<string> { ".d64", ".g64", ".d81", ".d71", ".d80", ".d82", ".prg" };
-
-        // set when searching disk
-        protected List<string> MediaExtensionsAllowed = new List<string>();
+        protected List<FloppyPointer> FloppyPointers = new List<FloppyPointer>(); // modern side long path joined to FloppyInfo.Id   
 
         public virtual FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier) // called from a client 
         {
@@ -61,5 +56,58 @@ namespace VDRIVE.Floppy
             this.InsertedFloppyPointer = floppyPointer;
             return this.InsertedFloppyPointer;
         }
+
+        protected virtual SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount)
+        {
+            SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
+            searchFloppyResponse.ResponseCode = responseCode;
+
+            if (resultCount > 0)
+            {
+                searchFloppyResponse.SyncByte = (byte)'+';
+                searchFloppyResponse.ResultCount = resultCount;
+
+                byte loChunkLength = (byte)this.Configuration.ChunkSize;
+                byte hiChunkLength = (byte)(this.Configuration.ChunkSize >> 8);
+                searchFloppyResponse.ChunkSizeLo = loChunkLength;
+                searchFloppyResponse.ChunkSizeHi = hiChunkLength;
+
+                byte loDestPtr = (byte)destPtr;
+                byte hiDestPtr = (byte)(destPtr >> 8);
+
+                searchFloppyResponse.DestPtrLo = loDestPtr;
+                searchFloppyResponse.DestPtrHi = hiDestPtr;
+            }
+
+            return searchFloppyResponse;
+        }
+
+        //protected SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount)
+        //{
+        //    SearchFloppyResponse searchFloppyResponse = new SearchFloppyResponse();
+        //    searchFloppyResponse.ResponseCode = responseCode;
+
+        //    if (resultCount > 0)
+        //    {
+        //        searchFloppyResponse.SyncByte = (byte)'+';
+        //        searchFloppyResponse.ResultCount = resultCount;
+
+
+        //        byte loChunkLength = (byte)chunkSize;
+        //        byte hiChunkLength = (byte)(chunkSize >> 8);
+        //        searchFloppyResponse.ChunkSizeLo = loChunkLength;
+        //        searchFloppyResponse.ChunkSizeHi = hiChunkLength;
+
+        //        // int memoryLocation = (payload[1] << 8) + payload[0];
+
+        //        byte loDestPtr = (byte)destPtr;
+        //        byte hiDestPtr = (byte)(destPtr >> 8);
+
+        //        searchFloppyResponse.DestPtrLo = loDestPtr;
+        //        searchFloppyResponse.DestPtrHi = hiDestPtr;
+        //    }
+
+        //    return searchFloppyResponse;
+        //}
     }
 }

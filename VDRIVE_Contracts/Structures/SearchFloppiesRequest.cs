@@ -7,7 +7,7 @@ namespace VDRIVE_Contracts.Structures
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct SearchFloppiesRequest
     {
-        public byte Operation;         // 0x05 = SAVE
+        public byte Operation;         // 0x05 = SEARCH for Floppies
 
         public byte SearchTermLength;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 80)]        
@@ -15,7 +15,7 @@ namespace VDRIVE_Contracts.Structures
 
         public byte MediaTypeLength;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-        public char[] MediaType; // optional - D64/D71/D81
+        public char[] MediaType; // optional CSV of media types (.D64,.D81) padded with 0x00 (uses config default if not filled in)
 
         public byte Flags; // dependent on implementation but can be used for ordering, case sensitivity, etc.
     }
