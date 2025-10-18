@@ -51,7 +51,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    - **d.** `SYS 49161` to mount a different floppy disk from the results (valid until next search)  
      Enter the sequence number from the search.  
      You can switch to any previously found floppy by entering its number again without re-searching  
-   - **e.** `LOAD`/`SAVE` from VDRIVE
+   - **e.** `LOAD`/`SAVE` from your VDRIVE
 
 ---
 
