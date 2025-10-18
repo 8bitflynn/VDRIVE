@@ -27,6 +27,8 @@ namespace VDRIVE.Configuration
             configuration.ServerPort = int.TryParse(configurationBuilder.GetSection("AppSettings:ServerPort").Value, out int serverPort) ? serverPort : (int?)null;
             configuration.ClientAddress = configurationBuilder.GetSection("AppSettings:ClientAddress").Value;
             configuration.ClientPort = int.TryParse(configurationBuilder.GetSection("AppSettings:ClientPort").Value, out int clientTalkPort) ? clientTalkPort : (int?)null;
+            configuration.SendTimeoutSeconds = int.TryParse(configurationBuilder.GetSection("AppSettings:SendTimeoutSeconds").Value, out int sendTimeout) ? sendTimeout : (int?)null;
+            configuration.ReceiveTimeoutSeconds = int.TryParse(configurationBuilder.GetSection("AppSettings:ReceiveTimeoutSeconds").Value, out int receiveTimeout) ? receiveTimeout : (int?)null;
             if (ushort.TryParse(configurationBuilder.GetSection("AppSettings:ChunkSize").Value, out ushort chunkSize))
             {
                 configuration.ChunkSize = chunkSize;

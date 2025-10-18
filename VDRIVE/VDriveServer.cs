@@ -7,9 +7,9 @@ using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class Server : VDriveBase, IServer
+    public class VDriveServer : VDriveBase, IServer
     {
-        public Server(IConfiguration configuation, ILog logger, string listenIp = null, int port = -1)
+        public VDriveServer(IConfiguration configuation, ILog logger, string listenIp = null, int port = -1)
         {
             this.Configuration = configuation;
             this.Logger = logger;

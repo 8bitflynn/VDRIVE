@@ -5,9 +5,9 @@ using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class Client : VDriveBase, IClient
+    public class VDriveClient : VDriveBase, IClient
     {
-        public Client(string ipAddress, int port, IConfiguration configuration, ILog logger)
+        public VDriveClient(string ipAddress, int port, IConfiguration configuration, ILog logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;

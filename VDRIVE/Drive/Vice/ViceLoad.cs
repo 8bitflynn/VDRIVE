@@ -223,6 +223,12 @@ namespace VDRIVE.Drive.Vice
 
         protected byte[] BuildDirectoryPrg(string[] rawLines, string diskName = "")
         {
+            // HACK: c1541.exe outputs "Empty image" when image is empty
+            if (rawLines.Length == 3 && rawLines[1].StartsWith("Empty image"))
+            {
+                rawLines[1] = $"0 \"Empty image\" ";
+            }
+
             const ushort LOAD_ADDR = 0x0801;
             const int FULL_LENGTH = 256 + 2;    // 256‐byte block + 2‐byte header
 

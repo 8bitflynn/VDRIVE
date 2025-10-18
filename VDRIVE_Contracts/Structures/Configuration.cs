@@ -16,5 +16,7 @@ namespace VDRIVE_Contracts.Structures
         public int? ServerPort { get; set; }
         public string ClientAddress { get; set; }
         public int? ClientPort { get; set; }
+        public int? SendTimeoutSeconds { get; set; }
+        public int? ReceiveTimeoutSeconds { get; set; }
     }
 }

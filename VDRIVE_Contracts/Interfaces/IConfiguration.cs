@@ -14,5 +14,7 @@
         int? ServerPort { get; set; }
         string ClientAddress { get; set; }
         int? ClientPort { get; set; }
+        int? SendTimeoutSeconds { get; set; }
+        int? ReceiveTimeoutSeconds { get; set; }
     }
 }

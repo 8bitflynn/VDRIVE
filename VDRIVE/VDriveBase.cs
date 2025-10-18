@@ -35,7 +35,7 @@ namespace VDRIVE
                             byte[] buffer = new byte[size];
                             buffer[0] = data[0];
 
-                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
+                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
                             LoadResponse loadResponse = loader.Load(loadRequest, floppyResolver, out byte[] payload);
@@ -65,7 +65,7 @@ namespace VDRIVE
                             byte[] buffer = new byte[size];
                             buffer[0] = data[0];
 
-                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
+                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             SaveRequest saveRequest = BinaryStructConverter.FromByteArray<SaveRequest>(buffer);
 
@@ -85,13 +85,11 @@ namespace VDRIVE
 
                             byte[] buffer = new byte[size];
 
-                            this.ReadNetworkStream(networkStream, buffer, 0, size);
+                            this.ReadNetworkStream(networkStream, buffer, 0, size, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             FloppyIdentifier floppyIdentifier = BinaryStructConverter.FromByteArray<FloppyIdentifier>(buffer);
 
                             FloppyInfo? floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);
-
-                            //this.Logger.LogMessage("Insert Request: ) + ", Name=\"" + (floppyInfo != null ? new string(floppyInfo.Value.ImageName) : "Not Found") + "\"");
                         }
                         break;
 
@@ -116,11 +114,10 @@ namespace VDRIVE
                             byte[] buffer = new byte[size];
                             buffer[0] = data[0]; // operation byte - fix
 
-                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
+                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             SearchFloppiesRequest searchFloppiesRequest = BinaryStructConverter.FromByteArray<SearchFloppiesRequest>(buffer);
 
-                            // TODO: move to floppy resolver?
                             this.Logger.LogMessage("Search Request: " + new string(searchFloppiesRequest.SearchTerm) + (searchFloppiesRequest.MediaType != null ? "," + new string(searchFloppiesRequest.MediaType) : ""));
 
                             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
@@ -146,16 +143,39 @@ namespace VDRIVE
                 networkStream.Flush();
             }
         }
-
-        protected bool ReadNetworkStream(NetworkStream stream, byte[] buffer, int offset, int count)
+        
+        protected bool ReadNetworkStream(NetworkStream stream, byte[] buffer, int offset, int count, TimeSpan timeout)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             int read = 0;
+
             while (read < count)
             {
-                int r = stream.Read(buffer, offset + read, count - read);
-                if (r <= 0) return false;
+                if (sw.Elapsed >= timeout)
+                {
+                    return false; // timed out before reading required bytes
+                }
+
+                if (!stream.DataAvailable)
+                {
+                    Thread.Sleep(10);
+                    continue;
+                }
+
+                int r;
+                try
+                {
+                    r = stream.Read(buffer, offset + read, count - read);
+                }
+                catch
+                {
+                    return false; // treat exceptions as failure to read
+                }
+
+                if (r <= 0) return false; // remote closed or no data
                 read += r;
             }
+
             return true;
         }
 
@@ -169,8 +189,18 @@ namespace VDRIVE
             var ack = new byte[] { 0x2B, 0x01 }; // request next chunk
             int received = 0;
 
+            var timeout = TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value);
+            var receiveTimeoutStopWatch = System.Diagnostics.Stopwatch.StartNew();
+
+            // wait for initial sync byte '+' (0x2B)
             while (true)
             {
+                if (receiveTimeoutStopWatch.Elapsed >= timeout)
+                {
+                    this.Logger.LogMessage("Timeout waiting for initial sync byte, aborting receive");
+                    throw new TimeoutException("Timed out waiting for sync byte");
+                }
+
                 if (!networkStream.DataAvailable)
                 {
                     Thread.Sleep(10);
@@ -178,29 +208,42 @@ namespace VDRIVE
                 }
 
                 int r = networkStream.Read(oneByte, 0, 1);
-                if (r == 1 && oneByte[0] == 0x2B) break; // sync byte
-
-                // ignore garbage and continue
+                if (r == 1 && oneByte[0] == 0x2B) break; // sync found
+                                                         // else drop garbage and continue
             }
 
             int chunksReceived = 0;
             while (received < totalSize)
             {
+                receiveTimeoutStopWatch.Restart();
+
                 int toRead = Math.Min(chunkSize, totalSize - received);
-                ReadNetworkStream(networkStream, buffer, received, toRead);
+                bool ok = ReadNetworkStream(networkStream, buffer, received, toRead, timeout);
+                if (!ok)
+                {
+                    this.Logger.LogMessage($"Timeout or read error receiving chunk at offset {received}, aborting receive");
+                    throw new TimeoutException("Timed out while reading chunk data");
+                }
 
                 received += toRead;
-                              
-                networkStream.Write(ack, 0, ack.Length);
-                networkStream.Flush();
+
+                try
+                {
+                    networkStream.Write(ack, 0, ack.Length);
+                    networkStream.Flush();
+                }
+                catch (Exception ex)
+                {
+                    this.Logger.LogMessage($"Error sending ack: {ex.Message}, aborting receive");
+                    throw;
+                }
 
                 chunksReceived++;
-
                 this.Logger.LogMessage($"Received {received} of {totalSize} bytes in {chunksReceived} chunks");
             }
 
-            return buffer.ToArray();
-        }
+            return buffer;
+        }       
 
         protected void SendData<T>(TcpClient tcpClient, NetworkStream networkStream, T header, byte[] payload) where T : struct
         {
@@ -220,7 +263,8 @@ namespace VDRIVE
                 return;
             }
 
-            this.SendChunks(tcpClient, networkStream, payload, this.Configuration.ChunkSize); 
+            // pass the configured timeout
+            this.SendChunks(tcpClient, networkStream, payload, this.Configuration.ChunkSize, TimeSpan.FromSeconds(this.Configuration.SendTimeoutSeconds.Value));
 
             DateTime end = DateTime.Now;
             this.Logger.LogMessage($"TimeTook:{(end - start).TotalMilliseconds / 1000} BytesPerSec:{payload.Length / (end - start).TotalMilliseconds * 1000}");
@@ -228,12 +272,8 @@ namespace VDRIVE
             networkStream.Flush();
         }
 
-        private void SendChunks(TcpClient tcpClient, NetworkStream networkStream, byte[] payload, ushort chunkSize)
+        private void SendChunks(TcpClient tcpClient, NetworkStream networkStream, byte[] payload, ushort chunkSize, TimeSpan timeout)
         {
-            // TODO: some binaries start with the IRQ vector so that is where the first bytes hit presumably because
-            // it turns it on later? - maybe can store those bytes last so IRQ is not hit during transfer?
-            // very interesting case...
-
             IList<List<byte>> chunks = payload.ToList().BuildChunks(chunkSize).ToList();
             int numOfChunks = chunks.Count();
             int bytesSent = 0;
@@ -241,67 +281,108 @@ namespace VDRIVE
             for (int chunkIndex = 0; chunkIndex < numOfChunks; chunkIndex++)
             {
                 List<byte> chunk = chunks[chunkIndex];
-               
-                // TODO: add memory address range loading chunk to
+
                 this.Logger.LogMessage($"{bytesSent}-{chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
 
-                networkStream.Write(chunk.ToArray(), 0, chunk.Count); // write whole chunk
-
-                bytesSent += chunk.Count;
-                networkStream.FlushAsync();
-
-                // wait for Chunk request from C64
-                ChunkRequest chunkRequest = this.ReadChunkRequest(tcpClient, networkStream);
-                switch (chunkRequest.Operation)
+                try
                 {
-                    case 0x01: // next chunk or finished
-                        if (chunkIndex + 1 == numOfChunks)
-                        {
-                            // transfer done successfully
-                            this.Logger.LogMessage("Send complete");
+                    // send whole chunk (blocking)
+                    networkStream.Write(chunk.ToArray(), 0, chunk.Count);
+
+                    bytesSent += chunk.Count;
+                    // flush synchronously to ensure bytes leave the buffer
+                    networkStream.Flush();
+
+                    // wait for Chunk request from C64 with timeout
+                    ChunkRequest chunkRequest = this.ReadChunkRequest(tcpClient, networkStream, timeout);
+
+                    switch (chunkRequest.Operation)
+                    {
+                        case 0x01: // next chunk or finished
+                            if (chunkIndex + 1 == numOfChunks)
+                            {
+                                this.Logger.LogMessage("Send complete");
+                                break;
+                            }
                             break;
-                        }
-                        break;
 
-                    case 0x02: // resend last chunk
-                        this.Logger.LogMessage("Resending last chunk");
-                        chunkIndex--;
-                        break;
+                        case 0x02: // resend last chunk
+                            this.Logger.LogMessage("Resending last chunk");
+                            chunkIndex--;
+                            bytesSent -= chunk.Count;
+                            if (bytesSent < 0) bytesSent = 0;
+                            break;
 
-                    case 0x03: // cancel
-                        this.Logger.LogMessage("Send canceled");
-                        return; // cancel this send                        
+                        case 0x03: // cancel
+                            this.Logger.LogMessage("Send canceled");
+                            return; // cancel this send
+                    }
+                }
+                catch (TimeoutException)
+                {
+                    this.Logger.LogMessage($"Timeout waiting for chunk ack after sending bytes {bytesSent - chunk.Count}..{bytesSent}, aborting send");
+                    SafeClose(tcpClient, networkStream);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    this.Logger.LogMessage($"Error during send: {ex.Message}, aborting send");
+                    SafeClose(tcpClient, networkStream);
+                    return;
                 }
             }
         }
 
-        private ChunkRequest ReadChunkRequest(TcpClient tcpClient, NetworkStream networkStream)
+        private ChunkRequest ReadChunkRequest(TcpClient tcpClient, NetworkStream networkStream, TimeSpan timeout)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             byte[] data = new byte[1];
+
             while (tcpClient.Connected)
             {
+                if (sw.Elapsed >= timeout)
+                {
+                    throw new TimeoutException("Timed out waiting for chunk request");
+                }
+
                 if (!networkStream.DataAvailable)
                 {
+                    // sleep short to avoid busy wait but check timeout frequently
                     Thread.Sleep(10);
                     continue;
                 }
+
                 int bytesRead = networkStream.Read(data, 0, 1);
-                if (bytesRead == 1 && data[0] == 0x2b)
+                if (bytesRead == 1 && data[0] == 0x2b) // '+' sync
                 {
+                    if (sw.Elapsed >= timeout)
+                    {
+                        throw new TimeoutException("Timed out waiting for chunk request payload");
+                    }
+
+                    // read second byte (operation)
                     bytesRead = networkStream.Read(data, 0, 1);
                     if (bytesRead == 1)
                     {
+                        // if ChunkRequest is larger than 1 byte, read the rest here
+                        // Adjust to actual ChunkRequest size; example assumes struct is 1 byte for Operation
                         ChunkRequest chunkRequest = BinaryStructConverter.FromByteArray<ChunkRequest>(data);
                         return chunkRequest;
                     }
                 }
                 else
                 {
-                    // dump the garbage chars
+                    // dump the garbage chars by design; continue waiting
                 }
             }
 
-            return default(ChunkRequest);
+            throw new InvalidOperationException("Connection closed while waiting for chunk request");
+        }
+
+        private void SafeClose(TcpClient tcpClient, NetworkStream networkStream)
+        {
+            try { networkStream?.Close(); } catch { }
+            try { tcpClient?.Close(); } catch { }
         }
     }
 }

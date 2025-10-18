@@ -47,6 +47,12 @@ namespace VDRIVE.Floppy
 
                         string imageName = Path.GetFileName(searchResult);
                         imageName = imageName.Length > 64 ? imageName.Substring(0, 64) : imageName; // truncate if needed
+
+                        // TODO: map to PETSCII
+                        // imageName is shown to user but only the ID is important 
+                        // so show the best case description
+                        imageName = imageName.Replace('_', '-'); // shows a back arrow on C64
+
                         floppyInfo.ImageNameLength = (byte)imageName.Length;
                         floppyInfo.ImageName = new char[64];
                         imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);                   
