@@ -1,15 +1,15 @@
 ﻿using System.Net.Sockets;
+using VDRIVE.Drive.Vice;
+using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
     public class Client : VDriveBase, IClient
     {
-        public Client(string ipAddress, int port, IConfiguration configuration, IFloppyResolver floppyResolver, ILoad loader, ISave saver, ILog logger)
+        public Client(string ipAddress, int port, IConfiguration configuration, ILog logger)
         {
-            this.FloppyResolver = floppyResolver;
-            this.Loader = loader;
-            this.Saver = saver;
+            this.Configuration = configuration;
             this.Logger = logger;
             this.IPAddress = ipAddress;
             this.Port = port;
@@ -29,9 +29,15 @@ namespace VDRIVE
                 tcpClient.NoDelay = true;
                 NetworkStream networkStream = tcpClient.GetStream();
 
+                //IFloppyResolver floppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger);
+                IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
+
+                ILoad loader = new ViceLoad(this.Configuration, this.Logger);
+                ISave saver = new ViceSave(this.Configuration, this.Logger);
+
                 while (tcpClient.Connected)
                 {
-                    this.HandleClient(tcpClient, networkStream);
+                    this.HandleClient(tcpClient, networkStream, floppyResolver, loader, saver);
                 }
             }
         }

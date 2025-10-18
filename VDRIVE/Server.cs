@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.ComponentModel.Design.Serialization;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using VDRIVE.Drive.Vice;
@@ -39,18 +40,23 @@ namespace VDRIVE
             {
                 TcpClient client = listener.AcceptTcpClient();
                 client.NoDelay = true;
-                Task.Run(() => this.HandleClient(client));
+
+                //IFloppyResolver floppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger);
+                IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
+
+                ILoad loader = new ViceLoad(this.Configuration, this.Logger);
+                ISave saver = new ViceSave(this.Configuration, this.Logger);
+
+                Task.Run(() =>
+                {
+                    this.HandleClient(client, floppyResolver, loader, saver);
+
+                });
             }
         }
 
-        private void HandleClient(TcpClient tcpClient)
+        private void HandleClient(TcpClient tcpClient, IFloppyResolver floppyResolver, ILoad loader, ISave saver)
         {
-            this.FloppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger); // search local paths
-            //IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(configuration, logger); // search commodoresoftware.com
-            //IFloppyResolver floppyResolver = new C64FloppyResolverFloppyResolver(configuration, logger);
-            this.Loader = new ViceLoad(this.Configuration, this.Logger);
-            this.Saver = new ViceSave(this.Configuration, this.Logger);
-
             string ip = tcpClient.Client.RemoteEndPoint.ToString();
 
             this.Logger.LogMessage($"Client connected: {ip}");
@@ -60,7 +66,7 @@ namespace VDRIVE
             {
                 while (tcpClient.Connected)
                 {
-                    this.HandleClient(tcpClient, networkStream);
+                    this.HandleClient(tcpClient, networkStream, floppyResolver, loader, saver);
                 }
             }
         }
@@ -87,8 +93,6 @@ namespace VDRIVE
             var hostAddrs = Dns.GetHostEntry(Dns.GetHostName()).AddressList;
             var ipv4 = hostAddrs.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a));
             return ipv4;
-        }
-
-       
+        }       
     }
 }

@@ -1,6 +1,8 @@
 ﻿using System.Net.Sockets;
 using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
+using VDRIVE.Drive.Vice;
+using VDRIVE.Floppy;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
@@ -9,14 +11,11 @@ namespace VDRIVE
 {
     public abstract class VDriveBase
     {
-        protected IConfiguration Configuration;
-        protected IFloppyResolver FloppyResolver;
-        protected ILoad Loader;
-        protected ISave Saver;
+        protected IConfiguration Configuration;        
         protected ILog Logger;
 
-        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream)
-        {
+        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, ILoad loader, ISave saver)
+        { 
             byte[] sendBuffer = new byte[1];
             byte[] data = new byte[1];
             if (!networkStream.DataAvailable)
@@ -42,7 +41,7 @@ namespace VDRIVE
                             this.ReadNetworkStream(networkStream, buffer, 1, size - 1);
 
                             LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
-                            LoadResponse loadResponse = this.Loader.Load(loadRequest, this.FloppyResolver, out byte[] payload);
+                            LoadResponse loadResponse = loader.Load(loadRequest, floppyResolver, out byte[] payload);
 
                             if (payload != null)
                             {
@@ -79,7 +78,7 @@ namespace VDRIVE
                             byte[] payload = this.ReceiveData(networkStream, saveRequest);
 
                             // TODO send this back to C64
-                            SaveResponse saveResponse = this.Saver.Save(saveRequest, this.FloppyResolver, payload);
+                            SaveResponse saveResponse = saver.Save(saveRequest, floppyResolver, payload);
                         }
                         break;
 
@@ -97,7 +96,7 @@ namespace VDRIVE
                             floppyIdentifier.IdLo = insertFloppyRequest.IdLo;
                             floppyIdentifier.IdHi = insertFloppyRequest.IdHi;
 
-                            FloppyInfo? floppyInfo = this.FloppyResolver.InsertFloppy(floppyIdentifier);
+                            FloppyInfo? floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);
 
                             this.Logger.LogMessage("Insert Request: ID=" + (floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8)) + ", Name=\"" + (floppyInfo != null ? new string(floppyInfo.Value.ImageName) : "Not Found") + "\"");
                         }
@@ -110,7 +109,7 @@ namespace VDRIVE
                             // and that is handled by the insert command
 
                             // TODO: read params from C64
-                            this.FloppyResolver.EjectFloppy();
+                            floppyResolver.EjectFloppy();
                         }
                         break;
 
@@ -127,7 +126,7 @@ namespace VDRIVE
 
                             this.Logger.LogMessage("Search Request: " + new string(searchFloppiesRequest.SearchTerm) + (searchFloppiesRequest.MediaType != null ? "," + new string(searchFloppiesRequest.MediaType) : ""));
 
-                            SearchFloppyResponse searchFloppyResponse = this.FloppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
+                            SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
 
                             // build the payload
                             List<byte> payload = new List<byte>();
