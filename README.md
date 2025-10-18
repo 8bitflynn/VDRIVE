@@ -5,6 +5,7 @@
 
 - VDRIVE is a free, open-source tool built for those who want modern flexibility in retro workflows. It reflects months of design, testing, and iteration — not a plug-and-play gimmick. If you prefer original hardware, that’s valid. If you want remote disk access, mount/unmount control, and HTTP support, VDRIVE is here for you.
 - VDRIVE includes IFloppyResolver implementations for both local disks and several remote repositories. For remote sources, I’ve been actively requesting permission from repository owners. If I don’t hear back, I treat access as equivalent to browsing their site from a modern machine — respectful, read-only, and non-invasive. That said, I fully respect the wishes of content owners: if any repository owner prefers their site not be included, I’ll remove it immediately.
+  
 
 ## 🕹️ VDRIVE Signal
 
@@ -19,6 +20,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 - Eventually, VDRIVE will implement its own `ILoad` / `ISave` interface to eliminate reliance on VICE — but using `c1541.exe` saved a lot of time and allowed faster prototyping.
 - This release is intended for developers and technically inclined users. Setup requires compiling and assembling. Prebuilt binaries will be provided once the project nears completion.
 - The simple PRG support (no disk) will be fixed soon by wrapping PRG in new D64 from c1541.exe but for now it can be loaded by just mounting it.
+- Latest changes allow for multiple C64s to connect to a single VDRIVE server and share disk images so paired programming is now possible on C64 and can be done without ever leaving it.
 
 ---
 
