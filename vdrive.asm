@@ -1,7 +1,7 @@
 ; memory map
 ; $c000 - jmp table
 ; $c380 - up9600 bitbanger/vdrive
-; $c5e5 - vars and constants
+; $c5e4 - vars and constants (counts down from $c5ff)
 ; $c600 - rs232 input buffer
 ; $c700 - rs232 output buffer 
 ; $c800 - up9600
@@ -28,6 +28,7 @@ temp_ptr_hi = $fe
 dest_ptr_lo = $ae ; basic and org iload use these locations
 dest_ptr_hi = $af ; as a pointer to the byte to store the recv'd byte
 
+user_input_length     = $c5e4
 dest_ptr_lo_save      = $c5e5
 dest_ptr_hi_save      = $c5e6
 byte_count_lo_save    = $c5e7
@@ -40,7 +41,7 @@ byte_count_mid        = $c5ed
 byte_count_hi         = $c5ee
 chunk_size_lo         = $c5ef
 chunk_size_hi         = $c5f0
-vdisk_devnum          = $c5f1
+vdrive_devnum         = $c5f1 ; poke 50673,# VDRIVE device number responds to (default 8)
 spinner_char_save     = $c5f2
 vdrive_retcode        = $c5f3
 org_iload_lo          = $c5f4
@@ -57,15 +58,14 @@ temp_workspace5       = $c5fe
 search_result_count   = $c5ff
 
 
-
 *= $c000
         jmp enable_vdrive
 ; $c003
         jmp disable_vdrive
 ; $c006  
-        jmp vdrive_search
+        jmp vdrive_search_floppies
 ; $c009
-        jmp mount_floppy_request
+        jmp vdrive_mount_floppy
    
 enable_vdrive
         ; install before hooking vectors 
@@ -73,12 +73,12 @@ enable_vdrive
         ; vector
         jsr install_up9600
 
-        ; default devnum for vdisk_devnum
+        ; default devnum for vdrive_devnum
         ; setting this memory location to
         ; 2 will route devnum 8 to original
         ; iload
         lda #$08
-        sta vdisk_devnum
+        sta vdrive_devnum
 
         lda $0330
         sta org_iload_lo
@@ -124,7 +124,7 @@ iload_handler
         php             
         pla            
         sta temp_workspace4 
-        lda vdisk_devnum
+        lda vdrive_devnum
         cmp devnum ; compare with number from load and if different, call original iload
         beq vdrive_load  
         jsr disable_up9600 ; just in case          
@@ -199,7 +199,6 @@ return_init
 
 return_success
         clc
-        ;lda #$00 ; success
 exit
         ldx dest_ptr_lo ; registers hold end address
         ldy dest_ptr_hi
@@ -254,7 +253,7 @@ recv_load_response
         rts
 
 isave_handler
-        lda vdisk_devnum 
+        lda vdrive_devnum 
         cmp devnum 
         beq vdrive_save
         lda org_isave_lo
@@ -379,22 +378,21 @@ no_padding_save
         rts
 
 ; search entry
-vdrive_search 
+vdrive_search_floppies 
         jsr clear_up9600_timing_issues 
         jsr enable_up9600   
 
-        jsr get_search_term
+        jsr get_user_input
      
         jsr send_search_request 
-
-        lda #$ff ; ff = success
-        sta vdrive_retcode 
 
         lda $07e7
         sta spinner_char_save      
 
+        lda #$ff ; ff = success, set in recv_search_response
+        sta vdrive_retcode 
         jsr recv_search_response ; header         
-        cmp #$ff
+        cmp #$ff ; vdrive_retcode cmp
         bne exit_search
 
 search_recv_payload   
@@ -406,18 +404,18 @@ search_recv_payload
         sta $07e7       
 
         lda search_result_count ; print filenames wipes this out
-        beq exit_search
+        beq exit_search ; no results
         jsr printfilenames
 
 search_return_init      
-        jsr mount_floppy_request
+        jsr vdrive_mount_floppy
 exit_search
         jsr disable_up9600 
         jsr restore_up9600_timing_issue_state   
 
         rts
 
-get_search_term
+get_user_input
         ldy #0
 readchar
         jsr $ffcf           ; chrin — waits for real input
@@ -428,7 +426,7 @@ readchar
         bne readchar        ; loop until y wraps
 
 done
-        sty fnlen
+        sty user_input_length
         rts
 
 send_search_request
@@ -442,7 +440,7 @@ send_search_request
         lda #>temp_search_term
         sta temp_ptr_hi
 
-        lda fnlen
+        lda user_input_length
         jsr send_byte
 
         ldx #$00                 ; use x as index
@@ -450,12 +448,12 @@ search_loop_x
         lda temp_search_term,x
         jsr send_byte
         inx
-        cpx fnlen
+        cpx user_input_length
         bne search_loop_x
 
-        lda #$73 ; pad rest
+        lda #$71 ; pad rest (80 char + MediaType fields (not used yet))
         sec
-        sbc fnlen
+        sbc user_input_length
         sta pad_count            ; zero-page pad counter
         beq no_padding_search        
 
@@ -465,34 +463,33 @@ pad_send_loop
         dec pad_count
         bne pad_send_loop
 
-no_padding_search
+no_padding_search       
         lda #$ff ; flags
         jsr send_byte
         rts
 
 recv_search_response
        
-        jsr get_syncbyte   
+        jsr get_syncbyte  
+         
         jsr recv_byte 
-        sta vdrive_retcode   
+        sta vdrive_retcode 
+  
         jsr recv_byte 
-        sta search_result_count
-
-        ;jsr print_accum
-
-        ; fixme
+        sta search_result_count  
+     
         lda vdrive_retcode       
         
         rts
 
-mount_floppy_request
+vdrive_mount_floppy
 
         jsr clear_up9600_timing_issues 
         jsr enable_up9600  
          
-        jsr get_search_term ; reuse to get id of floppy for now
-        cmp fnlen
-        beq mount_floppy_exit
+        jsr get_user_input ; reuse to get id of floppy for now
+        cmp user_input_length
+        beq mount_floppy_exit ; user hit enter, exit
 
         lda #$2b ; sync
         jsr send_byte
@@ -521,7 +518,7 @@ parse_floppy_id
         sta temp_workspace2
 
 parse_loop
-        cpx fnlen
+        cpx user_input_length
         beq done_parse
 
         lda temp_search_term,x
@@ -569,10 +566,7 @@ printfilenames
     lda #13
     jsr $ffd2              ; print initial newline
 
-    ;lda #$01
-   ; sta temp_workspace1    ; line counter = 0
-
-    lda dest_ptr_lo_save
+    lda dest_ptr_lo_save ; start where raw data was stored in RAM
     sta temp_ptr_lo
     lda dest_ptr_hi_save
     sta temp_ptr_hi
@@ -586,17 +580,13 @@ printloop
     tax
     ldy #1
     lda (temp_ptr_lo),y ; hi byte of floppy Id
-
-   ; lda temp_workspace1     ; A = line number
-   ; jsr $ba8c               ; move A into FAC
-    jsr $bdcd               ; print FAC as decimal
-
+    jsr $bdcd ; print id           
     lda #$20
-    jsr $ffd2               ; print space
+    jsr $ffd2             
 
     ; ---- print filename ----
     ldy #2
-    lda (temp_ptr_lo),y     ; length byte
+    lda (temp_ptr_lo),y     ; filename length byte
     tax
     beq printemptyname
 
@@ -612,16 +602,14 @@ printemptyname
     lda #13
     jsr $ffd2               ; carriage return
 
-    ; ---- advance pointer by struct size (67 bytes) ----
+    ; ---- advance pointer by FloppyInfo struct size 
     clc
     lda temp_ptr_lo
     adc #$43
     sta temp_ptr_lo
     lda temp_ptr_hi
     adc #0
-    sta temp_ptr_hi
-
-    ;inc temp_workspace1     ; increment line counter
+    sta temp_ptr_hi    
     dec search_result_count
     bne printloop
 
@@ -633,7 +621,7 @@ done_print
 ; bitbanger/vdisk chunked transfer
 *= $c380
 
-recv_data
+recv_data  
 
         ; remove garbage on line and sync frame
         jsr get_syncbyte
@@ -680,7 +668,7 @@ get_dest_ptr_low
 get_dest_ptr_hi
         jsr recv_byte
         sta dest_ptr_hi
-        sta dest_ptr_hi_save
+        sta dest_ptr_hi_save     
 
         ; manually decrement chunk counter
         ; to account for 2 memory bytes
@@ -922,7 +910,7 @@ recv_byte ; a holds received byte
         rts
 
 ; sync byte to line bytes up and removes garbage on the line
-get_syncbyte
+get_syncbyte       
         jsr recv_byte     
         cmp #$2b ; sync byte (nothing special, just needs to be same on both sides)
         bne get_syncbyte
@@ -959,9 +947,6 @@ rotate_index
 
 temp_search_term
         text ""
-
-
-
 
 
 
