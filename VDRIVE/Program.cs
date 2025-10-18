@@ -1,6 +1,4 @@
-﻿using VDRIVE.Drive.Vice;
-using VDRIVE.Floppy;
-using VDRIVE_Contracts.Interfaces;
+﻿using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
@@ -33,7 +31,7 @@ namespace VDRIVE
             //string ipAddress = "xxx.xxx.xxx.xxx";
             //int port = 80;
 
-            //Client client = new Client(ipAddress, port, configuration, floppyResolver, loader, saver, logger);
+            //Client client = new Client(ipAddress, port, configuration, logger);
             //client.Start();
         }   
     }

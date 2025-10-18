@@ -7,7 +7,7 @@ namespace VDRIVE_Contracts.Structures
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FloppyInfo
     {
-        // floppy identifier sent back from C64 to insert floppy
+        // FloppyIdentifier shown next to ImageName sent back when user selects this ID
         public byte IdLo;
         public byte IdHi;
 

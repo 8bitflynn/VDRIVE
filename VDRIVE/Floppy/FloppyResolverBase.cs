@@ -17,12 +17,17 @@ namespace VDRIVE.Floppy
         // set when searching disk
         protected List<string> MediaExtensionsAllowed = new List<string>();
 
-        public virtual FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier) // called from C64
+        public virtual FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier) // called from a client 
         {
             this.InsertedFloppyInfo = this.FloppyInfos.FirstOrDefault(fi => fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
             this.InsertedFloppyPointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == (floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8)));
-            this.Logger.LogMessage("Inserting floppy: " + new string(this.InsertedFloppyInfo.Value.ImageName));
-            return this.InsertedFloppyInfo.Value; // should work for now
+
+            if (this.InsertedFloppyInfo.HasValue)
+            {
+                string floppyName = new string(this.InsertedFloppyInfo.Value.ImageName);
+                this.Logger.LogMessage($"Inserting floppy: {floppyName} ID={(floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8))}");
+            }
+            return this.InsertedFloppyInfo.Value; 
         }
 
         public FloppyInfo? InsertFloppy(FloppyInfo floppyInfo) // easier locally

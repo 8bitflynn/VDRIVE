@@ -50,12 +50,7 @@ namespace VDRIVE
                                 this.Logger.LogMessage($"Destination Address: 0x{dest_ptr:X4}");
 
                                 payload = payload.Skip(2).ToArray(); // skip destination pointer     
-                            }
-                            else
-                            {
-                                // FIX move to loader if it it works
-                                loadResponse.ResponseCode = 0x04; // file not found
-                            }
+                            }                            
 
                             this.SendData(tcpClient, networkStream, loadResponse, payload);
                         }
@@ -98,15 +93,18 @@ namespace VDRIVE
 
                             FloppyInfo? floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);
 
-                            this.Logger.LogMessage("Insert Request: ID=" + (floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8)) + ", Name=\"" + (floppyInfo != null ? new string(floppyInfo.Value.ImageName) : "Not Found") + "\"");
+                            //this.Logger.LogMessage("Insert Request: ) + ", Name=\"" + (floppyInfo != null ? new string(floppyInfo.Value.ImageName) : "Not Found") + "\"");
                         }
                         break;
 
                     case 0x04: // UNMOUNT floppy image
                         {
+                            // NOT USED
                             // TODO: not sure I will implement this as I do not really see a need to?
                             // the only reason one would eject a floppy is to insert another one
                             // and that is handled by the insert command
+
+                            // MAYBE just re-use MOUNT sending in 0 instead of a real id?
 
                             // TODO: read params from C64
                             floppyResolver.EjectFloppy();
@@ -132,15 +130,14 @@ namespace VDRIVE
                             List<byte> payload = new List<byte>();
                             foreach (FloppyInfo foundFloppyInfo in foundFloppyInfos)
                             {
-                                byte[] serilizedFoundFloppyInfo = BinaryStructConverter.ToByteArray<FloppyInfo>(foundFloppyInfo);
-                                payload.AddRange(serilizedFoundFloppyInfo);
+                                byte[] serializedFoundFloppyInfo = BinaryStructConverter.ToByteArray<FloppyInfo>(foundFloppyInfo);
+                                payload.AddRange(serializedFoundFloppyInfo);
                             }
 
                             int lengthOfPayload = payload.Count;
                             searchFloppyResponse.ByteCountLo = (byte)(lengthOfPayload & 0xFF); // LSB
                             searchFloppyResponse.ByteCountMid = (byte)((lengthOfPayload >> 8) & 0xFF);
                             searchFloppyResponse.ByteCountHi = (byte)((lengthOfPayload >> 16) & 0xFF); // MSB
-
 
                             this.SendData(tcpClient, networkStream, searchFloppyResponse, payload.ToArray());
                         }
@@ -169,8 +166,8 @@ namespace VDRIVE
             int totalSize = (saveRequest.ByteCountHi << 16) | (saveRequest.ByteCountMid << 8) | saveRequest.ByteCountLo;
 
             byte[] buffer = new byte[totalSize];
-            var one = new byte[1];
-            var ack = new byte[] { 0x2B, 0x01 };
+            var oneByte = new byte[1];
+            var ack = new byte[] { 0x2B, 0x01 }; // request next chunk
             int received = 0;
 
             while (true)
@@ -181,8 +178,8 @@ namespace VDRIVE
                     continue;
                 }
 
-                int r = networkStream.Read(one, 0, 1);
-                if (r == 1 && one[0] == 0x2B) break; // sync byte
+                int r = networkStream.Read(oneByte, 0, 1);
+                if (r == 1 && oneByte[0] == 0x2B) break; // sync byte
 
                 // ignore garbage and continue
             }
@@ -194,8 +191,7 @@ namespace VDRIVE
                 ReadNetworkStream(networkStream, buffer, received, toRead);
 
                 received += toRead;
-
-                // ACK this chunk and request next chunk
+                              
                 networkStream.Write(ack, 0, ack.Length);
                 networkStream.Flush();
 
@@ -211,7 +207,6 @@ namespace VDRIVE
         {
             DateTime start = DateTime.Now;
 
-
             byte[] sendBuffer = new byte[1];
 
             // sync byte
@@ -222,12 +217,12 @@ namespace VDRIVE
 
             networkStream.Write(headerBytes, 0, headerBytes.Length);
 
-            if (payload == null) // file not found or something
+            if (payload == null) // file not found or similar
             {
                 return;
             }
 
-            this.SendChunks(tcpClient, networkStream, payload, this.Configuration.ChunkSize); // TODO: add config option for default chunk size
+            this.SendChunks(tcpClient, networkStream, payload, this.Configuration.ChunkSize); 
 
             DateTime end = DateTime.Now;
             this.Logger.LogMessage($"TimeTook:{(end - start).TotalMilliseconds / 1000} BytesPerSec:{payload.Length / (end - start).TotalMilliseconds * 1000}");
@@ -286,11 +281,10 @@ namespace VDRIVE
             {
                 if (!networkStream.DataAvailable)
                 {
-                    Thread.Sleep(50);
+                    Thread.Sleep(10);
                     continue;
                 }
                 int bytesRead = networkStream.Read(data, 0, 1);
-
                 if (bytesRead == 1 && data[0] == 0x2b)
                 {
                     bytesRead = networkStream.Read(data, 0, 1);

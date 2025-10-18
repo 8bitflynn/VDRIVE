@@ -1,11 +1,9 @@
-﻿using System.ComponentModel.Design.Serialization;
-using System.Net;
+﻿using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using VDRIVE.Drive.Vice;
 using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
-using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE
 {
@@ -38,17 +36,18 @@ namespace VDRIVE
 
             while (true)
             {
-                TcpClient client = listener.AcceptTcpClient();
-                client.NoDelay = true;
-
-                //IFloppyResolver floppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger);
-                IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
-
-                ILoad loader = new ViceLoad(this.Configuration, this.Logger);
-                ISave saver = new ViceSave(this.Configuration, this.Logger);
+                TcpClient client = listener.AcceptTcpClient(); // blocking
+                client.NoDelay = true;              
 
                 Task.Run(() =>
                 {
+                    // for now change in code which floppy resovler to use...
+                    IFloppyResolver floppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger);
+                    //IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
+
+                    ILoad loader = new ViceLoad(this.Configuration, this.Logger);
+                    ISave saver = new ViceSave(this.Configuration, this.Logger);
+
                     this.HandleClient(client, floppyResolver, loader, saver);
 
                 });
