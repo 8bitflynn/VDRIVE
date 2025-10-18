@@ -2,7 +2,7 @@
 
 namespace VDRIVE_Contracts.Interfaces
 {
-    public interface ILoad
+    public interface IVDriveLoader
     {
         LoadResponse Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload);       
     }

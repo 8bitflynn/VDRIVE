@@ -1,6 +1,6 @@
 ﻿namespace VDRIVE_Contracts.Interfaces
 {
-    public interface IClient
+    public interface IVDriveServer
     {
         void Start();
     }

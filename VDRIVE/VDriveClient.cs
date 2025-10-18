@@ -5,9 +5,9 @@ using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class VDriveClient : VDriveBase, IClient
+    public class VDriveClient : VDriveBase, IVDriveClient
     {
-        public VDriveClient(string ipAddress, int port, IConfiguration configuration, ILog logger)
+        public VDriveClient(string ipAddress, int port, IConfiguration configuration, IVDriveLoggger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
@@ -32,8 +32,8 @@ namespace VDRIVE
                 //IFloppyResolver floppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger);
                 IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
 
-                ILoad loader = new ViceLoad(this.Configuration, this.Logger);
-                ISave saver = new ViceSave(this.Configuration, this.Logger);
+                IVDriveLoader loader = new Vice2_4VDriveLoader(this.Configuration, this.Logger);
+                IVDriveSave saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {

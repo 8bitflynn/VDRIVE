@@ -7,7 +7,7 @@ namespace VDRIVE.Floppy
 {
     public class CommodoreSoftwareFloppyResolver : RemoteFloppyResolverBase, IFloppyResolver
     {
-        public CommodoreSoftwareFloppyResolver(IConfiguration configuration, ILog logger)
+        public CommodoreSoftwareFloppyResolver(IConfiguration configuration, IVDriveLoggger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
@@ -16,15 +16,20 @@ namespace VDRIVE.Floppy
         List<string> IgnoredSearchKeywords = new List<string> { "manual", "firmware", "documentation", "guide", "instruction", "tutorial", 
          "c128", "dos", "128" };        
       
-        public override FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier)
+        public override FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier)
         {
-            FloppyInfo? floppyInfo = base.InsertFloppy(floppyIdentifier);
+            FloppyInfo floppyInfo = base.InsertFloppy(floppyIdentifier);
+
+            if (floppyInfo.Equals(default(FloppyInfo)))
+            {
+                return floppyInfo;
+            }
 
             try
             {
                 using (HttpClient client = new HttpClient())
                 {
-                    string downloadPageUrl = this.BuildFullCommodoreSoftwarePath(this.InsertedFloppyPointer.Value.ImagePath);
+                    string downloadPageUrl = this.BuildFullCommodoreSoftwarePath(this.InsertedFloppyPointer.ImagePath);
                     HttpResponseMessage httpResponseMessage = client.PostAsync(downloadPageUrl, null).Result;
                     string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
 
@@ -45,7 +50,7 @@ namespace VDRIVE.Floppy
                             if (zippedFile == null)
                             {
                                 this.Logger.LogMessage("Failed to download file.");
-                                return null;
+                                return default(FloppyInfo);
                             }
                             this.Decompress(zippedFile);
                         }
@@ -55,7 +60,7 @@ namespace VDRIVE.Floppy
             catch (Exception exception)
             {
                 this.Logger.LogMessage("Failed to insert floppy: " + exception.Message);
-                return null;
+                return default(FloppyInfo);
             }
             
             return floppyInfo;

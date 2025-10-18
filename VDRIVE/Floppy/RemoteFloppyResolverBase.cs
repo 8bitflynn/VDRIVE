@@ -18,7 +18,7 @@ namespace VDRIVE.Floppy
                     httpResponseMessage.EnsureSuccessStatusCode();
 
                     byte[] fileBytes = httpResponseMessage.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
-                    this.Logger.LogMessage($"Download complete ({(fileBytes != null ? fileBytes.Length : 0)} bytes): " + new string(this.InsertedFloppyInfo.Value.ImageName));
+                    this.Logger.LogMessage($"Download complete ({(fileBytes != null ? fileBytes.Length : 0)} bytes): " + new string(this.InsertedFloppyInfo.ImageName));
 
                     return fileBytes;
                 }
@@ -61,18 +61,18 @@ namespace VDRIVE.Floppy
                     // Extract file
                     entry.ExtractToFile(fullFilePath, overwrite: true);
 
-                    if (this.InsertedFloppyPointer.HasValue)
+                    if (!this.InsertedFloppyPointer.Equals(default(FloppyInfo)))
                     {
                         if (!this.Configuration.MediaExtensionAllowed.Any(ir => fullFilePath.ToLower().EndsWith(ir)))
                         {
                             continue;
                         }
 
-                        FloppyInfo tempFloppyInfo = this.InsertedFloppyInfo.Value;
+                        FloppyInfo tempFloppyInfo = this.InsertedFloppyInfo;
                         tempFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
                         this.InsertedFloppyInfo = tempFloppyInfo; // update to extracted file name
 
-                        FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer.Value;
+                        FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer;
                         tempFloppyPointer.ImagePath = fullFilePath;
                         this.InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path                        
                     }

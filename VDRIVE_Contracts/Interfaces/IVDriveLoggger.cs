@@ -1,6 +1,6 @@
 ﻿namespace VDRIVE_Contracts.Interfaces
 {
-    public interface ILog
+    public interface IVDriveLoggger
     {
         void LogMessage(string message);
     }

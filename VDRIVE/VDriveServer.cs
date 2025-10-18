@@ -7,9 +7,9 @@ using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class VDriveServer : VDriveBase, IServer
+    public class VDriveServer : VDriveBase, IVDriveServer
     {
-        public VDriveServer(IConfiguration configuation, ILog logger, string listenIp = null, int port = -1)
+        public VDriveServer(IConfiguration configuation, IVDriveLoggger logger, string listenIp = null, int port = -1)
         {
             this.Configuration = configuation;
             this.Logger = logger;
@@ -47,15 +47,15 @@ namespace VDRIVE
                 Task.Run(() =>
                 {
                     IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
-                    ILoad loader = new ViceLoad(this.Configuration, this.Logger);
-                    ISave saver = new ViceSave(this.Configuration, this.Logger);
+                    IVDriveLoader loader = new Vice2_4VDriveLoader(this.Configuration, this.Logger);
+                    IVDriveSave saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
 
                     this.HandleClient(client, floppyResolver, loader, saver);
                 });
             }
         }
 
-        private void HandleClient(TcpClient tcpClient, IFloppyResolver floppyResolver, ILoad loader, ISave saver)
+        private void HandleClient(TcpClient tcpClient, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSave saver)
         {
             string ip = tcpClient.Client.RemoteEndPoint.ToString();
 

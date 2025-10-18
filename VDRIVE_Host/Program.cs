@@ -22,7 +22,7 @@ namespace VDRIVE_Host
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder();
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
 
-            ILog logger = new VDRIVE.Util.ConsoleLogger();
+            IVDriveLoggger logger = new VDRIVE.Util.ConsoleLogger();
 
             // firmware is setup as client mode by default so run this in server mode
             // should allow multiple C64 connections to same disk image but

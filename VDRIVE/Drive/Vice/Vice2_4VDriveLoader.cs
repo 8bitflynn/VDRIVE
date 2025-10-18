@@ -5,17 +5,17 @@ using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Drive.Vice
 {
-    public class ViceLoad : ILoad
+    public class Vice2_4VDriveLoader : IVDriveLoader
     {
-        public ViceLoad(IConfiguration configuration, ILog logger)
+        public Vice2_4VDriveLoader(IConfiguration configuration, IVDriveLoggger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;          
         }
         private IConfiguration Configuration;
-        private ILog Logger;
+        private IVDriveLoggger Logger;
 
-        LoadResponse ILoad.Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload)
+        LoadResponse IVDriveLoader.Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload)
         {
             try
             {
@@ -24,7 +24,7 @@ namespace VDRIVE.Drive.Vice
                 
                 if (filename.StartsWith("$")) // TODO: implement wildcards / filtering
                 {
-                    payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value);
+                    payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo(), floppyResolver.GetInsertedFloppyPointer());
                 }
                 else if (filename.StartsWith("*"))
                 {
@@ -32,14 +32,14 @@ namespace VDRIVE.Drive.Vice
                     // by just mounting the PRG and loading with "*"
                     // thought about wrapping in D64 but seems unnecessary overhead
                     // and its less steps for user
-                    FloppyPointer? floppyPointer = floppyResolver.GetInsertedFloppyPointer().Value;
+                    FloppyPointer? floppyPointer = floppyResolver.GetInsertedFloppyPointer();
                     if (floppyPointer.Value.ImagePath.ToLower().EndsWith(".prg"))
                     {
-                        payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().Value.ImagePath);
+                        payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath);
                     }
                     else
                     {
-                        string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer().Value);
+                        string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer());
                         string lineWithFirstFile = rawLines[1];
 
                         // Match anything inside double quotes, including spaces
@@ -51,7 +51,7 @@ namespace VDRIVE.Drive.Vice
                             string[] tokens = lineWithFirstFile.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                             loadRequest.FileName = extracted.ToCharArray();
                             loadRequest.FileNameLength = (byte)extracted.Length;
-                            payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
+                            payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo(), floppyResolver.GetInsertedFloppyPointer(), out responseCode);
                         }
                         else
                         {
@@ -61,7 +61,7 @@ namespace VDRIVE.Drive.Vice
                 }
                 else
                 {
-                    payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo().Value, floppyResolver.GetInsertedFloppyPointer().Value, out responseCode);
+                    payload = LoadFile(loadRequest, floppyResolver.GetInsertedFloppyInfo(), floppyResolver.GetInsertedFloppyPointer(), out responseCode);
                 }
 
                 LoadResponse loadResponse = BuildLoadResponse(loadRequest, payload, responseCode);

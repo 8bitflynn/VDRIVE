@@ -6,27 +6,27 @@ namespace VDRIVE.Floppy
 {
     public class C64FloppyResolver : RemoteFloppyResolverBase, IFloppyResolver
     {
-        public C64FloppyResolver(IConfiguration configuration, ILog logger)
+        public C64FloppyResolver(IConfiguration configuration, IVDriveLoggger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;            
         }
 
-        public override FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier)
+        public override FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier)
         {
-            FloppyInfo? floppyInfo = base.InsertFloppy(floppyIdentifier);
+            FloppyInfo floppyInfo = base.InsertFloppy(floppyIdentifier);
 
             try
             {
                 using (HttpClient client = new HttpClient())
                 {
-                    string downloadUrl = "https://www.c64.com/games/" + this.InsertedFloppyPointer.Value.ImagePath;
+                    string downloadUrl = "https://www.c64.com/games/" + this.InsertedFloppyPointer.ImagePath;
 
                     byte[] zippedFile = this.DownloadFile(downloadUrl);
                     if (zippedFile == null)
                     {
                         this.Logger.LogMessage("Failed to download file.");
-                        return null;
+                        return default(FloppyInfo);
                     }
                     this.Decompress(zippedFile);                
                 }
@@ -34,7 +34,7 @@ namespace VDRIVE.Floppy
             catch (Exception exception)
             {
                 this.Logger.LogMessage("Failed to insert floppy: " + exception.Message);
-                return null;
+                return default(FloppyInfo);
             }
 
             return floppyInfo;

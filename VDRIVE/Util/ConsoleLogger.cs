@@ -2,7 +2,7 @@
 
 namespace VDRIVE.Util
 {
-    public class ConsoleLogger : ILog
+    public class ConsoleLogger : IVDriveLoggger
     {
         public void LogMessage(string message)
         {

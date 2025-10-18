@@ -9,9 +9,9 @@ namespace VDRIVE
     public abstract class VDriveBase
     {
         protected IConfiguration Configuration;        
-        protected ILog Logger;
+        protected IVDriveLoggger Logger;
 
-        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, ILoad loader, ISave saver)
+        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSave saver)
         { 
             byte[] sendBuffer = new byte[1];
             byte[] data = new byte[1];
@@ -88,8 +88,7 @@ namespace VDRIVE
                             this.ReadNetworkStream(networkStream, buffer, 0, size, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             FloppyIdentifier floppyIdentifier = BinaryStructConverter.FromByteArray<FloppyIdentifier>(buffer);
-
-                            FloppyInfo? floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);
+                            FloppyInfo floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);                                                  
                         }
                         break;
 

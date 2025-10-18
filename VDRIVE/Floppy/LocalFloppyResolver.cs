@@ -5,7 +5,7 @@ namespace VDRIVE.Floppy
 {
     public class LocalFloppyResolver : FloppyResolverBase, IFloppyResolver
     {
-        public LocalFloppyResolver(IConfiguration configuration, ILog logger)
+        public LocalFloppyResolver(IConfiguration configuration, IVDriveLoggger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
@@ -13,7 +13,7 @@ namespace VDRIVE.Floppy
 
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
-            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{new string (searchFloppiesRequest.MediaType)}'");
+            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)?.TrimEnd()}' and media type '{new string (searchFloppiesRequest.MediaType)?.TrimEnd()}'");
 
             // clear last search results
             this.FloppyInfos.Clear();
@@ -76,7 +76,7 @@ namespace VDRIVE.Floppy
 
             SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)foundFloppyInfos.Count()); 
 
-            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{new string(searchFloppiesRequest.SearchTerm)}' and media type '{new string (searchFloppiesRequest.MediaType)}'");
+            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{new string(searchFloppiesRequest.SearchTerm)?.TrimEnd()}' and media type '{new string (searchFloppiesRequest.MediaType)?.TrimEnd()}'");
             return searchFloppyResponse;
         }        
 

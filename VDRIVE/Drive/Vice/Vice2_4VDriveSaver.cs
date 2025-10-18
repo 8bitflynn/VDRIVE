@@ -4,17 +4,17 @@ using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Drive.Vice
 {
-    public class ViceSave : ISave
+    public class Vice2_4VDriveSaver : IVDriveSave
     {
-        public ViceSave(IConfiguration configuration, ILog logger)
+        public Vice2_4VDriveSaver(IConfiguration configuration, IVDriveLoggger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
         }
         private IConfiguration Configuration;
-        private ILog Logger;
+        private IVDriveLoggger Logger;
 
-        SaveResponse ISave.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
+        SaveResponse IVDriveSave.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
         {
             SaveResponse saveResponse = new SaveResponse();
             saveResponse.ResponseCode = 0xff;
@@ -38,7 +38,7 @@ namespace VDRIVE.Drive.Vice
             var psi = new ProcessStartInfo
             {
                 FileName = this.Configuration.C1541Path,
-                Arguments = $"\"{floppyResolver.GetInsertedFloppyPointer().Value.ImagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
+                Arguments = $"\"{floppyResolver.GetInsertedFloppyPointer().ImagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true

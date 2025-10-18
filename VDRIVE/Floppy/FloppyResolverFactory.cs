@@ -4,7 +4,7 @@ namespace VDRIVE.Floppy
 {
     public class FloppyResolverFactory
     {
-        public static IFloppyResolver CreateFloppyResolver(string resolverType, IConfiguration configuration, ILog logger)
+        public static IFloppyResolver CreateFloppyResolver(string resolverType, IConfiguration configuration, IVDriveLoggger logger)
         {
             switch (resolverType)
             {

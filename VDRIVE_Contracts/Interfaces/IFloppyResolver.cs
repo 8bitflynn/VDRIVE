@@ -5,11 +5,11 @@ namespace VDRIVE_Contracts.Interfaces
     public interface IFloppyResolver
     {
         SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
-        FloppyInfo? InsertFloppy(FloppyInfo floppyInfo);
-        FloppyInfo? InsertFloppy(FloppyIdentifier floppyIdentifier);
-        FloppyInfo? GetInsertedFloppyInfo();
-        FloppyPointer? GetInsertedFloppyPointer();
-        FloppyPointer? SetInsertedFloppyPointer(FloppyPointer floppyPointer); // allow for fixup of pointer (usedful for generated images for loose PRG files)
-        FloppyInfo? EjectFloppy();
+        FloppyInfo InsertFloppy(FloppyInfo floppyInfo);
+        FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier);
+        FloppyInfo GetInsertedFloppyInfo();
+        FloppyPointer GetInsertedFloppyPointer();
+        FloppyPointer SetInsertedFloppyPointer(FloppyPointer floppyPointer); // allow for fixup of pointer (usedful for generated images for loose PRG files)
+        FloppyInfo EjectFloppy();
     }
 }
