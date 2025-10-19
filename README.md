@@ -38,9 +38,10 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    Edit `appsettings.json` to point to your disk images.
 
 5. **Run the VDRIVE Server**  
-   Launch the C# .NET Core server.
+   Launch the C# .NET Core server.   
+     `Should run on any OS with .NET Core runtime installed.` 
 
-6. **Test on Real Hardware**  
+7. **Test on Real Hardware**  
    From your Commodore 64:
 
    - **a.** `LOAD "vdrive.prg"` from regular disk  
