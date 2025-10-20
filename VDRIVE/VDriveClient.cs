@@ -33,7 +33,7 @@ namespace VDRIVE
                 IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
 
                 IVDriveLoader loader = new Vice2_4VDriveLoader(this.Configuration, this.Logger);
-                IVDriveSave saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
+                IVDriveSaver saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {

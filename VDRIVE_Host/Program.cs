@@ -1,7 +1,6 @@
 ﻿using VDRIVE;
 using VDRIVE.Configuration;
 using VDRIVE_Contracts.Interfaces;
-using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE_Host
 {
@@ -9,33 +8,46 @@ namespace VDRIVE_Host
     {
         /// <summary>
         /// 
-        /// CURRENT TESTING
+        /// CURRENT TESTING on C64
         /// SYS 49152 - enable
-        /// SYS 49158 - search floppies (will prompt for search term in C64)
-        /// SYS 49161 - insert floppy (will prompt for ID in C64)
+        /// SYS 49158 - search floppies (will prompt for search term in C64, enter the number to mount)
+        /// SYS 49161 - insert floppy (will prompt for ID in C64) - already done in previous step but user can change floppy here
         /// </summary>
         /// <param name="args"></param>
         static void Main(string[] args)
         {
             Program program = new Program();
 
-            VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder();
-            VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
-
             IVDriveLoggger logger = new VDRIVE.Util.ConsoleLogger();
 
-            // firmware is setup as client mode by default so run this in server mode
-            // should allow multiple C64 connections to same disk image but
-            // might need to put some locks in place for anything shared access         
-            VDriveServer server = new VDriveServer(configuration, logger);
-            server.Start();
+            VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
+            VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
 
-            // client mode is nice if you cannot change firewall settings as ESP8266 does not have a firewall!
-            //string ipAddress = "xxx.xxx.xxx.xxx";
-            //int port = 80;
+            if (!configBuilder.IsValidConfiguration(configuration))
+            {
+                logger.LogMessage("Invalid configuration, exiting");
+                return;
+            }
 
-            //Client client = new Client(ipAddress, port, configuration, logger);
-            //client.Start();
+            configBuilder.DumpConfiguration(configuration);
+
+            switch (configuration.ServerOrClientMode)
+            {
+                case "Server":                    
+                    // firmware is setup as client mode by default so run this in server mode
+                    // should allow multiple C64 connections to same disk image but
+                    // might need to put some locks in place for anything shared access         
+                    IVDriveServer server = new VDriveServer(configuration, logger);
+                    server.Start();
+                    break;
+
+                case "Client":
+                    logger.LogMessage("Starting in Client mode");
+                    // client mode is nice if you cannot change firewall settings as ESP8266 does not have a firewall!                 
+                    IVDriveClient client = new VDriveClient(configuration.ClientAddress, configuration.ClientPort.Value, configuration, logger);
+                    client.Start();
+                    break;                
+            }            
         }
     }
 }

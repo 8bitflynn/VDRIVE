@@ -11,7 +11,8 @@ namespace VDRIVE_Contracts.Structures
         public string TempPath { get; set; }
         public string TempFolder { get; set; }
         public ushort ChunkSize { get; set; }
-        public ushort MaxSearchResults { get; set; }        
+        public ushort MaxSearchResults { get; set; }     
+        public string ServerOrClientMode { get; set; }
         public string ServerListenAddress { get; set; }
         public int? ServerPort { get; set; }
         public string ClientAddress { get; set; }

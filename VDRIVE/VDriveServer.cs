@@ -46,16 +46,17 @@ namespace VDRIVE
 
                 Task.Run(() =>
                 {
+                    // instance dependencies per client for concurrency
                     IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
                     IVDriveLoader loader = new Vice2_4VDriveLoader(this.Configuration, this.Logger);
-                    IVDriveSave saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
+                    IVDriveSaver saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
 
                     this.HandleClient(client, floppyResolver, loader, saver);
                 });
             }
         }
 
-        private void HandleClient(TcpClient tcpClient, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSave saver)
+        private void HandleClient(TcpClient tcpClient, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSaver saver)
         {
             string ip = tcpClient.Client.RemoteEndPoint.ToString();
 

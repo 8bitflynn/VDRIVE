@@ -4,7 +4,7 @@ using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Drive.Vice
 {
-    public class Vice2_4VDriveSaver : IVDriveSave
+    public class Vice2_4VDriveSaver : IVDriveSaver
     {
         public Vice2_4VDriveSaver(IConfiguration configuration, IVDriveLoggger logger)
         {
@@ -14,7 +14,7 @@ namespace VDRIVE.Drive.Vice
         private IConfiguration Configuration;
         private IVDriveLoggger Logger;
 
-        SaveResponse IVDriveSave.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
+        SaveResponse IVDriveSaver.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
         {
             SaveResponse saveResponse = new SaveResponse();
             saveResponse.ResponseCode = 0xff;

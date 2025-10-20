@@ -32,8 +32,8 @@ namespace VDRIVE.Drive.Vice
                     // by just mounting the PRG and loading with "*"
                     // thought about wrapping in D64 but seems unnecessary overhead
                     // and its less steps for user
-                    FloppyPointer? floppyPointer = floppyResolver.GetInsertedFloppyPointer();
-                    if (floppyPointer.Value.ImagePath.ToLower().EndsWith(".prg"))
+                    FloppyPointer floppyPointer = floppyResolver.GetInsertedFloppyPointer();
+                    if (!floppyPointer.Equals(default(FloppyPointer)) && floppyPointer.ImagePath.ToLower().EndsWith(".prg"))
                     {
                         payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath);
                     }

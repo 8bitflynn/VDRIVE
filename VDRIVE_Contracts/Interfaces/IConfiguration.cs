@@ -10,6 +10,7 @@
         string TempFolder { get; set; } // folder name inside TempPath to use for temp files
         ushort ChunkSize { get; set; } // when sending data to C64, use this chunk size in bytes
         ushort MaxSearchResults { get; set; } // max results to C64
+        string ServerOrClientMode { get; set; } // "Server" or "Client" (ESP8266 firmware should be the opposite of this when connecting from c64)
         string ServerListenAddress { get; set; }
         int? ServerPort { get; set; }
         string ClientAddress { get; set; }

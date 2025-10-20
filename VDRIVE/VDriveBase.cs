@@ -11,7 +11,7 @@ namespace VDRIVE
         protected IConfiguration Configuration;        
         protected IVDriveLoggger Logger;
 
-        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSave saver)
+        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSaver saver)
         { 
             byte[] sendBuffer = new byte[1];
             byte[] data = new byte[1];
@@ -44,7 +44,7 @@ namespace VDRIVE
                             {
                                 byte[] dest_ptr_bytes = payload.Take(2).ToArray();
                                 ushort dest_ptr = (ushort)(dest_ptr_bytes[0] | (dest_ptr_bytes[1] << 8));
-                                this.Logger.LogMessage($"Destination Address: 0x{dest_ptr:X4}");
+                                this.Logger.LogMessage($"Start Address: 0x{dest_ptr:X4}");
 
                                 if (dest_ptr == 0xEA38) 
                                 {
@@ -52,6 +52,8 @@ namespace VDRIVE
                                 }
 
                                 payload = payload.Skip(2).ToArray(); // skip destination pointer     
+
+                                this.Logger.LogMessage($"End Address: 0x{dest_ptr+payload.Length:X4}");
                             }                            
 
                             this.SendData(tcpClient, networkStream, loadResponse, payload);

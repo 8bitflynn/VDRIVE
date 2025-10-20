@@ -2,7 +2,7 @@
 
 namespace VDRIVE_Contracts.Interfaces
 {
-    public interface IVDriveSave
+    public interface IVDriveSaver
     {
         SaveResponse Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload);
     }
