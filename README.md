@@ -39,22 +39,24 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 
 1. **Flash the ESP8266**  
    Burn `ESP8266_Firmware.ino` to your WiFi modem. For now, configuration must be hardcoded — but `WifiSetup.BAS` will soon allow setup directly from the C64.
-   - To build the firmware in Sketch, add this URL to the "Additional Board Manager URLs" in the "Preferences" dialog:  
+   - To build the firmware in <a href="https://www.arduino.cc/en/software/">Aurduino Sketch</a> add this URL to the "Additional Board Manager URLs" in the "Preferences" dialog:  
      `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
 
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
 
-2. **Assemble the C64 Client**  
-   Build `vdrive.asm` using **<a target="_blank" href="https://www.ajordison.co.uk/download.html">CBM Studio</a>**.
+2. **Build the C64 Client**  
+   Build `vdrive.asm` using <a href="https://www.ajordison.co.uk/download.html" target="_blank">CBM Studio</a>.
 
-3. **Configure the Server**  
+   You'll also need to build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">UP9600.asm</a> from Bo Zimmerman's repository.
+
+4. **Configure the Server**  
    Edit `appsettings.json` to point to your disk images.
 
-4. **Run the VDRIVE Server**  
+5. **Run the VDRIVE Server**  
    Launch the C# .NET Core server.  
    Should run on any OS with .NET Core runtime installed.
 
-5. **Test on Real Hardware**  
+6. **Test on Real Hardware**  
    From your Commodore 64:
 
    - `LOAD "vdrive.prg"` from regular disk  
