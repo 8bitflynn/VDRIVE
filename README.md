@@ -47,7 +47,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 2. **Build the C64 Client**  
    Build `vdrive.asm` using <a href="https://www.ajordison.co.uk/download.html" target="_blank">CBM Studio</a>.
 
-   Build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">UP9600.asm</a> from Bo Zimmerman's repository or copy the binary.
+   Build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">UP9600.asm</a> from Bo Zimmerman's repository.
 
 4. **Configure the Server** (or Client if running the firmware in Server mode)
    Edit `appsettings.json` to point to your disk images.
