@@ -8,17 +8,15 @@
 
 ## VDRIVE Hardware
 
+<img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250" align="right"/>
+
 - **ESP8266 WiFi modem**  
   Acts as the wireless transport layer. Flashed with custom firmware to handle all requests.
-- **ESP8266 WiFi**
-  NOTE: The ESP8266 firmware can be used on other projects that just need to bridge TCP and Serial. This makes the hardware "invisible" to the C64 and any other devices using it. Becuase of this design, I was able to partially get the vdrive code working on Vice 3.9 because it has a RS232 to IP connection.
-- These devices can be built with a ESP8266 and a Commodore 64 userport breakout board. I plan on providing some instructions on how to build them but there is likely information already out there. Also these can be bought from retro businesses and Ebay.
 
-<div style="float: right; margin-left: 20px; margin-bottom: 10px;">
-  <a href="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" target="_blank">
-    <img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250"/>
-  </a>
-</div>
+- **ESP8266 WiFi**  
+  The firmware can be reused in other projects needing TCP-to-Serial bridging. This design makes the hardware "invisible" to the C64 and other connected devices. Thanks to this abstraction, partial VDRIVE functionality works in VICE 3.9 via its RS232-to-IP bridge.
+
+- These devices can be built using an ESP8266 and a Commodore 64 userport breakout board. I plan to provide build instructions soon, though similar guides already exist. You can also find pre-built units from retro vendors or on eBay.
 
 ## VDRIVE Signal
 
