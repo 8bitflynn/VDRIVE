@@ -47,7 +47,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
 
 2. **Assemble the C64 Client**  
-   Compile `vdrive.asm` using **CBM Studio**.
+   Build `vdrive.asm` using **<a target="_blank" href="https://www.ajordison.co.uk/download.html">CBM Studio</a>**.
 
 3. **Configure the Server**  
    Edit `appsettings.json` to point to your disk images.
