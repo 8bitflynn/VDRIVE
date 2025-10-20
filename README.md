@@ -28,7 +28,7 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 
 1. **Flash the ESP8266**  
    Burn `ESP8266_Firmware.ino` to your WiFi modem. For now configuration has to be hard coded but included WifiSetup.BAS will be fixed soon so that configuration can be done on C64 directly.
-     - To build the firmware in Sketch, add this URL to the "Additional Board Manager URLs in "Preferences". http://arduino.esp8266.com/stable/package_esp8266com_index.json
+     - To build the firmware in Sketch, add this URL to the "Additional Board Manager URLs" in the "Preferences" dialog. http://arduino.esp8266.com/stable/package_esp8266com_index.json
    
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
 
