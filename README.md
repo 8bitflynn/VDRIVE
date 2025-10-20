@@ -45,9 +45,9 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
 
 2. **Build the C64 Client**  
-   Build `vdrive.asm` using <a href="https://www.ajordison.co.uk/download.html" target="_blank">CBM Studio</a>.
+   Build <a href="https://github.com/8bitflynn/VDRIVE/blob/master/vdrive.asm" target="_blank">`vdrive.asm`</a> using <a href="https://www.ajordison.co.uk/download.html" target="_blank">CBM Studio</a>.
 
-   Build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">UP9600.asm</a> from Bo Zimmerman's repository.
+   Build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">`UP9600.asm`</a> from Bo Zimmerman's repository.
 
 4. **Configure the Server** (or Client if running the firmware in Server mode)
    Edit `appsettings.json` to point to your disk images.
