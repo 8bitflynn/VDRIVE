@@ -47,12 +47,12 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 2. **Build the C64 Client**  
    Build `vdrive.asm` using <a href="https://www.ajordison.co.uk/download.html" target="_blank">CBM Studio</a>.
 
-   You'll also need to build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">UP9600.asm</a> from Bo Zimmerman's repository.
+   Build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">UP9600.asm</a> from Bo Zimmerman's repository or copy the binary.
 
-4. **Configure the Server**  
+4. **Configure the Server** (or Client if running the firmware in Server mode)
    Edit `appsettings.json` to point to your disk images.
 
-5. **Run the VDRIVE Server**  
+5. **Run the VDRIVE Serve/Clientr**  
    Launch the C# .NET Core server.  
    Should run on any OS with .NET Core runtime installed.
 
