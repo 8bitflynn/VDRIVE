@@ -20,7 +20,7 @@
 
 ## VDRIVE Signal
 
-Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https://8bitflynn.io</a> when the dust settles.
+Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https://8bitflynn.io/Projects</a> when the dust settles.
 
 ---
 
