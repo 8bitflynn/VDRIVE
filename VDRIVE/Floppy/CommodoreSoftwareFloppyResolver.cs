@@ -69,17 +69,15 @@ namespace VDRIVE.Floppy
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
             // clear previous search results
-            this.FloppyInfos.Clear();
-            this.FloppyPointers.Clear();
-          
-            string searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
-            string mediaType = searchFloppiesRequest.MediaType != null ? new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()) : string.Empty;
-            
+            this.ClearSearchResults();
+
+            this.ExtractSearchInfo(searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes);
+
+            this.Logger.LogMessage($"Searching Commodore.Software.com for description '{searchTerm}' and media type '{mediaTypeCSV}'");
+
             using (HttpClient client = new HttpClient())
             {
-                string searchUrl = this.BuildCommodoreSoftwareSearchUrl(searchTerm, mediaType);
-
-                this.Logger.LogMessage($"Searching Commodore Software for '{searchTerm}' with media type '{mediaType}'");
+                string searchUrl = this.BuildCommodoreSoftwareSearchUrl(searchTerm, mediaTypeCSV);
 
                 HttpResponseMessage httpResponseMessage = client.PostAsync(searchUrl, null).Result;
                 string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
@@ -89,8 +87,6 @@ namespace VDRIVE.Floppy
                     IEnumerable<FloppyInfo> floppyInfos = this.ScrapeResults(html);
 
                     SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff: (byte)0x04), (byte)floppyInfos.Count()); // more follows
-
-                    // foundFloppyInfos = floppyInfos.ToArray();
                     foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
                     searchFloppyResponse.ResultCount = (byte)foundFloppyInfos.Length;
 
@@ -118,6 +114,7 @@ namespace VDRIVE.Floppy
             ushort searchResultIndexId = 1;
             foreach (Match match in matches)
             {
+                
                 string imageName = match.Groups[2].Value.Trim();
                 if (IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
                 {
@@ -157,7 +154,7 @@ namespace VDRIVE.Floppy
             return floppyInfos;
         }
 
-        private string BuildCommodoreSoftwareSearchUrl(string searchTerm, string mediaType)
+        private string BuildCommodoreSoftwareSearchUrl(string searchTerm, string mediaType) // media type not currently used
         {
             string baseUrl = this.BuildFullCommodoreSoftwarePath("/search/search?");
             var queryParams = new Dictionary<string, string>

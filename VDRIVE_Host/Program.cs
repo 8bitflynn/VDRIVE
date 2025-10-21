@@ -42,7 +42,6 @@ namespace VDRIVE_Host
                     break;
 
                 case "Client":
-                    logger.LogMessage("Starting in Client mode");
                     // client mode is nice if you cannot change firewall settings as ESP8266 does not have a firewall!                 
                     IVDriveClient client = new VDriveClient(configuration.ClientAddress, configuration.ClientPort.Value, configuration, logger);
                     client.Start();

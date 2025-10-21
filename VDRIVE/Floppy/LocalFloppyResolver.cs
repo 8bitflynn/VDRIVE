@@ -1,4 +1,5 @@
-﻿using VDRIVE_Contracts.Interfaces;
+﻿using System.ComponentModel;
+using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Floppy
@@ -13,25 +14,15 @@ namespace VDRIVE.Floppy
 
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
-            this.Logger.LogMessage($"Searching floppy images for description '{new string(searchFloppiesRequest.SearchTerm)?.TrimEnd()}' and media type '{new string (searchFloppiesRequest.MediaType)?.TrimEnd()}'");
+            this.ExtractSearchInfo(searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes);
+                       
+            this.Logger.LogMessage($"Searching floppy images for description '{searchTerm}' and media type '{mediaTypeCSV}'");
 
             // clear last search results
             this.FloppyInfos.Clear();
-            this.FloppyPointers.Clear();
+            this.FloppyPointers.Clear();           
 
-            string[] mediaTypes = null;
-            string mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray());
-            if (!string.IsNullOrWhiteSpace(mediaTypeCSV))
-            {
-                mediaTypes = mediaTypeCSV.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            }
-            else
-            {
-                mediaTypes = this.Configuration.MediaExtensionAllowed.Split(',');
-            }
-            string searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
-            ushort searchResultIndexId = 1; // used to select floppy on C64 side 
-
+            ushort searchResultIndexId = 1; // sequence used to select floppy on C64 side 
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
             foreach (string searchPath in this.Configuration.SearchPaths)
             {
@@ -76,9 +67,9 @@ namespace VDRIVE.Floppy
 
             SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)foundFloppyInfos.Count()); 
 
-            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{new string(searchFloppiesRequest.SearchTerm)?.TrimEnd()}' and media type '{new string (searchFloppiesRequest.MediaType)?.TrimEnd()}'");
+            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{searchTerm}' and media type '{mediaTypeCSV}'");
             return searchFloppyResponse;
-        }        
+        }
 
         private List<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
         {
@@ -86,16 +77,13 @@ namespace VDRIVE.Floppy
 
             if (string.IsNullOrWhiteSpace(root)) return results;
             if (!Directory.Exists(root)) return results;
-
-            // Normalize extensions to a set of lower-case strings with leading dot
             HashSet<string> extSet = null;
             if (extensions != null)
             {
                 extSet = new HashSet<string>(
-                    extensions
-                        .Where(e => !string.IsNullOrWhiteSpace(e))
-                        .Select(e => e.StartsWith(".") ? e.ToLowerInvariant().Trim() : "." + e.ToLowerInvariant().Trim())
-                );
+                    extensions.Where(e => !string.IsNullOrWhiteSpace(e))
+                              .Select(e => e.StartsWith(".") ? e.ToLowerInvariant().Trim() : "." + e.ToLowerInvariant().Trim()),
+                    StringComparer.OrdinalIgnoreCase);
                 if (extSet.Count == 0) extSet = null;
             }
 
@@ -148,8 +136,8 @@ namespace VDRIVE.Floppy
                     // ignore directory-specific errors and continue
                 }
             }
-
-            return results;
-        }      
+           
+            return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
     }
 }

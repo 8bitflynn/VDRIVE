@@ -43,17 +43,15 @@ namespace VDRIVE.Floppy
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
             // clear previous search results
-            this.FloppyInfos.Clear();
-            this.FloppyPointers.Clear();
+            this.ClearSearchResults();
 
-            string mediaType = searchFloppiesRequest.MediaType != null ? new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()) : string.Empty;
-            string searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
+            this.ExtractSearchInfo(searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes);
 
             using (HttpClient client = new HttpClient())
             {
-                string searchUrl = this.BuildC64SearchUrl(searchTerm, mediaType);
+                string searchUrl = this.BuildC64SearchUrl(searchTerm, mediaTypeCSV);
 
-                this.Logger.LogMessage($"Searching C64.com for '{searchTerm}' with media type '{mediaType}'");
+                this.Logger.LogMessage($"Searching C64.com for '{searchTerm}' with media type '{mediaTypeCSV}'");
 
                 var fields = new Dictionary<string, string>
                 {

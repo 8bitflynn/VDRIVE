@@ -9,21 +9,21 @@ namespace VDRIVE
 {
     public class VDriveServer : VDriveBase, IVDriveServer
     {
-        public VDriveServer(IConfiguration configuation, IVDriveLoggger logger, string listenIp = null, int port = -1)
+        public VDriveServer(IConfiguration configuation, IVDriveLoggger logger)
         {
             this.Configuration = configuation;
             this.Logger = logger;
-            
-            if (!string.IsNullOrWhiteSpace(listenIp))
+
+            if (!string.IsNullOrWhiteSpace(this.Configuration.ServerListenAddress))
             {
-                this.ListenAddress = IPAddress.Parse(listenIp);
-            }
+                this.ListenAddress = IPAddress.Parse(this.Configuration.ServerListenAddress);
+            } 
             else
             {
-                this.ListenAddress = GetLocalIPv4Address() ?? IPAddress.Any;
+                this.ListenAddress = this.GetLocalIPv4Address();
             }
 
-            this.Port = port;
+            this.Port = this.Configuration.ServerPort.Value;
             if (this.Port == -1)
             {
                 this.Port = this.Configuration.ServerPort.Value;
@@ -59,7 +59,6 @@ namespace VDRIVE
         private void HandleClient(TcpClient tcpClient, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSaver saver)
         {
             string ip = tcpClient.Client.RemoteEndPoint.ToString();
-
             this.Logger.LogMessage($"Client connected: {ip}");
 
             using (tcpClient)
@@ -94,6 +93,6 @@ namespace VDRIVE
             var hostAddrs = Dns.GetHostEntry(Dns.GetHostName()).AddressList;
             var ipv4 = hostAddrs.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a));
             return ipv4;
-        }       
+        }
     }
 }

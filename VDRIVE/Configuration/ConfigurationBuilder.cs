@@ -143,6 +143,6 @@ namespace VDRIVE.Configuration
             this.Logger.LogMessage($"  SendTimeoutSeconds: {configuration.SendTimeoutSeconds}");
             this.Logger.LogMessage($"  ReceiveTimeoutSeconds: {configuration.ReceiveTimeoutSeconds}");
             this.Logger.LogMessage($"  ChunkSize: {configuration.ChunkSize}");
-        }
+        }        
     }
 }

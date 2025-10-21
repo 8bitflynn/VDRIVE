@@ -33,7 +33,10 @@ namespace VDRIVE.Floppy
 
         public FloppyInfo EjectFloppy()
         {
-            this.Logger.LogMessage(Logger is null ? "Ejecting floppy" : "Ejecting floppy: " + this.InsertedFloppyInfo.ImageName);
+            this.FloppyInfos.Clear();
+            this.FloppyPointers.Clear();
+
+            this.Logger.LogMessage("Ejecting floppy: " + new string (this.InsertedFloppyInfo.ImageName).TrimEnd());
             this.InsertedFloppyInfo = default(FloppyInfo);
             this.InsertedFloppyPointer = default(FloppyPointer);
             return this.InsertedFloppyInfo;
@@ -55,6 +58,34 @@ namespace VDRIVE.Floppy
         {
             this.InsertedFloppyPointer = floppyPointer;
             return this.InsertedFloppyPointer;
+        }
+
+        protected void ClearSearchResults()
+        {
+            this.FloppyInfos.Clear();
+            this.FloppyPointers.Clear();
+        }
+
+        protected void ExtractSearchInfo(SearchFloppiesRequest searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes)
+        {
+            searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
+            if (searchFloppiesRequest.MediaTypeLength == 0)
+            {
+                mediaTypeCSV = this.Configuration.MediaExtensionAllowed;
+            }
+            else
+            {
+                mediaTypeCSV = new string(searchFloppiesRequest.MediaType).TrimEnd();
+            }
+            
+            if (!string.IsNullOrWhiteSpace(mediaTypeCSV))
+            {
+                mediaTypes = mediaTypeCSV.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
+            else
+            {
+                mediaTypes = this.Configuration.MediaExtensionAllowed.Split(',');
+            }
         }
 
         protected virtual SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount)

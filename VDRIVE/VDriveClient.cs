@@ -29,9 +29,8 @@ namespace VDRIVE
                 tcpClient.NoDelay = true;
                 NetworkStream networkStream = tcpClient.GetStream();
 
-                //IFloppyResolver floppyResolver = new LocalFloppyResolver(this.Configuration, this.Logger);
-                IFloppyResolver floppyResolver = new CommodoreSoftwareFloppyResolver(this.Configuration, this.Logger);
-
+                // instance dependencies
+                IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
                 IVDriveLoader loader = new Vice2_4VDriveLoader(this.Configuration, this.Logger);
                 IVDriveSaver saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
 
