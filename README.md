@@ -55,9 +55,10 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
    Should run on any OS with .NET Core runtime installed.
 
 5. **Test on Real Hardware**  
-   From your Commodore 64:  
+   From your Commodore 64:
+   - `LOAD "UP9600.prg"` from regular disk  
    - `LOAD "vdrive.prg"` from regular disk  
-   - `SYS 49152` to enable VDRIVE (`SYS 49155` disables it)  
+   - `SYS 49152` to enable VDRIVE (`SYS 49155` disables it)
    - `SYS 49158` to search for disk images  
      → Results include sequence numbers (1, 2, 3…) and descriptions or filenames  
      → Enter the number to mount a disk from the search results  
