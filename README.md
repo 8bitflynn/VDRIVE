@@ -38,27 +38,24 @@ Docs will land at [8bitflynn.io](https://8bitflynn.io) when the dust settles.
 ### Install Steps
 
 1. **Flash the ESP8266**  
-   Burn `ESP8266_Firmware.ino` to your WiFi modem. For now, configuration must be hardcoded — but `WifiSetup.BAS` will soon allow setup directly from the C64.
-   - To build the firmware in <a href="https://www.arduino.cc/en/software/">Aurduino Sketch</a> add this URL to the "Additional Board Manager URLs" in the "Preferences" dialog:  
-     `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
-
+   Burn `ESP8266_Firmware.ino` to your WiFi modem. For now, configuration must be hardcoded — but `WifiSetup.BAS` will soon allow setup directly from the C64.  
+   - To build the firmware in [Arduino Sketch](https://www.arduino.cc/en/software/), add this URL to the "Additional Board Manager URLs" in the "Preferences" dialog:  
+     `http://arduino.esp8266.com/stable/package_esp8266com_index.json`  
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
 
 2. **Build the C64 Client**  
-   Build <a href="https://github.com/8bitflynn/VDRIVE/blob/master/vdrive.asm" target="_blank">`vdrive.asm`</a> using <a href="https://www.ajordison.co.uk/download.html" target="_blank">CBM Studio</a>.
+   Build [`vdrive.asm`](https://github.com/8bitflynn/VDRIVE/blob/master/vdrive.asm) using [CBM Studio](https://www.ajordison.co.uk/download.html).  
+   Build [`UP9600.asm`](https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm) from Bo Zimmerman's repository.
 
-   Build <a href="https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm" target="_blank">`UP9600.asm`</a> from Bo Zimmerman's repository.
+3. **Configure the Server**  
+   Edit `appsettings.json` with the paths VDRIVE should search. (Optionally use a remote IFloppyResolver).
 
-4. **Configure the Server** (or Client if running the firmware in Server mode)
-   Edit `appsettings.json` to point to your disk images.
-
-5. **Run the VDRIVE Serve/Clientr**  
+4. **Run the VDRIVE Server/Client**  
    Launch the C# .NET Core server.  
    Should run on any OS with .NET Core runtime installed.
 
-6. **Test on Real Hardware**  
-   From your Commodore 64:
-
+5. **Test on Real Hardware**  
+   From your Commodore 64:  
    - `LOAD "vdrive.prg"` from regular disk  
    - `SYS 49152` to enable VDRIVE (`SYS 49155` disables it)  
    - `SYS 49158` to search for disk images  
