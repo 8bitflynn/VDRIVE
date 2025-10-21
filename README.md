@@ -20,7 +20,7 @@
 
 ## VDRIVE Signal
 
-Docs will land at [8bitflynn.io]([https://8bitflynn.io](https://8bitflynn.io/Projects)) when the dust settles.
+Docs will land at [8bitflynn.io](https://8bitflynn.io](https://8bitflynn.io/Projects)) when the dust settles.
 
 ---
 
