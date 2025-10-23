@@ -5,9 +5,9 @@
 
 - VDRIVE is a free, open-source tool built for those who want modern flexibility in retro workflows. It reflects months of design, testing, and iteration — not a plug-and-play gimmick. If you prefer original hardware, that’s valid. If you want remote disk access, mount/unmount control, and HTTP support, VDRIVE is here for you.
   
-- VDRIVE was built with developers in mind and disk images can be shared right from your C64 in real time. Programmers, graphics artists, and sound designers can use the same VDRIVE server and access the latest changes right from your C64 from anywhere it can connect in real time! Local modern tools can be used to build binaries and assets and then saved to the local drive. VDRIVE searches any specified paths so saved resources can be loaded directly from the C64 without any copying making it easier to test those many iterations! The same is true from the C64 side, and any data saved to the disk image over VDRIVE can then be accessed on your modern machine making those tough to find bugs a lot easier to track down with tools like <a href="https://sourceforge.net/projects/c64-debugger/" target="_blank">C64Debugger</a>
+- VDRIVE was built with developers in mind and disk images can be shared right from your C64 in real time. Programmers, graphics artists, and sound designers can use the same VDRIVE server and access the latest changes right from your C64 from anywhere it can connect in real time! Local modern tools can be used to build binaries and assets and then saved to the local drive. VDRIVE searches any specified paths so saved resources can be loaded directly from the C64 without any copying making it easier to test those many iterations! The same is true from the C64 side, and any data saved to the disk image over VDRIVE can then be accessed on your modern machine making those tough to find bugs a lot easier to track down with tools like <a href="https://sourceforge.net/projects/c64-debugger/" target="_blank">C64Debugger</a>.
 
-- VDRIVE includes `IFloppyResolver` <a href="https://github.com/8bitflynn/VDRIVE/tree/master/VDRIVE/Floppy" target="_blank">implementations</a> for searching and mounting both local disks and several remote repositories. For remote sources, I’ve been actively requesting permission from repository owners. If I don’t hear back, I treat access as equivalent to browsing their site from a modern machine — respectful, read-only, and non-invasive. That said, I fully respect the wishes of content owners: if any repository owner prefers their site not be included, I’ll remove it immediately.
+- VDRIVE includes `IFloppyResolver` <a href="https://github.com/8bitflynn/VDRIVE/tree/master/VDRIVE/Floppy" target="_blank">implementation's</a> for searching and mounting both local disks and several remote repositories. For remote sources, I’ve been actively requesting permission from repository owners. If I don’t hear back, I treat access as equivalent to browsing their site from a modern machine — respectful, read-only, and non-invasive. That said, I fully respect the wishes of content owners: if any repository owner prefers their site not be included, I’ll remove it immediately.
 
 ## VDRIVE Hardware
 
@@ -35,6 +35,8 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 - VICE 3.9’s version of `c1541.exe` is incompatible — but will likely have a implementation soon.
 - PRG (no disk) files can be loaded by selecting them in search and issuing `LOAD "*",8,1` to inject directly into memory.
 - Multiple C64s can connect to a single VDRIVE server and share disk images — enabling lots of possibilities locally or remotely.
+- VDRIVE is optimized for PRG workflows and single-file compatibility. Multi-disk games, fastloaders, and custom loaders may not function as expected. Celebrate what works, and understand the limits.
+- Future versions may expand compatibility by staging full disk images locally, unlocking broader support without compromising simplicity.
 
 ---
 
