@@ -37,7 +37,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 ### Install Steps
 
 1. **Flash the ESP8266**  
-   Burn `ESP8266_Firmware.ino` to your WiFi modem.
+   Burn `ESP8266_Firmware.ino` to your WiFi modem. 
    - To build the firmware in [Arduino Sketch](https://www.arduino.cc/en/software/), add this URL to the "Additional Board Manager URLs" in the "Preferences" dialog:  
      `http://arduino.esp8266.com/stable/package_esp8266com_index.json`  
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
@@ -54,7 +54,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
      - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed.
 
 5. **Test on Real Hardware**  
-   From your Commodore 64 (plug in the VDRIVE Relay):  
+   From your Commodore 64:  
    - `LOAD "UP9600.prg"` from regular disk
    - `LOAD "setupwifi.prg"` from regular disk, RUN PRG and enter WiFi information    
      → Wifi information will be stored in flash memory on ESP8266 so setup only needs to be done once   
