@@ -54,10 +54,10 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
      - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed.
 
 5. **Test on Real Hardware**  
-   From your Commodore 64:  
+   From your Commodore 64 (plug in the VDRIVE Relay):  
    - `LOAD "UP9600.prg"` from regular disk
-   - `LOAD "setupwifi.BAS"` and enter WiFi information
-      → Note: Wifi information will be stored in flash memory on ESP8266  
+   - `LOAD "setupwifi.prg"` from regular disk, RUN PRG and enter WiFi information    
+     → Wifi information will be stored in flash memory on ESP8266 so setup only needs to be done once   
    - `LOAD "vdrive.prg"` from regular disk  
    - `SYS 49152` to enable VDRIVE (`SYS 49155` disables it)
    - `SYS 49158` to search for disk images  
