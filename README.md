@@ -16,7 +16,7 @@
 - **ESP8266 WiFi**  
   The firmware can be reused in other projects needing TCP-to-Serial bridging. This design makes the hardware "invisible" to the C64 and other connected devices. Thanks to this abstraction, partial VDRIVE functionality works in VICE 3.9 via its RS232-to-IP bridge.
 
-- These devices can be built using an ESP8266 and a Commodore 64 userport breakout board. I plan to provide build instructions soon, though similar guides already exist. You can also find pre-built units from retro vendors or on eBay.
+- These devices can be built using an ESP8266 and a Commodore 64 userport breakout board. I plan to provide build instructions soon, though similar guides already exist. You can also find pre-built units from retro vendors or on eBay. 
 
 ## VDRIVE Signal
 
@@ -30,7 +30,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 - VDRIVE currently uses `c1541.exe` from **VICE 2.4** for all `LOAD`, `SAVE`, and directory requests.
 - VICE 3.9’s version of `c1541.exe` is incompatible — but will likely have a implementation soon.
 - PRG (no disk) files can be loaded by selecting them in search and issuing `LOAD "*",8,1` to inject directly into memory.
-- Latest changes allow multiple C64s to connect to a single VDRIVE server and share disk images — enabling paired programming without leaving the machine.
+- Multiple C64s to connect to a single VDRIVE server and share disk images — enabling paired programming without leaving the machine.
 
 ---
 
