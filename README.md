@@ -19,8 +19,8 @@
 - **ESP8266 WiFi**  
   The firmware can be reused in other projects needing TCP-to-Serial bridging. This design makes the hardware "invisible" to the C64 and other connected devices. Thanks to this abstraction, partial VDRIVE functionality works in VICE 3.9 via its RS232-to-IP bridge.
 
-- **ESP8266 / C64 BREAKOUT BOARD / DIY**
-- These devices can be built using an ESP8266 and a Commodore 64 userport breakout board. I plan to providing build instructions when I get a chance, though similar guides already exist. There are also pre-built units from Retro Vendors or on eBay. 
+- **ESP8266 / C64 BREAKOUT BOARD / DIY**  
+  These devices can be built using an ESP8266 chip and a Commodore 64 userport breakout board. I plan to providing build instructions when I get a chance, though similar guides already exist. There are also pre-built units from Retro Vendors or on eBay. 
 
 ## VDRIVE Signal
 
@@ -58,7 +58,8 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 4. **Run the VDRIVE Server/Client**  
    Launch the C# .NET Core server. (or client if firmware is in server mode)
      - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed.
-
+     - Note: The VDRIVE dependency on Vice 2.4 "c1541.exe" means it currently must use one of the operating sytems that Vice 2.4 supports. My understanding that Vice can run on quite a few operating systems but zero testing has done on that.     
+       
 5. **Test on Real Hardware**  
    From your Commodore 64:  
    - `LOAD "UP9600.prg"` from regular disk
