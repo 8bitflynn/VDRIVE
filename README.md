@@ -28,8 +28,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 
 - This release is intended for developers and technically inclined users. Setup requires compiling and assembling. Pre-built binaries will be provided once the project nears completion.
 - VDRIVE currently uses `c1541.exe` from **VICE 2.4** for all `LOAD`, `SAVE`, and directory requests.
-- VICE 3.9’s version of `c1541.exe` appears incompatible — needs investigation.
-- Eventually, VDRIVE will implement its own `ILoad` / `ISave` interface to eliminate reliance on VICE — but using `c1541.exe` saved a lot of time and allowed faster prototyping.
+- VICE 3.9’s version of `c1541.exe` is incompatible — but will likely have a implementation soon.
 - PRG (no disk) files can be loaded by selecting them in search and issuing `LOAD "*",8,1` to inject directly into memory.
 - Latest changes allow multiple C64s to connect to a single VDRIVE server and share disk images — enabling paired programming without leaving the machine.
 
@@ -38,7 +37,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 ### Install Steps
 
 1. **Flash the ESP8266**  
-   Burn `ESP8266_Firmware.ino` to your WiFi modem. For now, configuration must be hardcoded — but `WifiSetup.BAS` will soon allow setup directly from the C64.  
+   Burn `ESP8266_Firmware.ino` to your WiFi modem.
    - To build the firmware in [Arduino Sketch](https://www.arduino.cc/en/software/), add this URL to the "Additional Board Manager URLs" in the "Preferences" dialog:  
      `http://arduino.esp8266.com/stable/package_esp8266com_index.json`  
    ⚠️ This will overwrite the modem firmware — but it can be re-flashed later as needed.
@@ -51,12 +50,14 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
    Edit `appsettings.json` with the paths VDRIVE should search. (Optionally use a remote IFloppyResolver).
 
 4. **Run the VDRIVE Server/Client**  
-   Launch the C# .NET Core server.  
-   Should run on any OS with .NET Core runtime installed.
+   Launch the C# .NET Core server. (or client if firmware is in server mode)
+     - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed.
 
 5. **Test on Real Hardware**  
-   From your Commodore 64:
-   - `LOAD "UP9600.prg"` from regular disk  
+   From your Commodore 64:  
+   - `LOAD "UP9600.prg"` from regular disk
+   - `LOAD "setupwifi.BAS"` and enter WiFi information
+      → Note: Wifi information will be stored in flash memory on ESP8266  
    - `LOAD "vdrive.prg"` from regular disk  
    - `SYS 49152` to enable VDRIVE (`SYS 49155` disables it)
    - `SYS 49158` to search for disk images  
@@ -71,6 +72,5 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 ### Known Limitations
 
 - VDRIVE runs at `$C000`, so any `LOAD` that hits that region will crash it. Eventually, full image transfers (e.g., D64) to SDIEC or other devices will be supported.
-- `setupwifi` is out of date — for now, Wi-Fi setup requires manual configuration in firmware.
 
 > VDRIVE is functional, but still evolving. Expect rough edges — and feel free to contribute or fork.
