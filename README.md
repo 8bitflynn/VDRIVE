@@ -57,7 +57,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 
 4. **Run the VDRIVE Server/Client**  
    Launch the C# .NET Core server. (or client if firmware is in server mode)
-     - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed as long as the IVDrive implementation can run on that operating system. 
+     - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed as long as the IVDrive implementation can run on that operating system. (currently Vice 2.4 and DirMaster)
      - VDRIVE implementation of <a href="https://style64.org/dirmaster" target="_blank">DirMaster</a> if functional! VDRIVE can now LOAD/SAVE/DIR using DirMaster through <a href="https://style64.org/cbmdisk" target="_blank">CBMdisk</a> which is the library portion if DirMaster. Code will be checked in soon after I have tested it some more.
      - VDRIVE implementation of <a href="https://vice-emu.sourceforge.io/index.html#download" target="_blank">Vice 3.9</a> is on the short list.
      
