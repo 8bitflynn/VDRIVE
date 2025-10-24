@@ -59,9 +59,9 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
    Launch the C# .NET Core server. (or client if firmware is in server mode)
      - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed.
      - The VDRIVE dependency on Vice 2.4 "c1541.exe" to LOAD/SAVE/DIR means VDRIVE must use one of the operating sytems that Vice 2.4 supports.
-     - Support for <a href="https://vice-emu.sourceforge.io/index.html#download" target="_blank">Vice 3.9</a> is on the short list.
-     - VDRIVE implementation of <a href="https://style64.org/dirmaster" target="_blank">DirMaster</a>! VDRIVE integration with DirMaster through <a href="https://style64.org/cbmdisk" target="_blank">CBMdisk</a> which is the library portion if DirMaster.
-       
+     - VDRIVE implementation of <a href="https://style64.org/dirmaster" target="_blank">DirMaster</a> if functional! VDRIVE can now LOAD/SAVE/DIR using DirMaster through <a href="https://style64.org/cbmdisk" target="_blank">CBMdisk</a> which is the library portion if DirMaster.
+     - VDRIVE implementation of <a href="https://vice-emu.sourceforge.io/index.html#download" target="_blank">Vice 3.9</a> is on the short list.
+     
 5. **Test on Real Hardware**  
    From your Commodore 64:  
    - `LOAD "UP9600.prg"` from regular disk
