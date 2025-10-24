@@ -31,7 +31,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 ### Notes
 
 - This release is intended for developers and technically inclined users. Setup requires compiling and assembling. Pre-built binaries will be provided once the project nears completion.
-- VDRIVE currently uses `c1541.exe` from **VICE 2.4** for all `LOAD`, `SAVE`, and directory requests.
+- VDRIVE currently uses `c1541.exe` from **VICE 2.4** for all `LOAD`, `SAVE`, and directory requests with development in the works for <a href="https://style64.org/dirmaster" target="_blank">DirMaster</a>!
 - VICE 3.9’s version of `c1541.exe` is incompatible — but will likely have a implementation soon.
 - PRG (no disk) files can be loaded by selecting them in search and issuing `LOAD "*",8,1` to inject directly into memory.
 - Multiple C64s can connect to a single VDRIVE server and share disk images — enabling lots of possibilities locally or remotely.
