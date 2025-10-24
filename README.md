@@ -58,7 +58,9 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 4. **Run the VDRIVE Server/Client**  
    Launch the C# .NET Core server. (or client if firmware is in server mode)
      - VDRIVE should run on <a href="https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md" target="_blank">any OS with .NET Core runtime</a> installed.
-     - Note: The VDRIVE dependency on Vice 2.4 "c1541.exe" means it currently must use one of the operating sytems that Vice 2.4 supports. My understanding that Vice can run on quite a few operating systems but zero testing has done on that.     
+     - The VDRIVE dependency on Vice 2.4 "c1541.exe" to LOAD/SAVE/DIR means VDRIVE must use one of the operating sytems that Vice 2.4 supports.
+     - <b>Support for <a href="https://vice-emu.sourceforge.io/index.html#download" target="_blank">lVice 3.9</a>) is on the short list</b>.
+     - Exploring support for <a href="https://style64.org/cbmdisk" target="_blank">CBMdisk</a> which is the library portion of <a href="https://style64.org/dirmaster" target="_blank">DirMaster</a> in Python. VDRIVE integration with DirMaster would be another option to Vice for the LOAD/SAVE/DIR functionality and should just require some Python scripts run in a process similar to the VIce implementation.
        
 5. **Test on Real Hardware**  
    From your Commodore 64:  
