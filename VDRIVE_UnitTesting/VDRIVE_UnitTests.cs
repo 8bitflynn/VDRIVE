@@ -1,4 +1,5 @@
 using VDRIVE.Configuration;
+using VDRIVE.Drive;
 using VDRIVE.Drive.Impl;
 using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
@@ -17,23 +18,28 @@ namespace VDRIVE_UnitTesting
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
 
+            if (!configBuilder.IsValidConfiguration(configuration))
+            {
+                return;
+            }
+
             IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver("Local", configuration, logger);
 
             SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest();
             searchFloppyRequest.SearchTerm = "data6".ToArray();
             searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
 
-            SearchFloppyResponse searchFloppyResponse =  floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[]  floppyInfo);
+            SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo);
 
             floppyResolver.InsertFloppy(floppyInfo[0]);
 
             LoadRequest loadRequest = new LoadRequest();
             loadRequest.Operation = 1;
-            loadRequest.FileName = "$".ToArray();     
-            loadRequest.FileNameLength = (byte)loadRequest.FileName.Length; 
+            loadRequest.FileName = "t6".ToArray();
+            loadRequest.FileNameLength = (byte)loadRequest.FileName.Length;
 
-            IStorageAdapter storageAdapter = new DirMasterStorageAdapter(configuration, logger);
-            storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload);           
+            IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter("Vice", configuration, logger);
+            LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload);
         }
     }
 }

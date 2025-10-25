@@ -98,23 +98,15 @@ namespace VDRIVE.Configuration
                     }
                     break;
 
-                case "Vice24":
-                    if (configuration.StorageAdapterSettings.Vice24 == null ||
-                        string.IsNullOrWhiteSpace(configuration.StorageAdapterSettings.Vice24.ExecutablePath))
+                case "Vice":
+                    if (configuration.StorageAdapterSettings.Vice == null ||
+                        string.IsNullOrWhiteSpace(configuration.StorageAdapterSettings.Vice.ExecutablePath) ||
+                        string.IsNullOrWhiteSpace(configuration.StorageAdapterSettings.Vice.Version))
                     {
-                        this.Logger.LogMessage("Vice24 settings are incomplete");
+                        this.Logger.LogMessage("Vice settings are incomplete");
                         return false;
                     }
-                    break;
-
-                case "Vice39":
-                    if (configuration.StorageAdapterSettings.Vice39 == null ||
-                        string.IsNullOrWhiteSpace(configuration.StorageAdapterSettings.Vice39.ExecutablePath))
-                    {
-                        this.Logger.LogMessage("Vice39 settings are incomplete");
-                        return false;
-                    }
-                    break;
+                    break;              
 
                 default:
                     this.Logger.LogMessage($"Unknown StorageAdapter type: {configuration.StorageAdapter}");
@@ -199,14 +191,11 @@ namespace VDRIVE.Configuration
                     this.Logger.LogMessage($"    DirMaster ScriptPath: {configuration.StorageAdapterSettings.DirMaster.ScriptPath}");
                     this.Logger.LogMessage($"    DirMaster CBMDiskPath: {configuration.StorageAdapterSettings.DirMaster.CBMDiskPath}");
                 }
-                if (configuration.StorageAdapterSettings.Vice24 != null && configuration.StorageAdapter == "Vice24")
+                if (configuration.StorageAdapterSettings.Vice != null && configuration.StorageAdapter == "Vice")
                 {
-                    this.Logger.LogMessage($"    Vice24 ExecutablePath: {configuration.StorageAdapterSettings.Vice24.ExecutablePath}");
-                }
-                if (configuration.StorageAdapterSettings.Vice39 != null && configuration.StorageAdapter == "Vice39")
-                {
-                    this.Logger.LogMessage($"    Vice39 ExecutablePath: {configuration.StorageAdapterSettings.Vice39.ExecutablePath}");
-                }
+                    this.Logger.LogMessage($"    Vice ExecutablePath: {configuration.StorageAdapterSettings.Vice.ExecutablePath}");
+                    this.Logger.LogMessage($"    Vice Version: {configuration.StorageAdapterSettings.Vice.Version}");
+                }               
             }
 
             // Floppy resolver settings

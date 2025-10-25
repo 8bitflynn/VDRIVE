@@ -4,8 +4,8 @@ namespace VDRIVE_Contracts.Interfaces
 {
     public interface IConfiguration
     {
-        public string StorageAdapter { get; set; } // DirMaster, Vice24, Vice39
-        public string FloppyResolver { get; set; } // Local, CommodoreSoftware, etc.
+        public string StorageAdapter { get; set; } 
+        public string FloppyResolver { get; set; } 
         public ushort MaxSearchResults { get; set; }
         public string TempPath { get; set; }
         public string TempFolder { get; set; }

@@ -1,14 +1,15 @@
 ﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
+using VDRIVE.Drive;
 using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Drive.Impl
+namespace VDRIVE.Storage.Impl
 {
-    public class Vice24VStorageAdapter : StorageAdapterBase, IStorageAdapter
+    internal class ViceStorageAdapter : StorageAdapterBase, IStorageAdapter
     {
-        public Vice24VStorageAdapter(IConfiguration configuration, ILogger logger)
+        public ViceStorageAdapter(IConfiguration configuration, ILogger logger)
         {
             Configuration = configuration;
             Logger = logger;
@@ -37,7 +38,7 @@ namespace VDRIVE.Drive.Impl
 
             var psi = new ProcessStartInfo
             {
-                FileName = Configuration.StorageAdapterSettings.Vice24.ExecutablePath,
+                FileName = Configuration.StorageAdapterSettings.Vice.ExecutablePath,
                 Arguments = $"\"{floppyResolver.GetInsertedFloppyPointer().ImagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -66,7 +67,6 @@ namespace VDRIVE.Drive.Impl
 
             return saveResponse;
         }
-
 
         LoadResponse IStorageAdapter.Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload)
         {
@@ -146,20 +146,22 @@ namespace VDRIVE.Drive.Impl
             // execute c1541 to extract the file
             var psi = new ProcessStartInfo
             {
-                FileName = Configuration.StorageAdapterSettings.Vice24.ExecutablePath,
+                FileName = Configuration.StorageAdapterSettings.Vice.ExecutablePath,
                 Arguments = $"\"{new string(floppyPointer.ImagePath)}\" -read \"{fileSpec}\" \"{outPrgPath}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 CreateNoWindow = true
             };
 
             using (var proc = Process.Start(psi))
             {
                 string c1541Out = proc.StandardOutput.ReadToEnd();
+                string error = proc.StandardError.ReadToEnd();
                 proc.WaitForExit();
                 Logger.LogMessage(c1541Out.Trim());
 
-                if (!c1541Out.StartsWith("Reading file"))
+                if (!c1541Out.ToLower().Contains("reading file"))
                 {
                     // TODO: map real codes from c1541.exe as they appear to be different?
                     responseCode = 0x04; // file not found
@@ -218,25 +220,34 @@ namespace VDRIVE.Drive.Impl
             // call c1541 to get text directory listing
             var psi = new ProcessStartInfo
             {
-                FileName = Configuration.StorageAdapterSettings.Vice24.ExecutablePath,
+                FileName = Configuration.StorageAdapterSettings.Vice.ExecutablePath,
                 Arguments = $"\"{new string(floppyPointer.ImagePath)}\" -dir",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 CreateNoWindow = true
             };
 
             string[] rawLines;
-            using (var proc = Process.Start(psi))
+            using (var process = Process.Start(psi))
             {
-                string allOutput = proc.StandardOutput.ReadToEnd();
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
 
-                // TODO: check for errors
-                // Unknown disk image
-                // etc...
-
-                proc.WaitForExit();
-                rawLines = allOutput
+                rawLines = output
                     .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            }
+
+            if (this.Configuration.StorageAdapterSettings.Vice.Version.StartsWith("3.")) 
+            {
+                // Vice39 c1541.exe just contains some extra info
+                var filteredLines = rawLines
+                    .Skip(3)                     // Skip first 3 lines
+                    .Take(rawLines.Length - 4)     // Take all but the last line (1 + 3 skipped)
+                    .Select(line => line.Trim()) // Optional: clean up whitespace
+                    .ToList();
+                return filteredLines.ToArray();
             }
 
             return rawLines;

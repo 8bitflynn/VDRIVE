@@ -1,21 +1,23 @@
 ﻿using VDRIVE.Drive.Impl;
+using VDRIVE.Floppy.Impl;
+using VDRIVE.Storage.Impl;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE.Drive
 {
     public class StorageAdapterFactory
     {
-        public static IStorageAdapter CreateStorageAdapter(string vdriveStorageType, IConfiguration configuration, ILogger logger)
+        public static IStorageAdapter CreateStorageAdapter(string storageAdapterType, IConfiguration configuration, ILogger logger)
         {
-            switch (vdriveStorageType)
+            switch (storageAdapterType)
             {
-                case "Vice24":
-                    return new Vice24VStorageAdapter(configuration, logger);                 
+                case "Vice":
+                    return new ViceStorageAdapter(configuration, logger);
                 case "DirMaster":
                     return new DirMasterStorageAdapter(configuration, logger);
                 default:
-                    throw new ArgumentException($"Unknown vdrive type: {vdriveStorageType}");
+                    throw new ArgumentException($"Unknown vdrive type: {storageAdapterType}");
             }
         }
-    }
+    }   
 }
