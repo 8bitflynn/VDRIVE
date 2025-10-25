@@ -1,6 +1,5 @@
 ﻿using System.IO.Compression;
 using System.Net;
-using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Floppy
 {
@@ -30,8 +29,10 @@ namespace VDRIVE.Floppy
             }
         }
 
-        protected void Decompress(byte[] zipBytes)
+        protected IEnumerable<string> DecompressArchive(byte[] zipBytes)
         {
+            List<string> extractedFullFilePaths = new List<string>();
+
             using (var zipStream = new MemoryStream(zipBytes))
             using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
             {
@@ -61,25 +62,11 @@ namespace VDRIVE.Floppy
                     // Extract file
                     entry.ExtractToFile(fullFilePath, overwrite: true);
 
-                    if (!this.InsertedFloppyPointer.Equals(default(FloppyInfo)))
-                    {
-                        if (!this.Configuration.MediaExtensionAllowed.Any(ir => fullFilePath.ToLower().EndsWith(ir)))
-                        {
-                            continue;
-                        }
-
-                        FloppyInfo tempFloppyInfo = this.InsertedFloppyInfo;
-                        tempFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
-                        this.InsertedFloppyInfo = tempFloppyInfo; // update to extracted file name
-
-                        FloppyPointer tempFloppyPointer = this.InsertedFloppyPointer;
-                        tempFloppyPointer.ImagePath = fullFilePath;
-                        this.InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path                        
-                    }
+                    extractedFullFilePaths.Add(fullFilePath);
                 }
             }
 
-            return;
+            return extractedFullFilePaths;
         }
     }
 }

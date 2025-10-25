@@ -1,10 +1,11 @@
-﻿using VDRIVE_Contracts.Interfaces;
+﻿using VDRIVE.Floppy.Impl;
+using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE.Floppy
 {
     public class FloppyResolverFactory
     {
-        public static IFloppyResolver CreateFloppyResolver(string resolverType, IConfiguration configuration, IVDriveLoggger logger)
+        public static IFloppyResolver CreateFloppyResolver(string resolverType, IConfiguration configuration, ILogger logger)
         {
             switch (resolverType)
             {

@@ -1,32 +1,48 @@
-﻿using System.ComponentModel;
-using VDRIVE_Contracts.Interfaces;
+﻿using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Floppy
+namespace VDRIVE.Floppy.Impl
 {
     public class LocalFloppyResolver : FloppyResolverBase, IFloppyResolver
     {
-        public LocalFloppyResolver(IConfiguration configuration, IVDriveLoggger logger)
+        public LocalFloppyResolver(IConfiguration configuration, ILogger logger)
         {
-            this.Configuration = configuration;
-            this.Logger = logger;
+            Configuration = configuration;
+            Logger = logger;
         }
 
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
-            this.ExtractSearchInfo(searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes);
-                       
-            this.Logger.LogMessage($"Searching floppy images for description '{searchTerm}' and media type '{mediaTypeCSV}'");
+            string searchTerm;
+            if (searchFloppiesRequest.SearchTermLength != 0)
+            {
+                searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
+            }
+            else
+            {
+                searchTerm = string.Empty;
+            }
+
+            string mediaTypeCSV;
+            if (searchFloppiesRequest.MediaTypeLength != 0)
+            {
+                mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()).TrimEnd();
+            }
+            else
+            {
+                mediaTypeCSV = string.Join(',', Configuration.FloppyResolverSettings.Local.MediaExtensionsAllowed);
+            }
+
+            Logger.LogMessage($"Searching floppy images for description '{searchTerm}' and media type '{mediaTypeCSV}'");
 
             // clear last search results
-            this.FloppyInfos.Clear();
-            this.FloppyPointers.Clear();           
+            ClearSearchResults();
 
             ushort searchResultIndexId = 1; // sequence used to select floppy on C64 side 
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
-            foreach (string searchPath in this.Configuration.SearchPaths)
+            foreach (string searchPath in Configuration.FloppyResolverSettings.Local.SearchPaths)
             {
-                IEnumerable<string> searchResults = this.TraverseFolder(searchPath, searchTerm, mediaTypes, true);
+                IEnumerable<string> searchResults = TraverseFolder(searchPath, searchTerm, Configuration.FloppyResolverSettings.Local.MediaExtensionsAllowed, Configuration.FloppyResolverSettings.Local.EnableRecursiveSearch);
                 if (searchResults != null)
                 {
                     foreach (string searchResult in searchResults)
@@ -40,34 +56,35 @@ namespace VDRIVE.Floppy
                         imageName = imageName.Length > 64 ? imageName.Substring(0, 64) : imageName; // truncate if needed
 
                         // TODO: map to PETSCII
-                        // imageName is shown to user but only the ID is important 
+                        // imageName shown to user but only sequential id used to select
                         // so show the best case description
                         imageName = imageName.Replace('_', '-'); // shows a back arrow on C64
 
                         floppyInfo.ImageNameLength = (byte)imageName.Length;
                         floppyInfo.ImageName = new char[64];
-                        imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);                   
-                     
+                        imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
+
                         // info stored in resolver with longs paths
                         FloppyPointer floppyPointer = new FloppyPointer();
                         floppyPointer.Id = searchResultIndexId;
                         floppyPointer.ImagePath = searchResult;
 
-                        floppyInfos.Add(floppyInfo);   
-                        
+                        floppyInfos.Add(floppyInfo);
+
                         // results stored in resolver for lookup if "inserted"
-                        this.FloppyInfos.Add(floppyInfo);
-                        this.FloppyPointers.Add(floppyPointer);
+                        FloppyInfos.Add(floppyInfo);
+                        FloppyPointers.Add(floppyPointer);
 
                         searchResultIndexId++;
-                    }                   
+                    }
                 }
             }
-            foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
+            // out param to return floppy info array
+            foundFloppyInfos = floppyInfos.Take(Configuration.MaxSearchResults).ToArray();
 
-            SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)foundFloppyInfos.Count()); 
+            SearchFloppyResponse searchFloppyResponse = BuildSearchFloppyResponse(4096, floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04, (byte)foundFloppyInfos.Count());
+            Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{searchTerm}' and media type '{mediaTypeCSV}'");
 
-            this.Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{searchTerm}' and media type '{mediaTypeCSV}'");
             return searchFloppyResponse;
         }
 
@@ -110,33 +127,38 @@ namespace VDRIVE.Floppy
                 bool extMatches = extSet == null || extSet.Contains(fileExt);
                 bool descMatches = string.IsNullOrEmpty(desc) || name.IndexOf(desc, StringComparison.OrdinalIgnoreCase) >= 0;
 
-                if (extMatches && descMatches) results.Add(fi.FullName);
+                if (extMatches && descMatches)
+                    results.Add(fi.FullName);
             }
 
-            if (!recurse) return results;
+            if (!recurse)
+                return results;
 
-            IEnumerable<string> subDirs;
+            IEnumerable<string> subDirectories;
             try
             {
-                subDirs = Directory.EnumerateDirectories(root);
+                subDirectories = Directory.EnumerateDirectories(root);
             }
             catch (UnauthorizedAccessException) { return results; }
             catch (DirectoryNotFoundException) { return results; }
             catch (IOException) { return results; }
 
-            foreach (var sub in subDirs)
+            foreach (string subDirectory in subDirectories)
             {
                 try
                 {
-                    var childMatches = TraverseFolder(sub, description, extSet, recurse: true);
-                    if (childMatches != null && childMatches.Count > 0) results.AddRange(childMatches);
+                    var childMatches = TraverseFolder(subDirectory, description, extSet, recurse: true);
+                    if (childMatches != null && childMatches.Count > 0)
+                    {
+                        results.AddRange(childMatches);
+                    }
                 }
                 catch
                 {
                     // ignore directory-specific errors and continue
                 }
             }
-           
+
             return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
     }

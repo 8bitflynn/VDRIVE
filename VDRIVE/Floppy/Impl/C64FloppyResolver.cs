@@ -2,14 +2,14 @@
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Floppy
+namespace VDRIVE.Floppy.Impl
 {
     public class C64FloppyResolver : RemoteFloppyResolverBase, IFloppyResolver
     {
-        public C64FloppyResolver(IConfiguration configuration, IVDriveLoggger logger)
+        public C64FloppyResolver(IConfiguration configuration, ILogger logger)
         {
-            this.Configuration = configuration;
-            this.Logger = logger;            
+            Configuration = configuration;
+            Logger = logger;
         }
 
         public override FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier)
@@ -20,38 +20,67 @@ namespace VDRIVE.Floppy
             {
                 using (HttpClient client = new HttpClient())
                 {
-                    string downloadUrl = "https://www.c64.com/games/" + this.InsertedFloppyPointer.ImagePath;
+                    string downloadUrl = "https://www.c64.com/games/" + InsertedFloppyPointer.ImagePath;
 
-                    byte[] zippedFile = this.DownloadFile(downloadUrl);
+                    byte[] zippedFile = DownloadFile(downloadUrl);
                     if (zippedFile == null)
                     {
-                        this.Logger.LogMessage("Failed to download file.");
-                        return default(FloppyInfo);
+                        Logger.LogMessage("Failed to download file.");
+                        return default;
                     }
-                    this.Decompress(zippedFile);                
+
+                    // attempt to get disk1
+                    IEnumerable<string> extractedFilePaths = this.DecompressArchive(zippedFile);
+                    string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths);
+
+                    FloppyInfo tempFloppyInfo = InsertedFloppyInfo;
+                    tempFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
+                    InsertedFloppyInfo = tempFloppyInfo; // update to extracted file name
+
+                    FloppyPointer tempFloppyPointer = InsertedFloppyPointer;
+                    tempFloppyPointer.ImagePath = fullFilePath;
+                    InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path         
                 }
             }
             catch (Exception exception)
             {
-                this.Logger.LogMessage("Failed to insert floppy: " + exception.Message);
-                return default(FloppyInfo);
+                Logger.LogMessage("Failed to insert floppy: " + exception.Message);
+                return default;
             }
 
             return floppyInfo;
-        }     
+        }      
 
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
             // clear previous search results
-            this.ClearSearchResults();
+            ClearSearchResults();
 
-            this.ExtractSearchInfo(searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes);
+            string searchTerm;
+            if (searchFloppiesRequest.SearchTermLength != 0)
+            {
+                searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
+            }
+            else
+            {
+                searchTerm = string.Empty;
+            }
+
+            string mediaTypeCSV;
+            if (searchFloppiesRequest.MediaTypeLength != 0)
+            {
+                mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()).TrimEnd();
+            }
+            else
+            {
+                mediaTypeCSV = string.Join(',', Configuration.FloppyResolverSettings.Local.MediaExtensionsAllowed);
+            }
 
             using (HttpClient client = new HttpClient())
             {
-                string searchUrl = this.BuildC64SearchUrl(searchTerm, mediaTypeCSV);
+                string searchUrl = BuildC64SearchUrl(searchTerm, mediaTypeCSV);
 
-                this.Logger.LogMessage($"Searching C64.com for '{searchTerm}' with media type '{mediaTypeCSV}'");
+                Logger.LogMessage($"Searching C64.com for '{searchTerm}' with media type '{mediaTypeCSV}'");
 
                 var fields = new Dictionary<string, string>
                 {
@@ -66,22 +95,22 @@ namespace VDRIVE.Floppy
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
-                    IEnumerable<FloppyInfo> floppyInfos = this.ScrapeResults(html);
+                    IEnumerable<FloppyInfo> floppyInfos = ScrapeResults(html);
 
-                    SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04), (byte)floppyInfos.Count()); // more follows
-                    foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
+                    SearchFloppyResponse searchFloppyResponse = BuildSearchFloppyResponse(4096, floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04, (byte)floppyInfos.Count()); // more follows
+                    foundFloppyInfos = floppyInfos.Take(Configuration.MaxSearchResults).ToArray();
 
-                    this.Logger.LogMessage($"Found {floppyInfos.Count()} results for '{searchTerm}'");
+                    Logger.LogMessage($"Found {floppyInfos.Count()} results for '{searchTerm}'");
                     return searchFloppyResponse;
                 }
                 else
                 {
-                    this.Logger.LogMessage(@"Failed to search {searchTerm}: " + httpResponseMessage.StatusCode);
+                    Logger.LogMessage(@"Failed to search {searchTerm}: " + httpResponseMessage.StatusCode);
                 }
             }
             foundFloppyInfos = null;
-            return default(SearchFloppyResponse);
-        }       
+            return default;
+        }
 
         private IEnumerable<FloppyInfo> ScrapeResults(string html)
         {
@@ -128,20 +157,20 @@ namespace VDRIVE.Floppy
                     floppyPointer.ImagePath = url;
 
                     // results stored in resolver for lookup if "inserted"
-                    this.FloppyInfos.Add(floppyInfo);
-                    this.FloppyPointers.Add(floppyPointer);
+                    FloppyInfos.Add(floppyInfo);
+                    FloppyPointers.Add(floppyPointer);
 
                     searchResultIndex++;
                 }
             }
-        
+
 
             return floppyInfos;
         }
 
         private string BuildC64SearchUrl(string searchTerm, string mediaType)
         {
-            string baseUrl = this.BuildFullC64Path("/search/search?");
+            string baseUrl = BuildFullC64Path("/search/search?");
             var queryParams = new Dictionary<string, string>
             {
                 { "searchword", searchTerm },

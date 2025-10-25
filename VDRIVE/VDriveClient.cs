@@ -1,5 +1,5 @@
 ﻿using System.Net.Sockets;
-using VDRIVE.Drive.Vice;
+using VDRIVE.Drive;
 using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
 
@@ -7,7 +7,7 @@ namespace VDRIVE
 {
     public class VDriveClient : VDriveBase, IVDriveClient
     {
-        public VDriveClient(string ipAddress, int port, IConfiguration configuration, IVDriveLoggger logger)
+        public VDriveClient(string ipAddress, int port, IConfiguration configuration, ILogger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
@@ -31,12 +31,11 @@ namespace VDRIVE
 
                 // instance dependencies
                 IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
-                IVDriveLoader loader = new Vice2_4VDriveLoader(this.Configuration, this.Logger);
-                IVDriveSaver saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
+                IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {
-                    this.HandleClient(tcpClient, networkStream, floppyResolver, loader, saver);
+                    this.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
                 }
             }
         }

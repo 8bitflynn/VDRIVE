@@ -9,6 +9,13 @@
 
   <ItemGroup>
     <None Remove="appsettings.json" />
+    <None Remove="Storage\Impl\vdrive_cbmdisk.py" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Storage\Impl\vdrive_cbmdisk.py">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

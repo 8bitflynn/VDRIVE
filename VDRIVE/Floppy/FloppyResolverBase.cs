@@ -6,7 +6,7 @@ namespace VDRIVE.Floppy
     public abstract class FloppyResolverBase : IFloppyResolver
     {
         protected IConfiguration Configuration;
-        protected IVDriveLoggger Logger;
+        protected ILogger Logger;
         protected FloppyInfo InsertedFloppyInfo; // info returned to C64
         protected List<FloppyInfo> FloppyInfos = new List<FloppyInfo>(); // C64 friendly floppy info
         protected FloppyPointer InsertedFloppyPointer; // join to FloppyInfo.Id for long path
@@ -19,10 +19,10 @@ namespace VDRIVE.Floppy
 
             if (!this.InsertedFloppyInfo.Equals(default(FloppyInfo)))
             {
-                string floppyName = new string(this.InsertedFloppyInfo.ImageName);
+                string floppyName = new string(this.InsertedFloppyInfo.ImageName.TakeWhile(c => c != '\0').ToArray());
                 this.Logger.LogMessage($"Inserting floppy: {floppyName} ID={(floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8))}");
             }
-            return this.InsertedFloppyInfo; 
+            return this.InsertedFloppyInfo;
         }
 
         public FloppyInfo InsertFloppy(FloppyInfo floppyInfo) // easier locally
@@ -36,7 +36,8 @@ namespace VDRIVE.Floppy
             this.FloppyInfos.Clear();
             this.FloppyPointers.Clear();
 
-            this.Logger.LogMessage("Ejecting floppy: " + new string (this.InsertedFloppyInfo.ImageName).TrimEnd());
+            string floppyName = new string(this.InsertedFloppyInfo.ImageName.TakeWhile(c => c != '\0').ToArray());
+            this.Logger.LogMessage("Ejecting floppy: " + floppyName);
             this.InsertedFloppyInfo = default(FloppyInfo);
             this.InsertedFloppyPointer = default(FloppyPointer);
             return this.InsertedFloppyInfo;
@@ -66,26 +67,68 @@ namespace VDRIVE.Floppy
             this.FloppyPointers.Clear();
         }
 
-        protected void ExtractSearchInfo(SearchFloppiesRequest searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes)
+        protected void ExtractSearchInfo(SearchFloppiesRequest searchFloppiesRequest, string mediaExtensionAllowed, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes)
         {
-            searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
-            if (searchFloppiesRequest.MediaTypeLength == 0)
+            if (searchFloppiesRequest.SearchTermLength != 0)
             {
-                mediaTypeCSV = this.Configuration.MediaExtensionAllowed;
+                searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
             }
             else
             {
-                mediaTypeCSV = new string(searchFloppiesRequest.MediaType).TrimEnd();
+                searchTerm = string.Empty;
             }
-            
+
+            if (searchFloppiesRequest.MediaTypeLength != 0)
+            {
+                mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()).TrimEnd();                
+            }
+            else
+            {
+                mediaTypeCSV = mediaExtensionAllowed;
+            }
+
             if (!string.IsNullOrWhiteSpace(mediaTypeCSV))
             {
                 mediaTypes = mediaTypeCSV.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             }
             else
             {
-                mediaTypes = this.Configuration.MediaExtensionAllowed.Split(',');
+                mediaTypes = mediaExtensionAllowed.Split(',');
             }
+        }
+
+        protected string ResolvePrimaryDisk(IEnumerable<string> extractFullFilePaths)
+        {
+            if (InsertedFloppyPointer.Equals(default(FloppyInfo)))
+                return null;
+
+            var allowedExtensions = Configuration
+                .FloppyResolverSettings
+                .CommodoreSoftware
+                .MediaExtensionsAllowed
+                .Select(ext => ext.ToLowerInvariant())
+                .ToHashSet();
+
+            return extractFullFilePaths
+                .Where(path => allowedExtensions.Contains(Path.GetExtension(path).ToLowerInvariant()))
+                .OrderByDescending(path => ScoreFilename(Path.GetFileName(path)))
+                .FirstOrDefault();
+        }
+
+        protected int ScoreFilename(string name)
+        {
+            name = name.ToLowerInvariant();
+
+            if (name.Contains("disk1") || name.Contains("side1") || name.Contains("main") || name.Contains("boot"))
+                return 100;
+
+            if (name.Contains("disk2") || name.Contains("side2") || name.Contains("extra") || name.Contains("docs"))
+                return 50;
+
+            if (name.Contains("readme") || name.Contains("manual"))
+                return 10;
+
+            return 25; // neutral fallback
         }
 
         protected virtual SearchFloppyResponse BuildSearchFloppyResponse(ushort destPtr, byte responseCode, byte resultCount)
@@ -111,6 +154,6 @@ namespace VDRIVE.Floppy
             }
 
             return searchFloppyResponse;
-        }       
+        }
     }
 }

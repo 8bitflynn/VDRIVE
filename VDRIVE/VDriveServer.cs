@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using VDRIVE.Drive.Vice;
+using VDRIVE.Drive;
 using VDRIVE.Floppy;
 using VDRIVE_Contracts.Interfaces;
 
@@ -9,7 +9,7 @@ namespace VDRIVE
 {
     public class VDriveServer : VDriveBase, IVDriveServer
     {
-        public VDriveServer(IConfiguration configuation, IVDriveLoggger logger)
+        public VDriveServer(IConfiguration configuation, ILogger logger)
         {
             this.Configuration = configuation;
             this.Logger = logger;
@@ -41,35 +41,29 @@ namespace VDRIVE
 
             while (true)
             {
-                TcpClient client = listener.AcceptTcpClient(); // blocking
-                client.NoDelay = true;              
+                TcpClient tcpClient = listener.AcceptTcpClient(); // blocking
+                tcpClient.NoDelay = true;              
 
                 Task.Run(() =>
                 {
                     // instance dependencies per client for concurrency
                     IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
-                    IVDriveLoader loader = new Vice2_4VDriveLoader(this.Configuration, this.Logger);
-                    IVDriveSaver saver = new Vice2_4VDriveSaver(this.Configuration, this.Logger);
+                    IStorageAdapter vdrive = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, this.Configuration, this.Logger);
 
-                    this.HandleClient(client, floppyResolver, loader, saver);
+                    string ip = tcpClient.Client.RemoteEndPoint.ToString();
+                    this.Logger.LogMessage($"Client connected: {ip}");
+
+                    using (tcpClient)
+                    using (NetworkStream networkStream = tcpClient.GetStream())
+                    {
+                        while (tcpClient.Connected)
+                        {
+                            this.HandleClient(tcpClient, networkStream, floppyResolver, vdrive);
+                        }
+                    }
                 });
             }
-        }
-
-        private void HandleClient(TcpClient tcpClient, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSaver saver)
-        {
-            string ip = tcpClient.Client.RemoteEndPoint.ToString();
-            this.Logger.LogMessage($"Client connected: {ip}");
-
-            using (tcpClient)
-            using (NetworkStream networkStream = tcpClient.GetStream())
-            {
-                while (tcpClient.Connected)
-                {
-                    this.HandleClient(tcpClient, networkStream, floppyResolver, loader, saver);
-                }
-            }
-        }
+        }     
 
         private IPAddress GetLocalIPv4Address()
         {

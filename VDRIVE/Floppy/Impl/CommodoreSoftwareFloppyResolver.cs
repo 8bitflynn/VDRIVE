@@ -3,19 +3,16 @@ using System.Text.RegularExpressions;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
-namespace VDRIVE.Floppy
+namespace VDRIVE.Floppy.Impl
 {
     public class CommodoreSoftwareFloppyResolver : RemoteFloppyResolverBase, IFloppyResolver
     {
-        public CommodoreSoftwareFloppyResolver(IConfiguration configuration, IVDriveLoggger logger)
+        public CommodoreSoftwareFloppyResolver(IConfiguration configuration, ILogger logger)
         {
-            this.Configuration = configuration;
-            this.Logger = logger;
+            Configuration = configuration;
+            Logger = logger;
         }
 
-        List<string> IgnoredSearchKeywords = new List<string> { "manual", "firmware", "documentation", "guide", "instruction", "tutorial", 
-         "c128", "dos", "128" };        
-      
         public override FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier)
         {
             FloppyInfo floppyInfo = base.InsertFloppy(floppyIdentifier);
@@ -29,7 +26,7 @@ namespace VDRIVE.Floppy
             {
                 using (HttpClient client = new HttpClient())
                 {
-                    string downloadPageUrl = this.BuildFullCommodoreSoftwarePath(this.InsertedFloppyPointer.ImagePath);
+                    string downloadPageUrl = BuildFullCommodoreSoftwarePath(InsertedFloppyPointer.ImagePath);
                     HttpResponseMessage httpResponseMessage = client.PostAsync(downloadPageUrl, null).Result;
                     string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
 
@@ -42,66 +39,93 @@ namespace VDRIVE.Floppy
                             string rawHref = match.Groups[1].Value;
                             string decodedHref = WebUtility.HtmlDecode(rawHref);
 
-                            this.Logger.LogMessage("Extracted link: " + decodedHref);
+                            Logger.LogMessage("Extracted link: " + decodedHref);
 
-                            string commodoreSoftwareDownloadUrl = this.BuildFullCommodoreSoftwarePath(decodedHref);
+                            string commodoreSoftwareDownloadUrl = BuildFullCommodoreSoftwarePath(decodedHref);
 
-                            byte[] zippedFile = this.DownloadFile(commodoreSoftwareDownloadUrl);
+                            byte[] zippedFile = DownloadFile(commodoreSoftwareDownloadUrl);
                             if (zippedFile == null)
                             {
-                                this.Logger.LogMessage("Failed to download file.");
-                                return default(FloppyInfo);
+                                Logger.LogMessage("Failed to download file.");
+                                return default;
                             }
-                            this.Decompress(zippedFile);
+
+                            // attempt to get disk1
+                            IEnumerable<string> extractedFilePaths = this.DecompressArchive(zippedFile);
+                            string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths);
+
+                            FloppyInfo tempFloppyInfo = InsertedFloppyInfo;
+                            tempFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
+                            InsertedFloppyInfo = tempFloppyInfo; // update to extracted file name
+
+                            FloppyPointer tempFloppyPointer = InsertedFloppyPointer;
+                            tempFloppyPointer.ImagePath = fullFilePath;
+                            InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path                        
                         }
                     }
                 }
             }
             catch (Exception exception)
             {
-                this.Logger.LogMessage("Failed to insert floppy: " + exception.Message);
-                return default(FloppyInfo);
+                Logger.LogMessage("Failed to insert floppy: " + exception.Message);
+                return default;
             }
-            
+
             return floppyInfo;
         }       
 
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
             // clear previous search results
-            this.ClearSearchResults();
+            ClearSearchResults();
 
-            this.ExtractSearchInfo(searchFloppiesRequest, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes);
+            string searchTerm;
+            if (searchFloppiesRequest.SearchTermLength != 0)
+            {
+                searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
+            }
+            else
+            {
+                searchTerm = string.Empty;
+            }
 
-            this.Logger.LogMessage($"Searching Commodore.Software.com for description '{searchTerm}' and media type '{mediaTypeCSV}'");
+            string mediaTypeCSV;
+            if (searchFloppiesRequest.MediaTypeLength != 0)
+            {
+                mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()).TrimEnd();
+            }
+            else
+            {
+                mediaTypeCSV = string.Join(',', Configuration.FloppyResolverSettings.Local.MediaExtensionsAllowed);
+            }
+
+            Logger.LogMessage($"Searching Commodore.Software.com for description '{searchTerm}' and media type '{mediaTypeCSV}'");
 
             using (HttpClient client = new HttpClient())
             {
-                string searchUrl = this.BuildCommodoreSoftwareSearchUrl(searchTerm, mediaTypeCSV);
+                string searchUrl = BuildCommodoreSoftwareSearchUrl(searchTerm, mediaTypeCSV);
 
                 HttpResponseMessage httpResponseMessage = client.PostAsync(searchUrl, null).Result;
                 string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
-                    IEnumerable<FloppyInfo> floppyInfos = this.ScrapeResults(html);
+                    IEnumerable<FloppyInfo> floppyInfos = ScrapeResults(html);
 
-                    SearchFloppyResponse searchFloppyResponse = this.BuildSearchFloppyResponse(4096, (floppyInfos.Count() > 0 ? (byte)0xff: (byte)0x04), (byte)floppyInfos.Count()); // more follows
-                    foundFloppyInfos = floppyInfos.Take(this.Configuration.MaxSearchResults).ToArray();
+                    SearchFloppyResponse searchFloppyResponse = BuildSearchFloppyResponse(4096, floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04, (byte)floppyInfos.Count()); // more follows
+                    foundFloppyInfos = floppyInfos.Take(Configuration.MaxSearchResults).ToArray();
                     searchFloppyResponse.ResultCount = (byte)foundFloppyInfos.Length;
-
-                    this.Logger.LogMessage($"Found {floppyInfos.Count()} results for '{searchTerm}'");                  
 
                     return searchFloppyResponse;
                 }
                 else
                 {
-                    this.Logger.LogMessage(@"Failed to search {searchTerm}: " + httpResponseMessage.StatusCode);
+                    Logger.LogMessage(@"Failed to search {searchTerm}: " + httpResponseMessage.StatusCode);
                 }
             }
             foundFloppyInfos = null;
-            return default(SearchFloppyResponse);
-        }      
+            return default;
+        }
 
         private IEnumerable<FloppyInfo> ScrapeResults(string html)
         {
@@ -114,10 +138,10 @@ namespace VDRIVE.Floppy
             ushort searchResultIndexId = 1;
             foreach (Match match in matches)
             {
-                
                 string imageName = match.Groups[2].Value.Trim();
-                if (IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
+                if (Configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
                 {
+                    // skip this result as it is ignored
                     continue;
                 }
 
@@ -136,7 +160,7 @@ namespace VDRIVE.Floppy
                 // strip html
                 string description = Regex.Replace(match.Groups[3].Value, @"<.*?>", "").Trim();
                 // strip non-ascii
-                description = Regex.Replace(description, @"[^\x20-\x7E]", "");               
+                description = Regex.Replace(description, @"[^\x20-\x7E]", "");
                 floppyInfos.Add(floppyInfo);
 
                 // floppy pointers hold Id and long path and are looked up when "inserted"
@@ -145,8 +169,8 @@ namespace VDRIVE.Floppy
                 floppyPointer.ImagePath = match.Groups[1].Value.Trim();
 
                 // results stored in resolver for lookup if "inserted"
-                this.FloppyInfos.Add(floppyInfo);
-                this.FloppyPointers.Add(floppyPointer);
+                FloppyInfos.Add(floppyInfo);
+                FloppyPointers.Add(floppyPointer);
 
                 searchResultIndexId++;
             }
@@ -156,7 +180,7 @@ namespace VDRIVE.Floppy
 
         private string BuildCommodoreSoftwareSearchUrl(string searchTerm, string mediaType) // media type not currently used
         {
-            string baseUrl = this.BuildFullCommodoreSoftwarePath("/search/search?");
+            string baseUrl = BuildFullCommodoreSoftwarePath("/search/search?");
             var queryParams = new Dictionary<string, string>
             {
                 { "searchword", searchTerm },

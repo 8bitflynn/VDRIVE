@@ -9,9 +9,9 @@ namespace VDRIVE
     public abstract class VDriveBase
     {
         protected IConfiguration Configuration;        
-        protected IVDriveLoggger Logger;
+        protected ILogger Logger;
 
-        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IVDriveLoader loader, IVDriveSaver saver)
+        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IStorageAdapter vdrive)
         { 
             byte[] sendBuffer = new byte[1];
             byte[] data = new byte[1];
@@ -38,7 +38,7 @@ namespace VDRIVE
                             this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
-                            LoadResponse loadResponse = loader.Load(loadRequest, floppyResolver, out byte[] payload);
+                            LoadResponse loadResponse = vdrive.Load(loadRequest, floppyResolver, out byte[] payload);
 
                             if (payload != null)
                             {
@@ -46,14 +46,36 @@ namespace VDRIVE
                                 ushort dest_ptr = (ushort)(dest_ptr_bytes[0] | (dest_ptr_bytes[1] << 8));
                                 this.Logger.LogMessage($"Start Address: 0x{dest_ptr:X4}");
 
-                                if (dest_ptr == 0xEA38) 
+                                // check for known instant C64 crash addreses                              
+
+                                // TODO: for now returning a file not found
+                                // but need to investigate better handling later
+                                List<ushort> rejectedLoadAddresses = new List<ushort>()
                                 {
-                                    this.Logger.LogMessage("Warning: IRQ vector for load address");
+                                    0x0314, // BASIC IRQ
+                                    0x0316, // BASIC NMI
+                                    0xFFFE, // KERNAL IRQ
+                                    0xFFFA, // KERNAL NMI
+                                    0xEA38, // LOAD address IRQ
+                                    0xC000  // VDRIVE location
+                                };
+
+                                if (rejectedLoadAddresses.Any(r => r == dest_ptr))
+                                {
+                                    // still needs work but for now it prevents C64 from locking up / blocking
+                                    // might consider timeouts on C64 side...
+                                    this.Logger.LogMessage($"Warning: known crash load address {dest_ptr}, rejecting load to prevent C64 lockup");
+
+                                    // invalidate payload and set error code
+                                    // to prevent C64 from locking up 
+                                    payload = null;
+                                    loadResponse.ResponseCode = 0x04; // file not found for now...
                                 }
-
-                                payload = payload.Skip(2).ToArray(); // skip destination pointer     
-
-                                this.Logger.LogMessage($"End Address: 0x{dest_ptr+payload.Length:X4}");
+                                else
+                                {
+                                    payload = payload.Skip(2).ToArray(); // skip destination pointer    
+                                    this.Logger.LogMessage($"End Address: 0x{dest_ptr + payload.Length:X4}");
+                                }
                             }                            
 
                             this.SendData(tcpClient, networkStream, loadResponse, payload);
@@ -77,7 +99,7 @@ namespace VDRIVE
                             byte[] payload = this.ReceiveData(networkStream, saveRequest);
 
                             // TODO send this back to C64
-                            SaveResponse saveResponse = saver.Save(saveRequest, floppyResolver, payload);
+                            SaveResponse saveResponse = vdrive.Save(saveRequest, floppyResolver, payload);
                         }
                         break;
 
@@ -118,17 +140,17 @@ namespace VDRIVE
                             this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             SearchFloppiesRequest searchFloppiesRequest = BinaryStructConverter.FromByteArray<SearchFloppiesRequest>(buffer);
-
-                            this.Logger.LogMessage("Search Request: " + new string(searchFloppiesRequest.SearchTerm) + (searchFloppiesRequest.MediaType != null ? "," + new string(searchFloppiesRequest.MediaType) : ""));
-
                             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
 
                             // build the payload
                             List<byte> payload = new List<byte>();
-                            foreach (FloppyInfo foundFloppyInfo in foundFloppyInfos)
+                            if (foundFloppyInfos != null)
                             {
-                                byte[] serializedFoundFloppyInfo = BinaryStructConverter.ToByteArray<FloppyInfo>(foundFloppyInfo);
-                                payload.AddRange(serializedFoundFloppyInfo);
+                                foreach (FloppyInfo foundFloppyInfo in foundFloppyInfos)
+                                {
+                                    byte[] serializedFoundFloppyInfo = BinaryStructConverter.ToByteArray<FloppyInfo>(foundFloppyInfo);
+                                    payload.AddRange(serializedFoundFloppyInfo);
+                                }                                
                             }
 
                             int lengthOfPayload = payload.Count;
@@ -264,7 +286,6 @@ namespace VDRIVE
                 return;
             }
 
-            // pass the configured timeout
             this.SendChunks(tcpClient, networkStream, payload, this.Configuration.ChunkSize, TimeSpan.FromSeconds(this.Configuration.SendTimeoutSeconds.Value));
 
             DateTime end = DateTime.Now;
@@ -282,7 +303,6 @@ namespace VDRIVE
             for (int chunkIndex = 0; chunkIndex < numOfChunks; chunkIndex++)
             {
                 List<byte> chunk = chunks[chunkIndex];
-
                 this.Logger.LogMessage($"{bytesSent}-{chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
 
                 try
@@ -296,7 +316,6 @@ namespace VDRIVE
 
                     // wait for Chunk request from C64 with timeout
                     ChunkRequest chunkRequest = this.ReadChunkRequest(tcpClient, networkStream, timeout);
-
                     switch (chunkRequest.Operation)
                     {
                         case 0x01: // next chunk or finished
@@ -314,9 +333,9 @@ namespace VDRIVE
                             if (bytesSent < 0) bytesSent = 0;
                             break;
 
-                        case 0x03: // cancel
+                        case 0x03: // cancel sending
                             this.Logger.LogMessage("Send canceled");
-                            return; // cancel this send
+                            return; 
                     }
                 }
                 catch (TimeoutException)
@@ -348,7 +367,6 @@ namespace VDRIVE
 
                 if (!networkStream.DataAvailable)
                 {
-                    // sleep short to avoid busy wait but check timeout frequently
                     Thread.Sleep(10);
                     continue;
                 }
@@ -366,7 +384,6 @@ namespace VDRIVE
                     if (bytesRead == 1)
                     {
                         // if ChunkRequest is larger than 1 byte, read the rest here
-                        // Adjust to actual ChunkRequest size; example assumes struct is 1 byte for Operation
                         ChunkRequest chunkRequest = BinaryStructConverter.FromByteArray<ChunkRequest>(data);
                         return chunkRequest;
                     }

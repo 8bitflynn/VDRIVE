@@ -18,7 +18,7 @@ namespace VDRIVE_Host
         {
             Program program = new Program();
 
-            IVDriveLoggger logger = new VDRIVE.Util.ConsoleLogger();
+            ILogger logger = new VDRIVE.Util.ConsoleLogger();
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
