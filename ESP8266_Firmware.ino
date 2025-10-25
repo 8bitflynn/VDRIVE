@@ -4,22 +4,26 @@
 // Wi-Fi / socket params (populated from EEPROM or SetupWifi)
 String ssid     = "";
 String password = "";
-String remoteIp = ""; // used in client mode
+String remoteIP = ""; // server IP address to connect to in client mode
+uint16_t port = 6510; // client port  / server listen port number
 bool wifiConnected = false;
 
-WiFiServer wifiServer(80);
-WiFiClient wifiClient;
-const uint16_t remotePort = 6510; // adjust if needed
+// a bit of time to 'R'eset or 'D'ump in serial monitor
+const int startupCmdWindowMilliseconds = 10000; // 10 seconds
 
-struct wifiInfo_struct {
+WiFiServer wifiServer(port);
+WiFiClient wifiClient;
+
+struct wifiInfo_struct {  
+  byte marker = 0xA5; // not sent just helps line up struct
   byte ssidLength = 0x00;
   char ssid[33];   // 32 + null
   byte pwdLength = 0x00;
   char pwd[255];   // up to 254 + null 
   byte ipLength = 0x00;
-  char ipAddr[16]; // "255.255.255.255" + null  
-  uint16_t portNumber;
-  byte clientMode = 0x01; // 0 = server, 1 = client (default)
+  char ipAddr[16]; // "255.255.255.255" + null  // client mode
+  uint16_t port; // server port number or client port number
+  byte mode = 0x00; // 1 = server, 0 = client (default)
 } wifiInfo;
 
 // firmware runtime flags
@@ -33,12 +37,51 @@ bool socketConnected = false;
 const byte SYNC_BYTE = 0x2B;
 
 void setup() {
-  Serial.begin(9600);
+  delay(500); // give USB time to settle
+  Serial.begin(9600);  
+  Serial.println("Booting firmware");
+
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
+  // short delay before startup for reset and dump
+  // 'R' = Reset EEPROM (writes zeros)
+  // 'D' = Dump EEPROM
+  Serial.println("Startup command window...");
   EEPROM.begin(sizeof(wifiInfo));
-  EEPROM.get(0, wifiInfo);   
+  unsigned long start = millis();
+  while (millis() - start < startupCmdWindowMilliseconds) {
+    if (Serial.available()) {
+      int b = Serial.read();
+      if (b == 'R') {
+        Serial.println("EEPROM reset requested.");
+        for (int i = 0; i < sizeof(wifiInfo); ++i) EEPROM.write(i, 0);
+        EEPROM.commit();
+        Serial.println("EEPROM cleared. Rebooting...");
+        ESP.restart(); // soft reboot
+        return;
+      }
+      if (b == 'D') {
+        Serial.println("EEPROM dump:");
+        for (int i = 0; i < sizeof(wifiInfo); ++i) {
+          byte val = EEPROM.read(i);
+          Serial.print(val, HEX);
+          Serial.print(" ");
+        }
+        Serial.println();
+      }
+    }
+  }
+ 
+  EEPROM.get(0, wifiInfo);  
+
+  Serial.print("EEPROM marker: ");
+  Serial.println(wifiInfo.marker, HEX);
+
+   if (wifiInfo.marker != 0xA5) {
+    Serial.println("EEPROM marker missing or invalid.");
+    return; // Skip loading corrupted or uninitialized data
+  }
   
   // restore values from EEPROM if present
   if (wifiInfo.ssidLength > 0 && wifiInfo.ssidLength < sizeof(wifiInfo.ssid)) {
@@ -51,15 +94,18 @@ void setup() {
   }
   if (wifiInfo.ipLength > 0 && wifiInfo.ipLength < sizeof(wifiInfo.ipAddr)) {
     wifiInfo.ipAddr[wifiInfo.ipLength] = 0;
-    remoteIp = String((char*)wifiInfo.ipAddr);
+    remoteIP = String((char*)wifiInfo.ipAddr);
+  } 
+  if (wifiInfo.port > 0) {
+    port = wifiInfo.port;
   }
 
-  // needed until I get the clientMode hooked in
-  wifiInfo.clientMode = 0x01; 
-  
-  //uint16_t portNumber = (highByte << 8) | lowByte;
+  Serial.print("EEPROM SSID length: "); Serial.println(wifiInfo.ssidLength);
+  Serial.print("EEPROM PWD length: "); Serial.println(wifiInfo.pwdLength);
+  Serial.print("EEPROM Mode: "); Serial.println(wifiInfo.mode == 0 ? "client" : "server");
  
   if (ssid.length() > 0 && password.length() > 0) {
+    Serial.println("Connecting to WiFi");
     ConnectToWIFI();
   } else {
     Serial.println("No WiFi creds stored, waiting for SetupWifi.");
@@ -68,13 +114,15 @@ void setup() {
 
 void loop() {
   
-  if (!wifiConnected) {
-    SetupWifi(); // waits for serial setup commands when not connected
-    return;
+ if (!wifiConnected) {
+  SetupWifi();
+  delay(1000); // prevent tight loop
+  Serial.println("Waiting for setup frame...");
+  return;
   }
-
+  
   // choose mode based on stored flag
-  bool inClientMode = (wifiInfo.clientMode == 1);
+  bool inClientMode = (wifiInfo.mode == 0); // 0 client mode (default), 1 server mode
 
   if (inClientMode) {
     HandleClientMode();
@@ -94,10 +142,12 @@ void loop() {
    - ip chars (ipLength bytes) // if ipLength > 0
    - clientMode (1 byte) // 0 = server, 1 = client
 */
-void SetupWifi() {
-  if (!Serial.available()) return;
+void SetupWifi() {  
+  if (!Serial.available()){    
+    return;
+  }
 
-  int b = Serial.read();
+  int b = Serial.read(); 
   if (b != SYNC_BYTE) return;
 
   // wait for lengths/fields, reading with small timeout
@@ -138,6 +188,12 @@ void SetupWifi() {
     tmpIP[i] = (char)c;
   }
 
+  // 2 bytes for client port
+  byte portLo = readByteBlocking();
+  byte portHi = readByteBlocking();
+  
+  uint16_t port = (portHi << 8) | portLo;
+
   int modeByte = readByteBlocking();
   if (modeByte < 0) return;
   byte mode = (byte)modeByte; // 0 server, 1 client
@@ -145,31 +201,45 @@ void SetupWifi() {
   // store into EEPROM structure
   wifiInfo.ssidLength = (byte)ssidLen;
   memset(wifiInfo.ssid, 0, sizeof(wifiInfo.ssid));
-  if (ssidLen > 0) strncpy((char*)wifiInfo.ssid, tmpSSID, ssidLen);
+  if (ssidLen > 0) {
+    strncpy((char*)wifiInfo.ssid, tmpSSID, ssidLen);
+    wifiInfo.ssid[ssidLen] = '\0'; // ensure termination
+  }
 
   wifiInfo.pwdLength = (byte)pwdLen;
   memset(wifiInfo.pwd, 0, sizeof(wifiInfo.pwd));
-  if (pwdLen > 0) strncpy((char*)wifiInfo.pwd, tmpPWD, pwdLen);
+  if (pwdLen > 0) {
+    strncpy((char*)wifiInfo.pwd, tmpPWD, pwdLen);
+    wifiInfo.pwd[pwdLen] = '\0'; // ensure termination
+  }  
 
   wifiInfo.ipLength = (byte)ipLen;
   memset(wifiInfo.ipAddr, 0, sizeof(wifiInfo.ipAddr));
-  if (ipLen > 0) strncpy((char*)wifiInfo.ipAddr, tmpIP, ipLen);
+  if (ipLen > 0) {
+    strncpy((char*)wifiInfo.ipAddr, tmpIP, ipLen);
+    wifiInfo.ipAddr[ipLen] = '\0'; // ensure termination
+  }
 
-  wifiInfo.clientMode = mode ? 1 : 0;
+  // client port 2 bytes
+  wifiInfo.port = port;
+
+  // server or client (0=client, 1=server)
+  wifiInfo.mode = mode;
 
   // persist
+  wifiInfo.marker = 0xA5; 
   EEPROM.put(0, wifiInfo);
   EEPROM.commit();
 
   // update runtime strings
   ssid = String(tmpSSID);
   password = String(tmpPWD);
-  remoteIp = String(tmpIP);
+  remoteIP = String(tmpIP);
 
   Serial.print("Stored SSID: "); Serial.println(ssid);
   Serial.print("Stored PWD length: "); Serial.println(wifiInfo.pwdLength);
-  Serial.print("Stored IP: "); Serial.println(remoteIp);
-  Serial.print("ClientMode: "); Serial.println(wifiInfo.clientMode ? "client" : "server");
+  Serial.print("Stored IP: "); Serial.println(remoteIP);
+  Serial.print("Mode: "); Serial.println(wifiInfo.mode == 1 ? "server" : "client");
 
   ConnectToWIFI();
 }
@@ -199,7 +269,7 @@ void ConnectToWIFI() {
   wifiConnected = true;
 
   // If server mode, start server
-  if (wifiInfo.clientMode == 0) {
+  if (wifiInfo.mode == 1) {
     wifiServer.begin();
     wifiServer.setNoDelay(true);
     Serial.println("Server started on port 80");
@@ -244,28 +314,28 @@ void HandleServerMode() {
   }
 }
 
-/* Client mode: maintain connection to remoteIp:remotePort and forward between Serial and socket */
+/* Client mode: maintain connection to remoteIP:remotePort and forward between Serial and socket */
 void HandleClientMode() {
-  if (remoteIp.length() == 0) {
+  if (remoteIP.length() == 0) {
     Serial.println("No remote IP configured for client mode");
     delay(1000);
     return;
   }
 
   if (!wifiClient || !wifiClient.connected()) {
-    if (wifiClient.connect(remoteIp.c_str(), remotePort)) {
+    if (wifiClient.connect(remoteIP.c_str(), port)) {
       wifiClient.setNoDelay(true);
       socketConnected = true;
       Serial.print("Connected to remote ");
-      Serial.print(remoteIp);
+      Serial.print(remoteIP);
       Serial.print(":");
-      Serial.println(remotePort);
+      Serial.println(port);
     } else {
       socketConnected = false;
       Serial.print("Connect failed to ");
-      Serial.print(remoteIp);
+      Serial.print(remoteIP);
       Serial.print(":");
-      Serial.println(remotePort);
+      Serial.println(port);
       delay(2000); // backoff before retry
       return;
     }

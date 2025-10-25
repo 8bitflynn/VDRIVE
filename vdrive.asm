@@ -179,11 +179,10 @@ vdrive_load
 recv_payload
         ; bitbanger/vdisk receiver entry
         jsr recv_data
+return_init
 
         lda spinner_char_save
-        sta $07e7      
-
-return_init
+        sta $07e7 ; restore org char  
 
          ; turn off up9600
         jsr disable_up9600  
@@ -397,7 +396,7 @@ vdrive_search_floppies
 
 search_recv_payload   
 
-        ; bitbanger/vdisk receiver entry
+        ; bitbanger/vdrive receiver entry
         jsr recv_data
 
         lda spinner_char_save
@@ -482,14 +481,14 @@ recv_search_response
         
         rts
 
-vdrive_mount_floppy
+vdrive_mount_floppy        
+         
+        jsr get_user_input ; re-use to get id of floppy for now
+        cmp user_input_length
+        beq mount_floppy_exit ; user hit enter, exit
 
         jsr clear_up9600_timing_issues 
         jsr enable_up9600  
-         
-        jsr get_user_input ; reuse to get id of floppy for now
-        cmp user_input_length
-        beq mount_floppy_exit ; user hit enter, exit
 
         lda #$2b ; sync
         jsr send_byte
