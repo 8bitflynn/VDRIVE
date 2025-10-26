@@ -1,5 +1,4 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
 using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
@@ -11,12 +10,9 @@ namespace VDRIVE.Drive.Impl
     {
         public DirMasterStorageAdapter(IConfiguration configuration, ILogger logger)
         {
-            Configuration = configuration;
-            Logger = logger;
+            this.Configuration = configuration;
+            this.Logger = logger;
         }
-
-        // Python script that intefaces to load/save/dir with cbmdisk
-        private const string vdrive_cbmdisk = "vdrive_cbmdisk.py";
 
         public LoadResponse Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload)
         {
@@ -72,7 +68,7 @@ namespace VDRIVE.Drive.Impl
             }
             catch (Exception exception)
             {
-                Logger.LogMessage(@"ERROR: " + exception.Message, LogSeverity.Error);
+                Logger.LogMessage(exception.Message, LogSeverity.Error);
 
                 payload = null;
                 return BuildLoadResponse(loadRequest, payload, 0x04); // file not found 
@@ -81,28 +77,17 @@ namespace VDRIVE.Drive.Impl
 
         protected byte[] LoadFile(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
-            //python ivdrive.py load / home / ryan / vdrive / disks / scene.d64 INTRO
-
             string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
-            if (!Directory.Exists(fullPath)) ;
-            Directory.CreateDirectory(fullPath);
+            if (!Directory.Exists(fullPath)) 
+                Directory.CreateDirectory(fullPath);
 
-            string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
+            string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToUpper();
             string outPrgPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, safeName).Trim();
-            //outPrgPath = outPrgPath.Replace(@"/", "_");
 
             if (File.Exists(outPrgPath))
-                File.Delete(outPrgPath);
+                File.Delete(outPrgPath);         
 
-            string exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            string scriptPath = Path.Combine(exeDirectory, vdrive_cbmdisk);
-            string command = "load";
-            string diskPath = floppyPointer.ImagePath;
-            string filename = safeName.ToUpper();
-
-            string arguments = $"\"{scriptPath}\" {command} \"{diskPath}\"";
-            if (command != "dir")
-                arguments += $" \"{filename}\"";
+            string arguments = $"\"{this.Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" load \"{floppyPointer.ImagePath}\" \"{safeName}\"";
 
             var psi = new ProcessStartInfo
             {
@@ -119,6 +104,10 @@ namespace VDRIVE.Drive.Impl
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
+                if (!string.IsNullOrWhiteSpace(output))
+                    Logger.LogMessage(output.Trim());
+                if (!string.IsNullOrWhiteSpace(error))
+                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
 
                 // TODO: fix this to work with any extension
                 string fulloutputPath = outPrgPath + ".prg";
@@ -130,7 +119,7 @@ namespace VDRIVE.Drive.Impl
                 }
                 else
                 {
-                    Logger.LogMessage($"ERROR: {safeName}.prg not found in temp directory.");
+                    Logger.LogMessage($"{safeName}.prg not found in temp directory.", LogSeverity.Error);
                     responseCode = 0x04; // file not found
                     return null;
                 }
@@ -170,10 +159,7 @@ namespace VDRIVE.Drive.Impl
 
         private string[] LoadRawDirectoryLines(FloppyPointer floppyPointer)
         {
-            string command = "dir";
-            string diskPath = floppyPointer.ImagePath;
-
-            string arguments = $"\"{Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" {command} \"{diskPath}\"";
+            string arguments = $"\"{Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" dir \"{floppyPointer.ImagePath}\"";
             var psi = new ProcessStartInfo
             {
                 FileName = Configuration.StorageAdapterSettings.DirMaster.ExecutablePath,
@@ -189,6 +175,10 @@ namespace VDRIVE.Drive.Impl
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
+                if (!string.IsNullOrWhiteSpace(output))
+                    Logger.LogMessage(output.Trim());
+                if (!string.IsNullOrWhiteSpace(error))
+                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
 
                 string[] rawLines = output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
                 return rawLines;
@@ -214,8 +204,7 @@ namespace VDRIVE.Drive.Impl
 
             File.WriteAllBytes(tempPrgPath, destPtrFileData);
 
-            string exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            string scriptPath = Path.Combine(exeDirectory, vdrive_cbmdisk);
+            string scriptPath = this.Configuration.StorageAdapterSettings.DirMaster.ScriptPath;
             string command = "save";
             string diskPath = floppyResolver.GetInsertedFloppyPointer().ImagePath;
             string filename = safeName.ToUpper();
@@ -242,7 +231,10 @@ namespace VDRIVE.Drive.Impl
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
-                Logger.LogMessage(output.Trim());
+                if (!string.IsNullOrWhiteSpace(output))
+                    Logger.LogMessage(output.Trim());
+                if (!string.IsNullOrWhiteSpace(error))
+                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
             }
 
             bool success = File.Exists(tempPrgPath);
@@ -251,11 +243,7 @@ namespace VDRIVE.Drive.Impl
                 // TODO: parse errors and return if needed
                 Logger.LogMessage($"File written to Image: {safeName}");
                 File.Delete(tempPrgPath); // cleanup temp file
-            }
-            else
-            {
-                Logger.LogMessage($"ERROR: Failed to write {safeName} to Image.", LogSeverity.Error);
-            }
+            }            
 
             return saveResponse;
         }

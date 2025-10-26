@@ -23,7 +23,7 @@ namespace VDRIVE.Floppy
                 }
                 catch (Exception ex)
                 {
-                    this.Logger.LogMessage("Download failed: " + ex.Message);
+                    this.Logger.LogMessage("Download failed: " + ex.Message, VDRIVE_Contracts.Enums.LogSeverity.Error);
                     return null;
                 }
             }

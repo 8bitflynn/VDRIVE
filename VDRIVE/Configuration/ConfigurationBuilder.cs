@@ -133,7 +133,7 @@ namespace VDRIVE.Configuration
 
                 case "CommodoreSoftware":
                     if (configuration.FloppyResolverSettings.CommodoreSoftware == null ||
-                        string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.CommodoreSoftware.SearchPath))
+                        string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.CommodoreSoftware.BaseURL))
                     {
                         this.Logger.LogMessage("CommodoreSoftware resolver settings are incomplete");
                         return false;
@@ -158,8 +158,8 @@ namespace VDRIVE.Configuration
             }
 
             this.Logger.LogMessage("VDRIVE Configuration:");
-            this.Logger.LogMessage($"  FloppyResolver: {configuration.FloppyResolver}");
             this.Logger.LogMessage($"  StorageAdapter: {configuration.StorageAdapter}");
+            this.Logger.LogMessage($"  FloppyResolver: {configuration.FloppyResolver}");           
             this.Logger.LogMessage($"  TempPath: {configuration.TempPath}");
             this.Logger.LogMessage($"  TempFolder: {configuration.TempFolder}");
             this.Logger.LogMessage($"  ServerOrClientMode: {configuration.ServerOrClientMode}");
@@ -210,7 +210,7 @@ namespace VDRIVE.Configuration
                 }
                 if (configuration.FloppyResolver == "CommodoreSoftware" && configuration.FloppyResolverSettings.CommodoreSoftware != null)
                 {
-                    this.Logger.LogMessage($"    CommodoreSoftware SearchPath: {configuration.FloppyResolverSettings.CommodoreSoftware.SearchPath}");
+                    this.Logger.LogMessage($"    CommodoreSoftware BaseURL: {configuration.FloppyResolverSettings.CommodoreSoftware.BaseURL}");
                     this.Logger.LogMessage($"    CommodoreSoftware MediaExtensionsAllowed: {string.Join(',', configuration.FloppyResolverSettings.CommodoreSoftware.MediaExtensionsAllowed)}");
                     this.Logger.LogMessage($"    CommodoreSoftware IgnoredSearchKeywords: {string.Join(',', configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords)}");
                 }

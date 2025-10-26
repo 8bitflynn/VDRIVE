@@ -65,37 +65,7 @@ namespace VDRIVE.Floppy
         {
             this.FloppyInfos.Clear();
             this.FloppyPointers.Clear();
-        }
-
-        protected void ExtractSearchInfo(SearchFloppiesRequest searchFloppiesRequest, string mediaExtensionAllowed, out string searchTerm, out string mediaTypeCSV, out string[] mediaTypes)
-        {
-            if (searchFloppiesRequest.SearchTermLength != 0)
-            {
-                searchTerm = new string(searchFloppiesRequest.SearchTerm.TakeWhile(c => c != '\0').ToArray());
-            }
-            else
-            {
-                searchTerm = string.Empty;
-            }
-
-            if (searchFloppiesRequest.MediaTypeLength != 0)
-            {
-                mediaTypeCSV = new string(searchFloppiesRequest.MediaType.TakeWhile(c => c != '\0').ToArray()).TrimEnd();                
-            }
-            else
-            {
-                mediaTypeCSV = mediaExtensionAllowed;
-            }
-
-            if (!string.IsNullOrWhiteSpace(mediaTypeCSV))
-            {
-                mediaTypes = mediaTypeCSV.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            }
-            else
-            {
-                mediaTypes = mediaExtensionAllowed.Split(',');
-            }
-        }
+        }      
 
         protected string ResolvePrimaryDisk(IEnumerable<string> extractFullFilePaths)
         {

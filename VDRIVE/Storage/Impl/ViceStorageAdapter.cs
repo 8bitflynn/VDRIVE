@@ -11,8 +11,8 @@ namespace VDRIVE.Storage.Impl
     {
         public ViceStorageAdapter(IConfiguration configuration, ILogger logger)
         {
-            Configuration = configuration;
-            Logger = logger;
+            this.Configuration = configuration;
+            this.Logger = logger;
         }
 
         SaveResponse IStorageAdapter.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
@@ -47,10 +47,14 @@ namespace VDRIVE.Storage.Impl
 
             using (var proc = Process.Start(psi))
             {
-                string c1541Out = proc.StandardOutput.ReadToEnd();
-                // Writing file -- use this for success check
+                string output = proc.StandardOutput.ReadToEnd();
+                string error = proc.StandardError.ReadToEnd();
                 proc.WaitForExit();
-                Logger.LogMessage(c1541Out.Trim());
+                if (!string.IsNullOrWhiteSpace(output))
+                    Logger.LogMessage(output.Trim());
+                if (!string.IsNullOrWhiteSpace(error))
+                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
+                proc.WaitForExit();
             }
 
             bool success = File.Exists(tempPrgPath);
@@ -59,11 +63,7 @@ namespace VDRIVE.Storage.Impl
                 // TODO: parse errors and return if needed
                 Logger.LogMessage($"File written to Image: {safeName}");
                 File.Delete(tempPrgPath); // cleanup temp file
-            }
-            else
-            {
-                Logger.LogMessage($"ERROR: Failed to write {safeName} to Image.");
-            }
+            }          
 
             return saveResponse;
         }
@@ -122,7 +122,7 @@ namespace VDRIVE.Storage.Impl
             }
             catch (Exception exception)
             {
-                Logger.LogMessage(@"ERROR: " + exception.Message, LogSeverity.Error);
+                Logger.LogMessage(exception.Message, LogSeverity.Error);
 
                 payload = null;
                 return BuildLoadResponse(loadRequest, payload, 0x04); // file not found 
@@ -156,12 +156,15 @@ namespace VDRIVE.Storage.Impl
 
             using (var proc = Process.Start(psi))
             {
-                string c1541Out = proc.StandardOutput.ReadToEnd();
+                string output = proc.StandardOutput.ReadToEnd();
                 string error = proc.StandardError.ReadToEnd();
                 proc.WaitForExit();
-                Logger.LogMessage(c1541Out.Trim());
+                if (!string.IsNullOrWhiteSpace(output))
+                    Logger.LogMessage(output.Trim());
+                if (!string.IsNullOrWhiteSpace(error))
+                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
 
-                if (!c1541Out.ToLower().Contains("reading file"))
+                if (!output.ToLower().Contains("reading file"))
                 {
                     // TODO: map real codes from c1541.exe as they appear to be different?
                     responseCode = 0x04; // file not found

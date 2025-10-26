@@ -17,7 +17,7 @@ namespace VDRIVE.Floppy.Impl
         {
             FloppyInfo floppyInfo = base.InsertFloppy(floppyIdentifier);
 
-            if (floppyInfo.Equals(default(FloppyInfo)))
+            if (floppyInfo.Equals(default))
             {
                 return floppyInfo;
             }
@@ -120,9 +120,10 @@ namespace VDRIVE.Floppy.Impl
                 }
                 else
                 {
-                    Logger.LogMessage(@"Failed to search {searchTerm}: " + httpResponseMessage.StatusCode);
+                    Logger.LogMessage($"Failed to search {searchTerm}: " + httpResponseMessage.StatusCode, VDRIVE_Contracts.Enums.LogSeverity.Error);
                 }
             }
+
             foundFloppyInfos = null;
             return default;
         }
@@ -198,7 +199,7 @@ namespace VDRIVE.Floppy.Impl
 
         private string BuildFullCommodoreSoftwarePath(string relativePath)
         {
-            return "https://commodore.software" + relativePath;
+            return this.Configuration.FloppyResolverSettings.CommodoreSoftware.BaseURL + relativePath;
         }
     }
 }

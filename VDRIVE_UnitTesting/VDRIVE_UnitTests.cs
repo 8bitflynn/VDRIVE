@@ -23,10 +23,10 @@ namespace VDRIVE_UnitTesting
                 return;
             }
 
-            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver("Local", configuration, logger);
+            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
 
             SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest();
-            searchFloppyRequest.SearchTerm = "data6".ToArray();
+            searchFloppyRequest.SearchTerm = "assblas".ToArray();
             searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
 
             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo);
@@ -35,10 +35,10 @@ namespace VDRIVE_UnitTesting
 
             LoadRequest loadRequest = new LoadRequest();
             loadRequest.Operation = 1;
-            loadRequest.FileName = "t6".ToArray();
+            loadRequest.FileName = "*".ToArray();
             loadRequest.FileNameLength = (byte)loadRequest.FileName.Length;
 
-            IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter("Vice", configuration, logger);
+            IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(configuration.StorageAdapter, configuration, logger);
             LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload);
         }
     }
