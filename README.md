@@ -35,6 +35,13 @@ VDRIVE supports modular `StorageAdapters` to handle all `LOAD`, `SAVE`, and dire
 
 Adapters can be swapped or extended to support additional workflows, ensuring compatibility across platforms and tooling preferences.
 
+## VDRIVE FloppyResolvers
+
+VDRIVE supports modular `StorageAdapters` to handle all `LOAD`, `SAVE`, and directory operations. These adapters interface with:
+
+- [`c1541.exe`](https://vice-emu.sourceforge.io/) from **VICE** — a command-line utility for manipulating Commodore disk images.
+- [`cbmdisk.pyd`](https://style64.org/cbmdisk) from **[DirMaster](https://style64.org/dirmaster)** — a Python wrapper for advanced disk image access and manipulation.
+
 ---
 
 ### Notes
@@ -95,7 +102,6 @@ SYS 49161   : Mount a different floppy from previous search
 - Enter a number to mount a disk from the results.  
 - You can switch between previously found floppies using their sequence number.  
 - Use `LOAD` and `SAVE` as usual — now routed through VDRIVE.
-
 
 ---
 
