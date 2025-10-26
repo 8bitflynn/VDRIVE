@@ -146,10 +146,10 @@ iload_handler
 
 vdrive_load
 
-        lda dest_ptr_lo
-        sta dest_ptr_lo_save
-        lda dest_ptr_hi
-        sta dest_ptr_hi_save
+       ; lda dest_ptr_lo
+;        sta dest_ptr_lo_save
+;        lda dest_ptr_hi
+;        sta dest_ptr_hi_save
 
         ; fixup to turn off sprites
         ; or anything needed to keep
@@ -168,18 +168,18 @@ vdrive_load
         lda #$00
         sta $93 ; 0=loading and 1=verifying msg
         lda #$ff ; ff = success
-        sta vdrive_retcode 
-
-        ; show loading
-        jsr $f5d2
-
-        lda $07e7
-        sta spinner_char_save 
+        sta vdrive_retcode             
 
         jsr recv_load_response
         ; a has lvdrive_retcode
         cmp #$ff
         bne return_init
+
+        lda $07e7
+        sta spinner_char_save 
+
+         ; show loading
+        jsr $f5d2
 
 recv_payload
         ; bitbanger/vdisk receiver entry
@@ -198,9 +198,11 @@ return_init
         lda vdrive_retcode ; holds any error or break message
         cmp #$ff
         beq return_success
+
+        ; return error
         sec  
-        ldx dest_ptr_lo_save ; registers hold start address
-        ldy dest_ptr_hi_save
+        ldx #$02
+        ldy #$00
         jmp exit
 
 return_success
