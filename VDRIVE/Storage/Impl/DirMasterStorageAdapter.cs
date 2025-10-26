@@ -23,7 +23,7 @@ namespace VDRIVE.Drive.Impl
 
                 if (filename.StartsWith("$")) // TODO: implement wildcards / filtering
                 {
-                    payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo(), floppyResolver.GetInsertedFloppyPointer());
+                    payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo(), floppyResolver.GetInsertedFloppyPointer(), out responseCode);
                 }
                 else if (filename.StartsWith("*"))
                 {
@@ -126,7 +126,7 @@ namespace VDRIVE.Drive.Impl
             }
         }
 
-        protected byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer)
+        protected byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
             string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
             string dirPrgPath = Path.Combine(fullPath, "dir.prg");
@@ -148,12 +148,14 @@ namespace VDRIVE.Drive.Impl
             byte[] dirPrgBytes = BuildDirectoryPrg(rawLines);
             File.WriteAllBytes(dirPrgPath, dirPrgBytes);
 
-            if (dirPrgBytes != null && dirPrgBytes.Length > 0)
+            if (dirPrgBytes != null && dirPrgBytes.Length > 0 && rawLines.Length > 0)
             {
                 Logger.LogMessage($"$ created successfully: {dirPrgPath}");
+                responseCode = 0xff;
                 return dirPrgBytes;
             }
 
+            responseCode = 0x04; // file not found
             return null;
         }
 
