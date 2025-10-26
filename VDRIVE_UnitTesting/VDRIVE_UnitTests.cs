@@ -11,7 +11,7 @@ namespace VDRIVE_UnitTesting
     public class VDRIVE_UnitTests
     {
         [TestMethod]
-        public void TestSearchLoad()
+        public void TestSearch_Load()
         {
             ILogger logger = new VDRIVE.Util.ConsoleLogger();
 
@@ -22,24 +22,28 @@ namespace VDRIVE_UnitTesting
             {
                 return;
             }
-
-            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
-
-            SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest();
-            searchFloppyRequest.SearchTerm = "assblas".ToArray();
+            
+            SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest(); // input from C64
+            searchFloppyRequest.SearchTerm = "data4".ToArray();
             searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
 
-            SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo);
+            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
+            SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo); // output to C64
 
-            floppyResolver.InsertFloppy(floppyInfo[0]);
 
-            LoadRequest loadRequest = new LoadRequest();
+            FloppyIdentifier floppyIdentifier = new FloppyIdentifier(); // input from C64 (user selected ID)
+            floppyIdentifier.IdLo = floppyInfo[0].IdLo;
+            floppyIdentifier.IdHi = floppyInfo[0].IdHi;
+
+            FloppyInfo insertedFloppy = floppyResolver.InsertFloppy(floppyIdentifier); // can insert floppy with full FloppyInfo too
+
+            LoadRequest loadRequest = new LoadRequest(); // input from C64
             loadRequest.Operation = 1;
-            loadRequest.FileName = "*".ToArray();
+            loadRequest.FileName = "8bitintro".ToArray();
             loadRequest.FileNameLength = (byte)loadRequest.FileName.Length;
 
             IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(configuration.StorageAdapter, configuration, logger);
-            LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload);
-        }
+            LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload); // output to C64
+        }       
     }
 }

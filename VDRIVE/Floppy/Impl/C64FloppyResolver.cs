@@ -33,13 +33,8 @@ namespace VDRIVE.Floppy.Impl
                     IEnumerable<string> extractedFilePaths = this.DecompressArchive(zippedFile);
                     string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths);
 
-                    FloppyInfo tempFloppyInfo = InsertedFloppyInfo;
-                    tempFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
-                    InsertedFloppyInfo = tempFloppyInfo; // update to extracted file name
-
-                    FloppyPointer tempFloppyPointer = InsertedFloppyPointer;
-                    tempFloppyPointer.ImagePath = fullFilePath;
-                    InsertedFloppyPointer = tempFloppyPointer; // update to extracted file path         
+                    this.InsertedFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
+                    this.InsertedFloppyPointer.ImagePath = fullFilePath; // update to disk image extracted file path       
                 }
             }
             catch (Exception exception)

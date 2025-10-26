@@ -69,7 +69,7 @@ namespace VDRIVE.Floppy
 
         protected string ResolvePrimaryDisk(IEnumerable<string> extractFullFilePaths)
         {
-            if (InsertedFloppyPointer.Equals(default(FloppyInfo)))
+            if (InsertedFloppyPointer.Equals(default))
                 return null;
 
             var allowedExtensions = Configuration
