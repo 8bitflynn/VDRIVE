@@ -74,6 +74,7 @@ From your Commodore 64:
 
 ```
 LOAD "UP9600.prg",8,1
+NEW
 LOAD "setupwifi.prg",8
 RUN
 ```
@@ -84,9 +85,11 @@ Then:
 
 ```
 LOAD "UP9600.prg",8,1  : not needed if loaded already above
+NEW
 LOAD "vdrive.prg",8,1
+NEW
 SYS 49152   : Enable VDRIVE  
-SYS 49155   : Disable VDRIVE  
+SYS 49155   : Disable VDRIVE (as needed) 
 SYS 49158   : Search for disk images  
 SYS 49161   : Mount a different floppy from previous search
 ```
