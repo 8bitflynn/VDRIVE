@@ -1,7 +1,7 @@
 ; memory map
-; $c000 - jmp table
-; $c380 - up9600 bitbanger/vdrive
-; $c5e4 - vars and constants (counts down from $c5ff)
+; $c000-$c380 - jmp table
+; $c400-$c5d8 - up9600 bitbanger/vdrive
+; $c5ff-$c5e4 - vars and constants (counts down from $c5ff)
 ; $c600 - rs232 input buffer
 ; $c700 - rs232 output buffer 
 ; $c800 - up9600
@@ -146,6 +146,11 @@ iload_handler
 
 vdrive_load
 
+        lda dest_ptr_lo
+        sta dest_ptr_lo_save
+        lda dest_ptr_hi
+        sta dest_ptr_hi_save
+
         ; fixup to turn off sprites
         ; or anything needed to keep
         ; up9600 timing stable
@@ -193,14 +198,17 @@ return_init
         lda vdrive_retcode ; holds any error or break message
         cmp #$ff
         beq return_success
-        sec
+        sec  
+        ldx dest_ptr_lo_save ; registers hold start address
+        ldy dest_ptr_hi_save
         jmp exit
 
 return_success
         clc
-exit
         ldx dest_ptr_lo ; registers hold end address
         ldy dest_ptr_hi
+exit
+        lda vdrive_retcode
         rts
 
 send_load_request
@@ -410,8 +418,7 @@ search_return_init
         jsr vdrive_mount_floppy
 exit_search
         jsr disable_up9600 
-        jsr restore_up9600_timing_issue_state   
-
+        jsr restore_up9600_timing_issue_state 
         rts
 
 get_user_input
@@ -504,10 +511,8 @@ vdrive_mount_floppy
 mount_floppy_exit
 
         jsr disable_up9600 
-        jsr restore_up9600_timing_issue_state   
-
+        jsr restore_up9600_timing_issue_state  
         rts
-
 
 parse_floppy_id
 
@@ -618,7 +623,7 @@ done_print
  
 
 ; bitbanger/vdisk chunked transfer
-*= $c380
+*= $c400
 
 recv_data  
 
