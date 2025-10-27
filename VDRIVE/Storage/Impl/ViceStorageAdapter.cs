@@ -42,6 +42,7 @@ namespace VDRIVE.Storage.Impl
                 Arguments = $"\"{floppyResolver.GetInsertedFloppyPointer().ImagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 CreateNoWindow = true
             };
 
