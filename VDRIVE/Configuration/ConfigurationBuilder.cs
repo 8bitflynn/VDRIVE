@@ -181,7 +181,7 @@ namespace VDRIVE.Configuration
             this.Logger.LogMessage($"  ChunkSize: {configuration.ChunkSize}");
             this.Logger.LogMessage($"  MaxSearchResults: {configuration.MaxSearchResults}");
 
-            // Drive settings
+            // Storage adapter settings
             if (configuration.StorageAdapterSettings != null)
             {
                 this.Logger.LogMessage("  StorageAdapterSettings:");
@@ -195,6 +195,7 @@ namespace VDRIVE.Configuration
                 {
                     this.Logger.LogMessage($"    Vice ExecutablePath: {configuration.StorageAdapterSettings.Vice.ExecutablePath}");
                     this.Logger.LogMessage($"    Vice Version: {configuration.StorageAdapterSettings.Vice.Version}");
+                    this.Logger.LogMessage($"    Vice ForceDeleteFirst: {configuration.StorageAdapterSettings.Vice.ForceDeleteFirst}"); 
                 }               
             }
 

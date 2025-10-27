@@ -4,6 +4,8 @@
     {
         public string ExecutablePath { get; set; }
         public string Version { get; set; }
+        public bool ForceDeleteFirst { get; set; }
+
     }
 
 }

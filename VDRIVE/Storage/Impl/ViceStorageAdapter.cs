@@ -35,11 +35,24 @@ namespace VDRIVE.Storage.Impl
             File.WriteAllBytes(tempPrgPath, destPtrFileData);
 
             string fileSpec = $"@8:{safeName}";
+            string imagePath = floppyResolver.GetInsertedFloppyPointer().ImagePath;
+
+            bool isVice3 = Configuration.StorageAdapterSettings.Vice.Version.StartsWith("3.");
+            bool forceDeleteFirst = Configuration.StorageAdapterSettings.Vice.ForceDeleteFirst;
+
+            string arguments = $"\"{imagePath}\"";
+
+            if (isVice3 && forceDeleteFirst)
+            {
+                arguments += $" -delete \"{fileSpec}\"";
+            }
+
+            arguments += $" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit";
 
             var psi = new ProcessStartInfo
             {
                 FileName = Configuration.StorageAdapterSettings.Vice.ExecutablePath,
-                Arguments = $"\"{floppyResolver.GetInsertedFloppyPointer().ImagePath}\" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit",
+                Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -55,16 +68,14 @@ namespace VDRIVE.Storage.Impl
                     Logger.LogMessage(output.Trim());
                 if (!string.IsNullOrWhiteSpace(error))
                     Logger.LogMessage(error.Trim(), LogSeverity.Error);
-                proc.WaitForExit();
             }
 
             bool success = File.Exists(tempPrgPath);
             if (success)
             {
-                // TODO: parse errors and return if needed
                 Logger.LogMessage($"File written to Image: {safeName}");
                 File.Delete(tempPrgPath); // cleanup temp file
-            }          
+            }
 
             return saveResponse;
         }
