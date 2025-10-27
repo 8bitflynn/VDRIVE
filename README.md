@@ -24,7 +24,9 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
   The firmware can be reused in other projects needing TCP-to-Serial bridging. This design makes the hardware "invisible" to the C64 and other connected devices. Thanks to this abstraction, partial VDRIVE functionality works in VICE 3.9 via its RS232-to-IP bridge.
 
 - **ESP8266 / C64 BREAKOUT BOARD / DIY**  
-  These devices can be built using an ESP8266 chip and a Commodore 64 userport breakout board. I plan to providing build instructions when I get a chance, though similar guides already exist. There are also pre-built units from Retro Vendors or on eBay. 
+  These devices can be built using an ESP8266 chip and a Commodore 64 userport breakout board. I plan to providing build instructions when I get a chance, though similar guides already exist. There are also pre-built units from Retro Vendors or on eBay.
+
+---
 
 ## VDRIVE StorageAdapters
 
@@ -35,12 +37,18 @@ VDRIVE supports modular `StorageAdapters` to handle all `LOAD`, `SAVE`, and dire
 
 Adapters can be swapped or extended to support additional workflows, ensuring compatibility across platforms and tooling preferences.
 
+---
+
 ## VDRIVE FloppyResolvers
 
-VDRIVE supports modular `StorageAdapters` to handle all `LOAD`, `SAVE`, and directory operations. These adapters interface with:
+VDRIVE's `FloppyResolver` system abstracts disk image discovery across **local paths** and **remote archives**, without directly manipulating disk contents. Instead, it delegates search execution to the host OS, which returns candidate results for mounting.
 
-- [`c1541.exe`](https://vice-emu.sourceforge.io/) from **VICE** — a command-line utility for manipulating Commodore disk images.
-- [`cbmdisk.pyd`](https://style64.org/cbmdisk) from **[DirMaster](https://style64.org/dirmaster)** — a Python wrapper for advanced disk image access and manipulation.
+Resolvers support:
+
+- **Local Search** — the host OS scans user-defined directories for matching `.D64`, `.T64`, `.PRG`, and other CBM-compatible files.
+- **Remote Search** — the host OS queries curated online archives such as [Commodore.Software](https://commodore.software/) and returns matching entries based on filename, metadata, or contextual hints.
+
+Users search for disks using floppy resolvers and all search reseults return a **sequence number** and a description or filename that can be selected to mount. 
 
 ---
 
