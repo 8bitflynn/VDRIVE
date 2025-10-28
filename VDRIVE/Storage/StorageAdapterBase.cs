@@ -1,5 +1,9 @@
-﻿using VDRIVE_Contracts.Interfaces;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using VDRIVE_Contracts.Enums;
+using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace VDRIVE.Drive
 {
@@ -167,5 +171,67 @@ namespace VDRIVE.Drive
             return loadResponse;
         }
 
+        private static readonly ConcurrentDictionary<string, ReaderWriterLockSlim> ImageLocks = new();
+
+        protected virtual RunProcessResult RunProcessWithLock(RunProcessParameters runProcessParameters, bool isWrite)
+        {
+            if (runProcessParameters == null || string.IsNullOrWhiteSpace(runProcessParameters.ImagePath))
+            {
+                return null;
+            }
+
+            Logger.LogMessage($"{(isWrite ? "Write" : "Read")} lock acquired for {runProcessParameters.ImagePath}");
+
+            var lockSlim = GetImageLock(runProcessParameters.ImagePath);
+
+            if (isWrite)
+                lockSlim.EnterWriteLock();
+            else
+                lockSlim.EnterReadLock();
+
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = runProcessParameters.ExecutablePath,
+                    Arguments = runProcessParameters.Arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using (Process process = Process.Start(psi))
+                {
+                    RunProcessResult runProcessResult = new RunProcessResult
+                    {
+                        Output = process.StandardOutput.ReadToEnd(),
+                        Error = process.StandardError.ReadToEnd()
+                    };
+                    process.WaitForExit();
+
+                    if (!string.IsNullOrWhiteSpace(runProcessResult.Output))
+                        Logger.LogMessage(runProcessResult.Output.Trim());
+                    if (!string.IsNullOrWhiteSpace(runProcessResult.Error))
+                        Logger.LogMessage(runProcessResult.Error.Trim(), LogSeverity.Error);
+
+                    return runProcessResult;
+                }
+            }
+            finally
+            {
+                if (isWrite)
+                    lockSlim.ExitWriteLock();
+                else
+                    lockSlim.ExitReadLock();
+
+                Logger.LogMessage($"{(isWrite ? "Write" : "Read")} lock release for {runProcessParameters.ImagePath}");
+            }
+        }
+
+        private ReaderWriterLockSlim GetImageLock(string imagePath)
+        {            
+            return ImageLocks.GetOrAdd(imagePath, _ => new ReaderWriterLockSlim());
+        }
     }
 }

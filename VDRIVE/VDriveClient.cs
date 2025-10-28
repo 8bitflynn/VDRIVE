@@ -5,7 +5,7 @@ using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class VDriveClient : VDriveBase, IVDriveClient
+    public class VDriveClient : IVDriveClient
     {
         public VDriveClient(string ipAddress, int port, IConfiguration configuration, ILogger logger)
         {
@@ -16,6 +16,9 @@ namespace VDRIVE
         }
         private readonly string IPAddress;
         private readonly int Port;
+        protected IConfiguration Configuration;
+        protected ILogger Logger;
+
 
         public void Start()
         {
@@ -30,12 +33,13 @@ namespace VDRIVE
                 NetworkStream networkStream = tcpClient.GetStream();
 
                 // instance dependencies
+                IProtocolHandler protocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
                 IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
                 IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {
-                    this.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
+                    protocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
                 }
             }
         }

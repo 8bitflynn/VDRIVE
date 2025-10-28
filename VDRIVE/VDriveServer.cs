@@ -7,7 +7,7 @@ using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class VDriveServer : VDriveBase, IVDriveServer
+    public class VDriveServer : IVDriveServer
     {
         public VDriveServer(IConfiguration configuation, ILogger logger)
         {
@@ -31,6 +31,9 @@ namespace VDRIVE
         }
         private readonly IPAddress ListenAddress;
         private readonly int Port;
+        protected IConfiguration Configuration;
+        protected ILogger Logger;
+
 
         public void Start()
         {
@@ -44,11 +47,12 @@ namespace VDRIVE
                 TcpClient tcpClient = listener.AcceptTcpClient(); // blocking
                 tcpClient.NoDelay = true;              
 
-                Task.Run(() =>
+                Task.Run(() => 
                 {
                     // instance dependencies per client for concurrency
+                    IProtocolHandler potocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
                     IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
-                    IStorageAdapter vdrive = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, this.Configuration, this.Logger);
+                    IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, this.Configuration, this.Logger);                  
 
                     string ip = tcpClient.Client.RemoteEndPoint.ToString();
                     this.Logger.LogMessage($"Client connected: {ip}");
@@ -58,7 +62,7 @@ namespace VDRIVE
                     {
                         while (tcpClient.Connected)
                         {
-                            this.HandleClient(tcpClient, networkStream, floppyResolver, vdrive);
+                            potocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
                         }
                     }
                 });

@@ -25,7 +25,7 @@ namespace VDRIVE.Drive.Impl
                 {
                     payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo(), floppyResolver.GetInsertedFloppyPointer(), out responseCode);
                 }
-                else if (filename.StartsWith("*"))
+                else if (filename.StartsWith("*") || filename.StartsWith(":*")) // SX64 Commodore->Run Stop Combo
                 {
                     // hack to allow loading of PRG files directly for now 
                     // by just mounting the PRG and loading with "*"
@@ -34,12 +34,12 @@ namespace VDRIVE.Drive.Impl
                     FloppyPointer floppyPointer = floppyResolver.GetInsertedFloppyPointer();
                     if (!floppyPointer.Equals(default(FloppyPointer)) && floppyPointer.ImagePath.ToLower().EndsWith(".prg"))
                     {
-                        payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath);
+                        payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath); // load PRG
                     }
                     else
                     {
                         string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer());
-                        string lineWithFirstFile = rawLines[1];
+                        string lineWithFirstFile = rawLines[1]; // get first file
 
                         // Match anything inside double quotes, including spaces
                         Match match = Regex.Match(lineWithFirstFile, "\"([^\"]*)\"");

@@ -16,10 +16,7 @@ namespace VDRIVE.Storage.Impl
         }
 
         SaveResponse IStorageAdapter.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
-        {
-            SaveResponse saveResponse = new SaveResponse();
-            saveResponse.ResponseCode = 0xff;
-
+        {         
             byte[] destPtrFileData = new byte[payload.Length + 2];
             destPtrFileData[0] = saveRequest.TargetAddressLo;
             destPtrFileData[1] = saveRequest.TargetAddressHi;
@@ -44,38 +41,32 @@ namespace VDRIVE.Storage.Impl
 
             if (isVice3 && forceDeleteFirst)
             {
-                arguments += $" -delete \"{fileSpec}\"";
+                arguments += $" -delete \"{fileSpec}\""; // 2.4 behavior
             }
-
             arguments += $" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit";
 
-            var psi = new ProcessStartInfo
-            {
-                FileName = Configuration.StorageAdapterSettings.Vice.ExecutablePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+            RunProcessParameters runProcessParameters = new RunProcessParameters();
+            runProcessParameters.ImagePath = imagePath;
+            runProcessParameters.Arguments = arguments;
+            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
 
-            using (var proc = Process.Start(psi))
+            RunProcessResult runProcessResult = this.RunProcessWithLock(runProcessParameters, isWrite: true);
+           
+            SaveResponse saveResponse = new SaveResponse();
+            if (!runProcessResult.HasError)
             {
-                string output = proc.StandardOutput.ReadToEnd();
-                string error = proc.StandardError.ReadToEnd();
-                proc.WaitForExit();
-                if (!string.IsNullOrWhiteSpace(output))
-                    Logger.LogMessage(output.Trim());
-                if (!string.IsNullOrWhiteSpace(error))
-                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
+                saveResponse.ResponseCode = (byte)0xff;
+                Logger.LogMessage($"File written to Image: {safeName}");                
+            }
+            else
+            {
+                saveResponse.ResponseCode = (byte)0x04;
             }
 
-            bool success = File.Exists(tempPrgPath);
-            if (success)
+            if (File.Exists(tempPrgPath))
             {
-                Logger.LogMessage($"File written to Image: {safeName}");
                 File.Delete(tempPrgPath); // cleanup temp file
-            }
+            }         
 
             return saveResponse;
         }
@@ -91,7 +82,7 @@ namespace VDRIVE.Storage.Impl
                 {
                     payload = LoadDirectory(loadRequest, floppyResolver.GetInsertedFloppyInfo(), floppyResolver.GetInsertedFloppyPointer(), out responseCode);
                 }
-                else if (filename.StartsWith("*"))
+                else if (filename.StartsWith("*") || filename.StartsWith(":*")) // SX64 Commodore->Run Stop Combo
                 {
                     // hack to allow loading of PRG files directly for now 
                     // by just mounting the PRG and loading with "*"
@@ -143,6 +134,13 @@ namespace VDRIVE.Storage.Impl
 
         private byte[] LoadFile(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
+            if (floppyInfo.Equals(default) || floppyPointer.Equals(default)
+                || string.IsNullOrWhiteSpace(floppyPointer.ImagePath))
+            {
+                responseCode = 0x04; // file not found
+                return null;
+            }
+
             string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
             if (!Directory.Exists(fullPath)) ;
             Directory.CreateDirectory(fullPath);
@@ -154,35 +152,21 @@ namespace VDRIVE.Storage.Impl
                 File.Delete(outPrgPath);
 
             string fileSpec = $"@8:{safeName}";
+            string arguments = $"\"{new string(floppyPointer.ImagePath)}\" -read \"{fileSpec}\" \"{outPrgPath}\" -quit";
 
-            // execute c1541 to extract the file
-            var psi = new ProcessStartInfo
+            RunProcessParameters runProcessParameters = new RunProcessParameters();
+            runProcessParameters.ImagePath = floppyPointer.ImagePath;
+            runProcessParameters.Arguments = arguments;
+            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+
+            RunProcessResult runProcessResult = this.RunProcessWithLock(runProcessParameters, isWrite: false);
+
+            if (!runProcessResult.Output.ToLower().Contains("reading file"))
             {
-                FileName = Configuration.StorageAdapterSettings.Vice.ExecutablePath,
-                Arguments = $"\"{new string(floppyPointer.ImagePath)}\" -read \"{fileSpec}\" \"{outPrgPath}\" -quit",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using (var proc = Process.Start(psi))
-            {
-                string output = proc.StandardOutput.ReadToEnd();
-                string error = proc.StandardError.ReadToEnd();
-                proc.WaitForExit();
-                if (!string.IsNullOrWhiteSpace(output))
-                    Logger.LogMessage(output.Trim());
-                if (!string.IsNullOrWhiteSpace(error))
-                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
-
-                if (!output.ToLower().Contains("reading file"))
-                {
-                    // TODO: map real codes from c1541.exe as they appear to be different?
-                    responseCode = 0x04; // file not found
-                    return null;
-                }
-            }
+                // TODO: map real codes from c1541.exe as they appear to be different?
+                responseCode = 0x04; // file not found
+                return null;
+            }       
 
             if (File.Exists(outPrgPath))
             {
@@ -234,28 +218,18 @@ namespace VDRIVE.Storage.Impl
 
         private string[] LoadRawDirectoryLines(FloppyPointer floppyPointer)
         {
-            // call c1541 to get text directory listing
-            var psi = new ProcessStartInfo
-            {
-                FileName = Configuration.StorageAdapterSettings.Vice.ExecutablePath,
-                Arguments = $"\"{new string(floppyPointer.ImagePath)}\" -dir",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+            string arguments = $"\"{new string(floppyPointer.ImagePath)}\" -dir";
 
-            string[] rawLines;
-            using (var process = Process.Start(psi))
-            {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
+            RunProcessParameters runProcessParameters = new RunProcessParameters();
+            runProcessParameters.ImagePath = floppyPointer.ImagePath;
+            runProcessParameters.Arguments = arguments;
+            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
 
-                rawLines = output
-                    .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-            }
+            RunProcessResult runProcessResult = this.RunProcessWithLock(runProcessParameters, isWrite: false);
 
+            string[] rawLines = rawLines = runProcessResult.Output
+                  .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            
             if (this.Configuration.StorageAdapterSettings.Vice.Version.StartsWith("3.")) 
             {
                 // Vice39 c1541.exe just contains some extra info

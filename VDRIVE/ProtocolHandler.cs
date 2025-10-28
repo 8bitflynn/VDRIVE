@@ -1,18 +1,24 @@
 ﻿using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using VDRIVE.Util;
+using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE
 {
-    public abstract class VDriveBase
+    public class ProtocolHandler : IProtocolHandler
     {
-        protected IConfiguration Configuration;        
-        protected ILogger Logger;
+        public ProtocolHandler(IConfiguration configuration, ILogger logger)
+        {
+            this.Configuration = configuration;
+            this.Logger = logger;
+        }
+        private IConfiguration Configuration;
+        private ILogger Logger;
 
-        protected void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IStorageAdapter vdrive)
-        { 
+        public void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IStorageAdapter storageAdapter)
+        {
             byte[] sendBuffer = new byte[1];
             byte[] data = new byte[1];
             if (!networkStream.DataAvailable)
@@ -21,11 +27,14 @@ namespace VDRIVE
                 return;
             }
 
-            int offset = networkStream.Read(data, 0, data.Length);
-            if (offset == 1 && data[0] == 0x2b) // sync byte
+            bool success = this.ReadNetworkStream(networkStream, data, 0, 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+            if (success && data[0] == 0x2b) // sync byte
             {
                 // operation byte
-                offset = networkStream.Read(data, 0, data.Length);
+                success = this.ReadNetworkStream(networkStream, data, 0, 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+                if (!success)               
+                    return;
+                
                 switch (data[0])
                 {
                     case 0x01: // LOAD
@@ -35,10 +44,15 @@ namespace VDRIVE
                             byte[] buffer = new byte[size];
                             buffer[0] = data[0];
 
-                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+                            success = this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+                            if (!success)
+                                return;
 
                             LoadRequest loadRequest = BinaryStructConverter.FromByteArray<LoadRequest>(buffer);
-                            LoadResponse loadResponse = vdrive.Load(loadRequest, floppyResolver, out byte[] payload);
+
+                            this.Logger.LogMessage($"Load Request: LOAD\"{new string(loadRequest.FileName)}\",{loadRequest.DeviceNum}{(loadRequest.SecondaryAddr != 0 ? "," + loadRequest.SecondaryAddr : "")}");
+
+                            LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload);
 
                             if (payload != null)
                             {
@@ -46,7 +60,9 @@ namespace VDRIVE
                                 ushort dest_ptr = (ushort)(dest_ptr_bytes[0] | (dest_ptr_bytes[1] << 8));
                                 this.Logger.LogMessage($"Start Address: 0x{dest_ptr:X4}");
 
-                                // check for known instant C64 crash addreses                              
+                                // check for known instant C64 crash addreses
+                                // to help stabalize during testing
+                                int end_dest_ptr = dest_ptr + payload.Length;
 
                                 // TODO: for now returning a file not found
                                 // but need to investigate better handling later
@@ -60,10 +76,9 @@ namespace VDRIVE
                                     0xC000  // VDRIVE location
                                 };
 
-                                if (rejectedLoadAddresses.Any(r => r == dest_ptr))
+                                if (rejectedLoadAddresses.Any(r => r == dest_ptr)
+                                    || end_dest_ptr >= 0xc000)
                                 {
-                                    // still needs work but for now it prevents C64 from locking up / blocking
-                                    // might consider timeouts on C64 side...
                                     this.Logger.LogMessage($"Warning: known crash load address {dest_ptr}, rejecting load to prevent C64 lockup");
 
                                     // invalidate payload and set error code
@@ -74,9 +89,9 @@ namespace VDRIVE
                                 else
                                 {
                                     payload = payload.Skip(2).ToArray(); // skip destination pointer    
-                                    this.Logger.LogMessage($"End Address: 0x{dest_ptr + payload.Length:X4}");
+                                    this.Logger.LogMessage($"End Address: 0x{end_dest_ptr:X4}");
                                 }
-                            }                            
+                            }
 
                             this.SendData(tcpClient, networkStream, loadResponse, payload);
                         }
@@ -89,7 +104,9 @@ namespace VDRIVE
                             byte[] buffer = new byte[size];
                             buffer[0] = data[0];
 
-                            this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+                            success =  this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+                            if (!success)
+                                return;
 
                             SaveRequest saveRequest = BinaryStructConverter.FromByteArray<SaveRequest>(buffer);
 
@@ -98,8 +115,7 @@ namespace VDRIVE
                             // recv data
                             byte[] payload = this.ReceiveData(networkStream, saveRequest);
 
-                            // TODO send this back to C64
-                            SaveResponse saveResponse = vdrive.Save(saveRequest, floppyResolver, payload);
+                            SaveResponse saveResponse = storageAdapter.Save(saveRequest, floppyResolver, payload);
                         }
                         break;
 
@@ -112,7 +128,9 @@ namespace VDRIVE
                             this.ReadNetworkStream(networkStream, buffer, 0, size, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
 
                             FloppyIdentifier floppyIdentifier = BinaryStructConverter.FromByteArray<FloppyIdentifier>(buffer);
-                            FloppyInfo floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);                                                  
+                            FloppyInfo floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);
+
+                            // TODO: return response 
                         }
                         break;
 
@@ -150,7 +168,7 @@ namespace VDRIVE
                                 {
                                     byte[] serializedFoundFloppyInfo = BinaryStructConverter.ToByteArray<FloppyInfo>(foundFloppyInfo);
                                     payload.AddRange(serializedFoundFloppyInfo);
-                                }                                
+                                }
                             }
 
                             int lengthOfPayload = payload.Count;
@@ -166,8 +184,8 @@ namespace VDRIVE
                 networkStream.Flush();
             }
         }
-        
-        protected bool ReadNetworkStream(NetworkStream stream, byte[] buffer, int offset, int count, TimeSpan timeout)
+
+        private bool ReadNetworkStream(NetworkStream stream, byte[] buffer, int offset, int count, TimeSpan timeout)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int read = 0;
@@ -202,7 +220,7 @@ namespace VDRIVE
             return true;
         }
 
-        protected byte[] ReceiveData(NetworkStream networkStream, SaveRequest saveRequest)
+        private byte[] ReceiveData(NetworkStream networkStream, SaveRequest saveRequest)
         {
             int chunkSize = (saveRequest.ChunkSizeHi << 8) | saveRequest.ChunkSizeLo;
             int totalSize = (saveRequest.ByteCountHi << 16) | (saveRequest.ByteCountMid << 8) | saveRequest.ByteCountLo;
@@ -220,7 +238,7 @@ namespace VDRIVE
             {
                 if (receiveTimeoutStopWatch.Elapsed >= timeout)
                 {
-                    this.Logger.LogMessage("Timeout waiting for initial sync byte, aborting receive");
+                    this.Logger.LogMessage("Timeout waiting for initial sync byte, aborting receive", LogSeverity.Error);
                     throw new TimeoutException("Timed out waiting for sync byte");
                 }
 
@@ -244,7 +262,7 @@ namespace VDRIVE
                 bool ok = ReadNetworkStream(networkStream, buffer, received, toRead, timeout);
                 if (!ok)
                 {
-                    this.Logger.LogMessage($"Timeout or read error receiving chunk at offset {received}, aborting receive");
+                    this.Logger.LogMessage($"Timeout or read error receiving chunk at offset {received}, aborting receive", LogSeverity.Error);
                     throw new TimeoutException("Timed out while reading chunk data");
                 }
 
@@ -266,9 +284,9 @@ namespace VDRIVE
             }
 
             return buffer;
-        }       
+        }
 
-        protected void SendData<T>(TcpClient tcpClient, NetworkStream networkStream, T header, byte[] payload) where T : struct
+        private void SendData<T>(TcpClient tcpClient, NetworkStream networkStream, T header, byte[] payload) where T : struct
         {
             DateTime start = DateTime.Now;
 
@@ -281,7 +299,7 @@ namespace VDRIVE
             byte[] headerBytes = BinaryStructConverter.ToByteArray<T>(header);
             networkStream.Write(headerBytes, 0, headerBytes.Length);
 
-            if (payload == null) // file not found or similar
+            if (payload == null) // file not found or no payload (save response)
             {
                 return;
             }
@@ -303,7 +321,7 @@ namespace VDRIVE
             for (int chunkIndex = 0; chunkIndex < numOfChunks; chunkIndex++)
             {
                 List<byte> chunk = chunks[chunkIndex];
-                this.Logger.LogMessage($"{bytesSent}-{chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
+                this.Logger.LogMessage($"Sending {bytesSent}-{chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
 
                 try
                 {
@@ -335,7 +353,7 @@ namespace VDRIVE
 
                         case 0x03: // cancel sending
                             this.Logger.LogMessage("Send canceled");
-                            return; 
+                            return;
                     }
                 }
                 catch (TimeoutException)
