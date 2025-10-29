@@ -7,7 +7,7 @@
   
 - VDRIVE is designed with developers in mind — enabling real-time disk image sharing directly from your Commodore 64. VDRIVE allows programmers, graphic artists, and sourd designers to work seemlessly in the same environment without ever leaving the C64. Modern tools that save to any configured search paths for VDRIVE will be avaiable as soon as its saved to disk. Have that hard to bug on C64? Save it to disk on C64 and take a closer look with modern tools. Save that fix and then load it on the C64 to test. No SD card swaps, no copying. Just development.
 
-- VDRIVE is designed for safe concurrency, allowing multiple simultaneous LOAD and SAVE operations—even targeting the same disk image or file. Access is synchronized using read/write locks scoped to the full file path, ensuring consistency and preventing conflicts.
+- VDRIVE is designed for safe concurrency, enabling multiple C64's to LOAD and SAVE to the same disk image—even the same file—without corruption. File access is synchronized using read/write locks scoped to the full file path. While this ensures atomic operations and prevents data races, it follows a Last-Write-Wins model: the most recent SAVE will overwrite prior versions, regardless of their relative freshness. This tradeoff favors performance and simplicity over version enforcement.
 
 ## VDRIVE Signal
 
