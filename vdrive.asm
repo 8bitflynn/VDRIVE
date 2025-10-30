@@ -182,7 +182,7 @@ vdrive_load
         jsr $f5d2
 
 recv_payload
-        ; bitbanger/vdisk receiver entry
+        ; bitbanger/vdrive receiver entry
         jsr recv_data
 return_init
 
@@ -201,7 +201,7 @@ return_init
 
         ; return error
         sec  
-        ldx #$02
+        ldx #$02 ; Not sure this is correct 
         ldy #$00
         jmp exit
 
@@ -293,7 +293,9 @@ vdrive_save
         sta spinner_char_save
           
         ; send payload
-        jsr send_data
+        jsr send_data    
+
+        ;jsr recv_save_response
 
         lda spinner_char_save
         sta $07e7
@@ -303,10 +305,9 @@ vdrive_save
         
         ; restore state to original
         jsr restore_up9600_timing_issue_state
-
+        
         ; return success
-        clc
-
+        clc      
         rts
 
 setup_save_ptrs
@@ -386,6 +387,12 @@ filename_pad_loop_save
 no_padding_save
         rts
 
+recv_save_response     
+        jsr get_syncbyte
+        jsr recv_byte 
+        sta vdrive_retcode      
+        rts
+
 ; search entry
 vdrive_search_floppies 
         jsr clear_up9600_timing_issues 
@@ -424,7 +431,14 @@ exit_search
         rts
 
 get_user_input
+        lda #$0d        
+        jsr $ffd2       
+
+        lda #'>'        
+        jsr $ffd2      
+
         ldy #0
+        sty user_input_length
 readchar
         jsr $ffcf           ; chrin — waits for real input
         cmp #$0d            ; return?
@@ -624,7 +638,7 @@ done_print
 
  
 
-; bitbanger/vdisk chunked transfer
+; bitbanger/vdrive chunked transfer
 *= $c400
 
 recv_data  
@@ -953,7 +967,6 @@ rotate_index
 
 temp_search_term
         text ""
-
 
 
 

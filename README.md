@@ -7,7 +7,7 @@
   
 - VDRIVE is designed with developers in mind — enabling real-time disk image sharing directly from your Commodore 64. VDRIVE allows programmers, graphic artists, and sourd designers to work seemlessly in the same environment without ever leaving the C64. Modern tools that save to any configured search paths for VDRIVE will be avaiable as soon as its saved to disk. Have that hard to bug on C64? Save it to disk on C64 and take a closer look with modern tools. Save that fix and then load it on the C64 to test. No SD card swaps, no copying. Just development.
 
-- VDRIVE includes `IFloppyResolver` <a href="https://github.com/8bitflynn/VDRIVE/tree/master/VDRIVE/Floppy" target="_blank">implementation's</a> for searching and mounting both local disks and several remote repositories. For remote sources, I’ve been actively requesting permission from repository owners. If I don’t hear back, I treat access as equivalent to browsing their site from a modern machine — respectful, read-only, and non-invasive. That said, I fully respect the wishes of content owners: if any repository owner prefers their site not be included, I’ll remove it immediately.
+- VDRIVE is designed for safe concurrency, enabling multiple C64's to LOAD and SAVE to the same disk image—even the same file—without corruption. File access is synchronized using read/write locks scoped to the full file path. While this ensures atomic operations and prevents data races, it follows a Last-Write-Wins model: the most recent SAVE will overwrite prior versions, regardless of their relative freshness. This tradeoff favors performance and simplicity over version enforcement.
 
 ## VDRIVE Signal
 
@@ -16,8 +16,9 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 ## VDRIVE Hardware
 
 <div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
-<strong>Note:</strong> Looking into <a href="https://wic64.net/web/" target="_blank">WIC64</a> as a replacement for UP9600 / ESP8266 for better compatibility and performance! My understanding is that WIC64 is memory mapped to the C64 so it does not need serial communication and can potentially double the speed of VDRIVE! This also opens the door to possibly running VDRIVE from cartridge so that binaries could load anyplace in memory!
+<strong>Note:</strong> Exploring <a href="https://wic64.net/web/" target="_blank">WIC64</a> as a potential upgrade from UP9600 / ESP8266 for improved compatibility and performance. Since WIC64 is memory-mapped to the C64, it bypasses serial communication entirely—potentially doubling VDRIVE’s throughput. This also opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
 </div>
+
 
 <img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250" align="right"/>
 
