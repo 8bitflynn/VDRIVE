@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using VDRIVE.Drive;
 using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
@@ -7,10 +6,11 @@ using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Storage.Impl
 {
-    internal class ViceStorageAdapter : StorageAdapterBase, IStorageAdapter
+    public class ViceStorageAdapter : StorageAdapterBase, IStorageAdapter
     {
-        public ViceStorageAdapter(IConfiguration configuration, ILogger logger)
+        public ViceStorageAdapter(IProcessRunner processRunner, IConfiguration configuration, ILogger logger)
         {
+            this.ProcessRunner = processRunner;
             this.Configuration = configuration;
             this.Logger = logger;
         }
@@ -22,7 +22,7 @@ namespace VDRIVE.Storage.Impl
             destPtrFileData[1] = saveRequest.TargetAddressHi;
             payload.CopyTo(destPtrFileData, 2);
 
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
+            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
             if (!Directory.Exists(fullPath))
                 Directory.CreateDirectory(fullPath);
 
@@ -49,8 +49,9 @@ namespace VDRIVE.Storage.Impl
             runProcessParameters.ImagePath = imagePath;
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+            runProcessParameters.LockType = LockType.Write;
 
-            RunProcessResult runProcessResult = this.RunProcessWithLock(runProcessParameters, isWrite: true);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
            
             SaveResponse saveResponse = new SaveResponse();
             if (!runProcessResult.HasError)
@@ -141,12 +142,12 @@ namespace VDRIVE.Storage.Impl
                 return null;
             }
 
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
+            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
             if (!Directory.Exists(fullPath)) ;
-            Directory.CreateDirectory(fullPath);
+            Directory.CreateDirectory(fullPath);          
 
             string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
-            string outPrgPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, safeName).Trim();
+            string outPrgPath = Path.Combine(fullPath, safeName).Trim();
             outPrgPath = outPrgPath.Replace(@"/", "_");
             if (File.Exists(outPrgPath))
                 File.Delete(outPrgPath);
@@ -158,8 +159,9 @@ namespace VDRIVE.Storage.Impl
             runProcessParameters.ImagePath = floppyPointer.ImagePath;
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+            runProcessParameters.LockType = LockType.Read;
 
-            RunProcessResult runProcessResult = this.RunProcessWithLock(runProcessParameters, isWrite: false);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
 
             if (!runProcessResult.Output.ToLower().Contains("reading file"))
             {
@@ -184,7 +186,7 @@ namespace VDRIVE.Storage.Impl
 
         private byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
+            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
             string dirPrgPath = Path.Combine(fullPath, "dir.prg");
 
             // Ensure temp directory exists          
@@ -224,8 +226,9 @@ namespace VDRIVE.Storage.Impl
             runProcessParameters.ImagePath = floppyPointer.ImagePath;
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+            runProcessParameters.LockType = LockType.Read;
 
-            RunProcessResult runProcessResult = this.RunProcessWithLock(runProcessParameters, isWrite: false);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
 
             string[] rawLines = rawLines = runProcessResult.Output
                   .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
@@ -242,6 +245,6 @@ namespace VDRIVE.Storage.Impl
             }
 
             return rawLines;
-        }
+        }     
     }
 }

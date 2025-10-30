@@ -3,21 +3,22 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using VDRIVE.Drive;
 using VDRIVE.Floppy;
+using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
     public class VDriveServer : IVDriveServer
     {
-        public VDriveServer(IConfiguration configuation, ILogger logger)
+        public VDriveServer(IConfiguration configuration, ILogger logger)
         {
-            this.Configuration = configuation;
+            this.Configuration = configuration;
             this.Logger = logger;
 
             if (!string.IsNullOrWhiteSpace(this.Configuration.ServerListenAddress))
             {
                 this.ListenAddress = IPAddress.Parse(this.Configuration.ServerListenAddress);
-            } 
+            }
             else
             {
                 this.ListenAddress = this.GetLocalIPv4Address();
@@ -34,7 +35,6 @@ namespace VDRIVE
         protected IConfiguration Configuration;
         protected ILogger Logger;
 
-
         public void Start()
         {
             TcpListener listener = new TcpListener(this.ListenAddress, Port);
@@ -45,14 +45,15 @@ namespace VDRIVE
             while (true)
             {
                 TcpClient tcpClient = listener.AcceptTcpClient(); // blocking
-                tcpClient.NoDelay = true;              
+                tcpClient.NoDelay = true;
 
-                Task.Run(() => 
+                Task.Run(() =>
                 {
                     // instance dependencies per client for concurrency
-                    IProtocolHandler potocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
+                    IProtocolHandler protocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
+                    IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
                     IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
-                    IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, this.Configuration, this.Logger);                  
+                    IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
                     string ip = tcpClient.Client.RemoteEndPoint.ToString();
                     this.Logger.LogMessage($"Client connected: {ip}");
@@ -62,12 +63,12 @@ namespace VDRIVE
                     {
                         while (tcpClient.Connected)
                         {
-                            potocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
+                            protocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
                         }
                     }
                 });
             }
-        }     
+        }
 
         private IPAddress GetLocalIPv4Address()
         {

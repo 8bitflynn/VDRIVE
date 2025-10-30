@@ -1,6 +1,7 @@
 ﻿using System.Net.Sockets;
 using VDRIVE.Drive;
 using VDRIVE.Floppy;
+using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
@@ -19,7 +20,6 @@ namespace VDRIVE
         protected IConfiguration Configuration;
         protected ILogger Logger;
 
-
         public void Start()
         {
             if (string.IsNullOrEmpty(this.IPAddress))
@@ -34,8 +34,9 @@ namespace VDRIVE
 
                 // instance dependencies
                 IProtocolHandler protocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
+                IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
                 IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
-                IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, this.Configuration, this.Logger);
+                IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {

@@ -1,6 +1,10 @@
 ﻿using VDRIVE;
 using VDRIVE.Configuration;
+using VDRIVE.Drive;
+using VDRIVE.Floppy;
+using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
+using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE_Host
 {
@@ -11,13 +15,11 @@ namespace VDRIVE_Host
         /// CURRENT TESTING on C64
         /// SYS 49152 - enable
         /// SYS 49158 - search floppies (will prompt for search term in C64, enter the number to mount)
-        /// SYS 49161 - insert floppy (will prompt for ID in C64) - already done in previous step but user can change floppy here
+        /// SYS 49161 - insert floppy (will prompt for ID in C64) - already done i n previous step but user can change floppy here
         /// </summary>
         /// <param name="args"></param>
         static void Main(string[] args)
         {
-            Program program = new Program();
-
             ILogger logger = new VDRIVE.Util.ConsoleLogger();
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
@@ -47,6 +49,6 @@ namespace VDRIVE_Host
                     client.Start();
                     break;                
             }            
-        }
+        }      
     }
 }

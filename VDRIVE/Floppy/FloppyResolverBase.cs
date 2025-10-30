@@ -53,13 +53,7 @@ namespace VDRIVE.Floppy
             return this.InsertedFloppyPointer;
         }
 
-        public abstract SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
-
-        public FloppyPointer SetInsertedFloppyPointer(FloppyPointer floppyPointer)
-        {
-            this.InsertedFloppyPointer = floppyPointer;
-            return this.InsertedFloppyPointer;
-        }
+        public abstract SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);    
 
         protected void ClearSearchResults()
         {

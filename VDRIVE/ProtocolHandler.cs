@@ -32,9 +32,9 @@ namespace VDRIVE
             {
                 // operation byte
                 success = this.ReadNetworkStream(networkStream, data, 0, 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
-                if (!success)               
+                if (!success)
                     return;
-                
+
                 switch (data[0])
                 {
                     case 0x01: // LOAD
@@ -54,46 +54,32 @@ namespace VDRIVE
 
                             LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload);
 
+                            ushort dest_ptr_start = 0x00;
                             if (payload != null)
                             {
                                 byte[] dest_ptr_bytes = payload.Take(2).ToArray();
-                                ushort dest_ptr = (ushort)(dest_ptr_bytes[0] | (dest_ptr_bytes[1] << 8));
-                                this.Logger.LogMessage($"Start Address: 0x{dest_ptr:X4}");
+                                dest_ptr_start = (ushort)(payload[0] | (payload[1] << 8));
+                                this.Logger.LogMessage($"Start Address: 0x{dest_ptr_start:X4}");
 
                                 // check for known instant C64 crash addreses
                                 // to help stabalize during testing
-                                int end_dest_ptr = dest_ptr + payload.Length;
+                                int end_dest_ptr = dest_ptr_start + payload.Length;
 
-                                // TODO: for now returning a file not found
-                                // but need to investigate better handling later
-                                List<ushort> rejectedLoadAddresses = new List<ushort>()
+                                if (this.IsInvalidLoadAddress(dest_ptr_start, end_dest_ptr))
                                 {
-                                    0x0314, // BASIC IRQ
-                                    0x0316, // BASIC NMI
-                                    0xFFFE, // KERNAL IRQ
-                                    0xFFFA, // KERNAL NMI
-                                    0xEA38, // LOAD address IRQ
-                                    0xC000  // VDRIVE location
-                                };
-
-                                if (rejectedLoadAddresses.Any(r => r == dest_ptr)
-                                    || end_dest_ptr >= 0xc000)
-                                {
-                                    this.Logger.LogMessage($"Warning: known crash load address {dest_ptr}, rejecting load to prevent C64 lockup");
-
-                                    // invalidate payload and set error code
-                                    // to prevent C64 from locking up 
-                                    payload = null;
-                                    loadResponse.ResponseCode = 0x04; // file not found for now...
+                                    payload = payload.Skip(2).ToArray(); // skip destination pointer    
+                                    int endAddress = dest_ptr_start + payload.Length - 1;
+                                    this.Logger.LogMessage($"End Address: 0x{endAddress:X4}");
                                 }
                                 else
                                 {
-                                    payload = payload.Skip(2).ToArray(); // skip destination pointer    
-                                    this.Logger.LogMessage($"End Address: 0x{end_dest_ptr:X4}");
+                                    payload = null;
+                                    loadResponse.ResponseCode = 0x04; // file not found
                                 }
                             }
 
-                            this.SendData(tcpClient, networkStream, loadResponse, payload);
+                            this.SendData(tcpClient, networkStream, loadResponse, dest_ptr_start, payload);
+
                         }
                         break;
 
@@ -104,7 +90,7 @@ namespace VDRIVE
                             byte[] buffer = new byte[size];
                             buffer[0] = data[0];
 
-                            success =  this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+                            success = this.ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
                             if (!success)
                                 return;
 
@@ -134,17 +120,18 @@ namespace VDRIVE
                         }
                         break;
 
-                    case 0x04: // UNMOUNT floppy image
+                    case 0x04: // create floppy image
                         {
-                            // NOT USED
-                            // TODO: not sure I will implement this as I do not really see a need to?
-                            // the only reason one would eject a floppy is to insert another one
-                            // and that is handled by the insert command
+                            int size = Marshal.SizeOf<NewFloppyRequest>();
 
-                            // MAYBE just re-use MOUNT sending in 0 instead of a real id?
+                            byte[] buffer = new byte[size];
 
-                            // TODO: read params from C64
-                            floppyResolver.EjectFloppy();
+                            this.ReadNetworkStream(networkStream, buffer, 0, size, TimeSpan.FromSeconds(this.Configuration.ReceiveTimeoutSeconds.Value));
+
+                            NewFloppyRequest newFloppyRequest = BinaryStructConverter.FromByteArray<NewFloppyRequest>(buffer);
+                            //  NewFloppyResponse newFloppyResponse = storageAdapter.CreateFloppy(newFloppyRequest);
+
+
                         }
                         break;
 
@@ -176,13 +163,38 @@ namespace VDRIVE
                             searchFloppyResponse.ByteCountMid = (byte)((lengthOfPayload >> 8) & 0xFF);
                             searchFloppyResponse.ByteCountHi = (byte)((lengthOfPayload >> 16) & 0xFF); // MSB
 
-                            this.SendData(tcpClient, networkStream, searchFloppyResponse, payload.ToArray());
+                            this.SendData(tcpClient, networkStream, searchFloppyResponse, (ushort)(searchFloppyResponse.DestPtrHi << 8 | searchFloppyResponse.DestPtrLo), payload.ToArray());
                         }
                         break;
                 }
 
                 networkStream.Flush();
             }
+        }
+
+        private bool IsInvalidLoadAddress(ushort dest_ptr_start, int end_dest_ptr)
+        {
+            // TODO: for now returning a file not found
+            // but need to investigate better handling later
+            List<ushort> rejectedLoadAddresses = new List<ushort>()
+                                {
+                                    0x0314, // BASIC IRQ
+                                    0x0316, // BASIC NMI
+                                    0xFFFE, // KERNAL IRQ
+                                    0xFFFA, // KERNAL NMI
+                                    0xEA38, // LOAD address IRQ
+                                    0xC000  // VDRIVE location
+                                };
+
+            if (rejectedLoadAddresses.Any(r => r == dest_ptr_start)
+                || end_dest_ptr >= 0xc000)
+            {
+                this.Logger.LogMessage($"Warning: invalid load address or end address 0x{dest_ptr_start:X4}-0x{end_dest_ptr:X4}, rejecting load to prevent C64 lockup");
+                return false;
+            }
+
+            return true;
+
         }
 
         private bool ReadNetworkStream(NetworkStream stream, byte[] buffer, int offset, int count, TimeSpan timeout)
@@ -207,6 +219,7 @@ namespace VDRIVE
                 try
                 {
                     r = stream.Read(buffer, offset + read, count - read);
+                    this.Logger.LogMessage($"Received: {r} bytes ", LogSeverity.Info);
                 }
                 catch
                 {
@@ -222,7 +235,7 @@ namespace VDRIVE
 
         private byte[] ReceiveData(NetworkStream networkStream, SaveRequest saveRequest)
         {
-            int chunkSize = (saveRequest.ChunkSizeHi << 8) | saveRequest.ChunkSizeLo;
+            ushort chunkSize = (ushort)((saveRequest.ChunkSizeHi << 8) | saveRequest.ChunkSizeLo);
             int totalSize = (saveRequest.ByteCountHi << 16) | (saveRequest.ByteCountMid << 8) | saveRequest.ByteCountLo;
 
             byte[] buffer = new byte[totalSize];
@@ -248,8 +261,8 @@ namespace VDRIVE
                     continue;
                 }
 
-                int r = networkStream.Read(oneByte, 0, 1);
-                if (r == 1 && oneByte[0] == 0x2B) break; // sync found
+                bool sucess = ReadNetworkStream(networkStream, oneByte, 0, 1, timeout);
+                if (sucess && oneByte[0] == 0x2B) break; // sync found
                                                          // else drop garbage and continue
             }
 
@@ -259,8 +272,8 @@ namespace VDRIVE
                 receiveTimeoutStopWatch.Restart();
 
                 int toRead = Math.Min(chunkSize, totalSize - received);
-                bool ok = ReadNetworkStream(networkStream, buffer, received, toRead, timeout);
-                if (!ok)
+                bool success = ReadNetworkStream(networkStream, buffer, received, toRead, timeout);
+                if (!success)
                 {
                     this.Logger.LogMessage($"Timeout or read error receiving chunk at offset {received}, aborting receive", LogSeverity.Error);
                     throw new TimeoutException("Timed out while reading chunk data");
@@ -280,13 +293,17 @@ namespace VDRIVE
                 }
 
                 chunksReceived++;
-                this.Logger.LogMessage($"Received {received} of {totalSize} bytes in {chunksReceived} chunks");
+
+                int startByte = received;
+                int endByte = received + chunkSize;
+
+                this.Logger.LogMessage($"Received {startByte}-{endByte} bytes (chunk {chunksReceived} of {chunkSize})");
             }
 
             return buffer;
         }
 
-        private void SendData<T>(TcpClient tcpClient, NetworkStream networkStream, T header, byte[] payload) where T : struct
+        private void SendData<T>(TcpClient tcpClient, NetworkStream networkStream, T header, ushort dest_address_start, byte[] payload) where T : struct
         {
             DateTime start = DateTime.Now;
 
@@ -304,15 +321,16 @@ namespace VDRIVE
                 return;
             }
 
-            this.SendChunks(tcpClient, networkStream, payload, this.Configuration.ChunkSize, TimeSpan.FromSeconds(this.Configuration.SendTimeoutSeconds.Value));
+            this.SendChunks(tcpClient, networkStream, dest_address_start, payload, this.Configuration.ChunkSize, TimeSpan.FromSeconds(this.Configuration.SendTimeoutSeconds.Value));
 
             DateTime end = DateTime.Now;
-            this.Logger.LogMessage($"TimeTook:{(end - start).TotalMilliseconds / 1000} BytesPerSec:{payload.Length / (end - start).TotalMilliseconds * 1000}");
+            this.Logger.LogMessage($"TimeTook:{((end - start).TotalMilliseconds / 1000).ToString("F3")} " + $"BytesPerSec:{(payload.Length / (end - start).TotalMilliseconds * 1000).ToString("F3")}"
+);
 
             networkStream.Flush();
         }
 
-        private void SendChunks(TcpClient tcpClient, NetworkStream networkStream, byte[] payload, ushort chunkSize, TimeSpan timeout)
+        private void SendChunks(TcpClient tcpClient, NetworkStream networkStream, ushort dest_addre_start, byte[] payload, ushort chunkSize, TimeSpan timeout)
         {
             IList<List<byte>> chunks = payload.ToList().BuildChunks(chunkSize).ToList();
             int numOfChunks = chunks.Count();
@@ -321,7 +339,16 @@ namespace VDRIVE
             for (int chunkIndex = 0; chunkIndex < numOfChunks; chunkIndex++)
             {
                 List<byte> chunk = chunks[chunkIndex];
-                this.Logger.LogMessage($"Sending {bytesSent}-{chunk.Count + bytesSent} chunk {chunkIndex + 1} of {chunks.Count}");
+
+                // FIXME
+                ushort baseAddress = dest_addre_start;
+                int startByte = bytesSent;
+                int endByte = bytesSent + chunk.Count;
+
+                int startAddress = dest_addre_start + bytesSent;
+                int endAddress = startAddress + chunk.Count - 1;
+
+                this.Logger.LogMessage($"Sending {startByte}-{endByte} bytes to 0x{startAddress:X4}-0x{endAddress:X4} (chunk {chunkIndex + 1} of {chunks.Count})");
 
                 try
                 {

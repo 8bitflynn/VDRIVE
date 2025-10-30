@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
@@ -8,8 +7,9 @@ namespace VDRIVE.Drive.Impl
 {
     public class DirMasterStorageAdapter : StorageAdapterBase, IStorageAdapter
     {
-        public DirMasterStorageAdapter(IConfiguration configuration, ILogger logger)
+        public DirMasterStorageAdapter(IProcessRunner processRunner, IConfiguration configuration, ILogger logger)
         {
+            this.ProcessRunner = processRunner;
             this.Configuration = configuration;
             this.Logger = logger;
         }
@@ -77,9 +77,16 @@ namespace VDRIVE.Drive.Impl
 
         protected byte[] LoadFile(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
-            if (!Directory.Exists(fullPath)) 
-                Directory.CreateDirectory(fullPath);
+            if (floppyInfo.Equals(default) || floppyPointer.Equals(default)
+                || string.IsNullOrWhiteSpace(floppyPointer.ImagePath))
+            {
+                responseCode = 0x04; // file not found
+                return null;
+            }
+
+            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
+            if (!Directory.Exists(fullPath)) ;
+            Directory.CreateDirectory(fullPath);
 
             string safeName = new string(loadRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToUpper();
             string outPrgPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, safeName).Trim();
@@ -89,41 +96,28 @@ namespace VDRIVE.Drive.Impl
 
             string arguments = $"\"{this.Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" load \"{floppyPointer.ImagePath}\" \"{safeName}\"";
 
-            var psi = new ProcessStartInfo
-            {
-                FileName = Configuration.StorageAdapterSettings.DirMaster.ExecutablePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                WorkingDirectory = Path.Combine(Configuration.TempPath, Configuration.TempFolder)
-            };
+            RunProcessParameters runProcessParameters = new RunProcessParameters();
+            runProcessParameters.ImagePath = floppyPointer.ImagePath;
+            runProcessParameters.Arguments = arguments;
+            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+            runProcessParameters.LockType = LockType.Read;
 
-            using (var process = Process.Start(psi))
-            {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-                if (!string.IsNullOrWhiteSpace(output))
-                    Logger.LogMessage(output.Trim());
-                if (!string.IsNullOrWhiteSpace(error))
-                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
 
-                // TODO: fix this to work with any extension
-                string fulloutputPath = outPrgPath + ".prg";
-                if (File.Exists(fulloutputPath))
-                {
-                    Logger.LogMessage($"File extracted: {outPrgPath}");
-                    responseCode = 0xff; // success
-                    return File.ReadAllBytes(fulloutputPath);
-                }
-                else
-                {
-                    Logger.LogMessage($"{safeName}.prg not found in temp directory.", LogSeverity.Error);
-                    responseCode = 0x04; // file not found
-                    return null;
-                }
+            // TODO: fix this to work with any extension
+            string fulloutputPath = outPrgPath + ".prg";
+            if (File.Exists(fulloutputPath))
+            {
+                Logger.LogMessage($"File extracted: {outPrgPath}");
+                responseCode = 0xff; // success
+                return File.ReadAllBytes(fulloutputPath);
             }
+            else
+            {
+                Logger.LogMessage($"{safeName}.prg not found in temp directory.", LogSeverity.Error);
+                responseCode = 0x04; // file not found
+                return null;
+            }           
         }
 
         protected byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
@@ -162,29 +156,17 @@ namespace VDRIVE.Drive.Impl
         private string[] LoadRawDirectoryLines(FloppyPointer floppyPointer)
         {
             string arguments = $"\"{Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" dir \"{floppyPointer.ImagePath}\"";
-            var psi = new ProcessStartInfo
-            {
-                FileName = Configuration.StorageAdapterSettings.DirMaster.ExecutablePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
 
-            using (var process = Process.Start(psi))
-            {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-                if (!string.IsNullOrWhiteSpace(output))
-                    Logger.LogMessage(output.Trim());
-                if (!string.IsNullOrWhiteSpace(error))
-                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
+            RunProcessParameters runProcessParameters = new RunProcessParameters();
+            runProcessParameters.ImagePath = floppyPointer.ImagePath;
+            runProcessParameters.Arguments = arguments;
+            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.DirMaster.ExecutablePath;
+            runProcessParameters.LockType = LockType.Read;
 
-                string[] rawLines = output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-                return rawLines;
-            }
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+
+            string[] rawLines = runProcessResult.Output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            return rawLines;          
         }
 
         public SaveResponse Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
@@ -208,7 +190,7 @@ namespace VDRIVE.Drive.Impl
 
             string scriptPath = this.Configuration.StorageAdapterSettings.DirMaster.ScriptPath;
             string command = "save";
-            string diskPath = floppyResolver.GetInsertedFloppyPointer().ImagePath;
+            string imagePath = floppyResolver.GetInsertedFloppyPointer().ImagePath;
             string filename = safeName.ToUpper();
             string extensionNoDot = Path.GetExtension(filename); // PRG, SEQ, USR
             if (string.IsNullOrWhiteSpace(extensionNoDot))
@@ -216,28 +198,17 @@ namespace VDRIVE.Drive.Impl
                 extensionNoDot = "PRG";
             }
 
-            string arguments = $"\"{scriptPath}\" {command} \"{diskPath}\" \"{tempPrgPath}\" \"{extensionNoDot}\"";
+            string arguments = $"\"{scriptPath}\" {command} \"{imagePath}\" \"{tempPrgPath}\" \"{extensionNoDot}\"";
 
-            var psi = new ProcessStartInfo
-            {
-                FileName = Configuration.StorageAdapterSettings.DirMaster.ExecutablePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                WorkingDirectory = Path.Combine(Configuration.TempPath, Configuration.TempFolder)
-            };
+            RunProcessParameters runProcessParameters = new RunProcessParameters();
+            runProcessParameters.ImagePath = imagePath;
+            runProcessParameters.Arguments = arguments;
+            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+            runProcessParameters.LockType = LockType.Write;
 
-            using (var process = Process.Start(psi))
-            {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-                if (!string.IsNullOrWhiteSpace(output))
-                    Logger.LogMessage(output.Trim());
-                if (!string.IsNullOrWhiteSpace(error))
-                    Logger.LogMessage(error.Trim(), LogSeverity.Error);
-            }
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+
+            //TODO: add better error handling
 
             bool success = File.Exists(tempPrgPath);
             if (success)
@@ -245,7 +216,7 @@ namespace VDRIVE.Drive.Impl
                 // TODO: parse errors and return if needed
                 Logger.LogMessage($"File written to Image: {safeName}");
                 File.Delete(tempPrgPath); // cleanup temp file
-            }            
+            }
 
             return saveResponse;
         }
