@@ -51,7 +51,7 @@ namespace VDRIVE.Floppy
                         continue;
 
                     // Build full output path
-                    string fullFilePath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder, entry.FullName);
+                    string fullFilePath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder,Thread.CurrentThread.ManagedThreadId.ToString(), entry.FullName);
 
                     // Ensure directory exists
                     if (!Directory.Exists(Path.GetDirectoryName(fullFilePath)))
