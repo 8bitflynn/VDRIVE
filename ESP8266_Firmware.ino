@@ -1,6 +1,12 @@
 #include <ESP8266WiFi.h>
 #include <EEPROM.h>
 
+const int BUFFER_SIZE = 128;
+char txBuffer[BUFFER_SIZE];
+int bufferIndex = 0;
+unsigned long lastByteTime = 0;
+const unsigned long FLUSH_TIMEOUT_MS = 10;
+
 // Wi-Fi / socket params (populated from EEPROM or SetupWifi)
 String ssid     = "";
 String password = "";
@@ -290,11 +296,23 @@ void HandleServerMode() {
 
     while (client.connected()) {
       // from C64 -> socket
-      if (Serial.available()) {
-        digitalWrite(LED_BUILTIN, LOW);
-        char c = Serial.read();
-        client.write((uint8_t)c);
-      }
+       // forward data
+      while (Serial.available()) {
+       char c = Serial.read();
+       txBuffer[bufferIndex++] = c;
+       lastByteTime = millis();
+
+       if (bufferIndex >= BUFFER_SIZE) {
+        wifiClient.write((uint8_t*)txBuffer, bufferIndex);
+        bufferIndex = 0;
+     }
+   }
+
+  // Flush if timeout exceeded
+  if (bufferIndex > 0 && millis() - lastByteTime > FLUSH_TIMEOUT_MS) {
+     wifiClient.write((uint8_t*)txBuffer, bufferIndex);
+     bufferIndex = 0;
+  }
 
       // from socket -> C64
       while (client.available()) {
@@ -304,8 +322,7 @@ void HandleServerMode() {
       }
       
       Serial.flush();
-      digitalWrite(LED_BUILTIN, HIGH);
-      delay(1);
+      digitalWrite(LED_BUILTIN, HIGH);      
     }
 
     client.stop();
@@ -342,10 +359,21 @@ void HandleClientMode() {
   }
 
   // forward data
-  if (Serial.available()) {
-    digitalWrite(LED_BUILTIN, LOW);
+  while (Serial.available()) {
     char c = Serial.read();
-    wifiClient.write((uint8_t)c);
+    txBuffer[bufferIndex++] = c;
+    lastByteTime = millis();
+
+    if (bufferIndex >= BUFFER_SIZE) {
+        wifiClient.write((uint8_t*)txBuffer, bufferIndex);
+        bufferIndex = 0;
+    }
+  }
+
+  // Flush if timeout exceeded
+  if (bufferIndex > 0 && millis() - lastByteTime > FLUSH_TIMEOUT_MS) {
+     wifiClient.write((uint8_t*)txBuffer, bufferIndex);
+     bufferIndex = 0;
   }
 
   while (wifiClient.available()) {
