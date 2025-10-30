@@ -7,6 +7,10 @@ int bufferIndex = 0;
 unsigned long lastByteTime = 0;
 const unsigned long FLUSH_TIMEOUT_MS = 10;
 
+char rxBuffer[BUFFER_SIZE];
+int rxIndex = 0;
+unsigned long lastRxTime = 0;
+
 // Wi-Fi / socket params (populated from EEPROM or SetupWifi)
 String ssid     = "";
 String password = "";
@@ -303,23 +307,33 @@ void HandleServerMode() {
        lastByteTime = millis();
 
        if (bufferIndex >= BUFFER_SIZE) {
-        wifiClient.write((uint8_t*)txBuffer, bufferIndex);
+        client.write((uint8_t*)txBuffer, bufferIndex);
         bufferIndex = 0;
      }
    }
 
-  // Flush if timeout exceeded
-  if (bufferIndex > 0 && millis() - lastByteTime > FLUSH_TIMEOUT_MS) {
-     wifiClient.write((uint8_t*)txBuffer, bufferIndex);
-     bufferIndex = 0;
-  }
+    // Flush if timeout exceeded
+    if (bufferIndex > 0 && millis() - lastByteTime > FLUSH_TIMEOUT_MS) {
+       client.write((uint8_t*)txBuffer, bufferIndex);
+       bufferIndex = 0;
+    }
 
       // from socket -> C64
-      while (client.available()) {
-        digitalWrite(LED_BUILTIN, LOW);
-        char c = client.read();
-        Serial.write((uint8_t)c);
-      }
+       while (client.available()) {
+      char c = client.read();
+      rxBuffer[rxIndex++] = c;
+      lastRxTime = millis();
+
+    if (rxIndex >= BUFFER_SIZE) {
+      Serial.write((uint8_t*)rxBuffer, rxIndex);
+      rxIndex = 0;
+     }
+    }
+  
+    if (rxIndex > 0 && millis() - lastRxTime > FLUSH_TIMEOUT_MS) {
+      Serial.write((uint8_t*)rxBuffer, rxIndex);
+      rxIndex = 0;
+    }
       
       Serial.flush();
       digitalWrite(LED_BUILTIN, HIGH);      
@@ -377,9 +391,19 @@ void HandleClientMode() {
   }
 
   while (wifiClient.available()) {
-    digitalWrite(LED_BUILTIN, LOW);
-    char c = wifiClient.read();
-    Serial.write((uint8_t)c);
+  char c = wifiClient.read();
+  rxBuffer[rxIndex++] = c;
+  lastRxTime = millis();
+
+  if (rxIndex >= BUFFER_SIZE) {
+    Serial.write((uint8_t*)rxBuffer, rxIndex);
+    rxIndex = 0;
+   }
+  }
+
+  if (rxIndex > 0 && millis() - lastRxTime > FLUSH_TIMEOUT_MS) {
+    Serial.write((uint8_t*)rxBuffer, rxIndex);
+    rxIndex = 0;
   }
 
   Serial.flush();
