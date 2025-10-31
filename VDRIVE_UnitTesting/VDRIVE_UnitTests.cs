@@ -63,28 +63,28 @@ namespace VDRIVE_UnitTesting
 
             configBuilder.DumpConfiguration(configuration);
 
-            int testIterations = 10;
+            SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest(); // input from C64
+            searchFloppyRequest.SearchTerm = "data4".ToArray();
+            searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
 
+            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
+            SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo); // output to C64
+
+            FloppyIdentifier floppyIdentifier = new FloppyIdentifier(); // input from C64 (user selected ID)
+            floppyIdentifier.IdLo = floppyInfo[0].IdLo;
+            floppyIdentifier.IdHi = floppyInfo[0].IdHi;
+
+            FloppyInfo insertedFloppy = floppyResolver.InsertFloppy(floppyIdentifier); // sent from C64 - 2 byte floppy ID
+
+            // read/write to same disk/file in different threads
+            // to test concurrency
+            int testIterations = 25;
             List<Task> tasks = new List<Task>();
-
             Task task1 = Task.Run(() =>
             {
                 int count = 0;
                 while (count < testIterations)
                 {
-                    SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest(); // input from C64
-                    searchFloppyRequest.SearchTerm = "data4".ToArray();
-                    searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
-
-                    IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
-                    SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo); // output to C64
-
-                    FloppyIdentifier floppyIdentifier = new FloppyIdentifier(); // input from C64 (user selected ID)
-                    floppyIdentifier.IdLo = floppyInfo[0].IdLo;
-                    floppyIdentifier.IdHi = floppyInfo[0].IdHi;
-
-                    FloppyInfo insertedFloppy = floppyResolver.InsertFloppy(floppyIdentifier); // can insert floppy with full FloppyInfo too
-
                     LoadRequest loadRequest = new LoadRequest(); // input from C64
                     loadRequest.Operation = 1;
                     loadRequest.FileName = "8bitintro".ToArray();
@@ -105,19 +105,7 @@ namespace VDRIVE_UnitTesting
                 int count = 0;
                 while (count < testIterations)
                 {
-                    SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest(); // input from C64
-                    searchFloppyRequest.SearchTerm = "data4".ToArray();
-                    searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
-
-                    IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
-                    SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo); // output to C64
-
-                    FloppyIdentifier floppyIdentifier = new FloppyIdentifier(); // input from C64 (user selected ID)
-                    floppyIdentifier.IdLo = floppyInfo[0].IdLo;
-                    floppyIdentifier.IdHi = floppyInfo[0].IdHi;
-
-                    FloppyInfo insertedFloppy = floppyResolver.InsertFloppy(floppyIdentifier); // can insert floppy with full FloppyInfo too
-
+                  
                     SaveRequest saveRequest = new SaveRequest(); // input from C64
                     saveRequest.Operation = 1;
                     saveRequest.FileName = "8bitintro".ToArray();

@@ -106,8 +106,8 @@ namespace VDRIVE.Configuration
                         this.Logger.LogMessage("Vice settings are incomplete");
                         return false;
                     }
-                    break;              
-
+                    break;
+               
                 default:
                     this.Logger.LogMessage($"Unknown StorageAdapter type: {configuration.StorageAdapter}");
                     return false;
@@ -139,6 +139,11 @@ namespace VDRIVE.Configuration
                         return false;
                     }
                     break;
+
+                case "C64":
+                    //return false;
+                    break;
+
 
                 default:
                     this.Logger.LogMessage($"Unknown FloppyResolver type: {configuration.FloppyResolver}");
@@ -185,6 +190,8 @@ namespace VDRIVE.Configuration
             if (configuration.StorageAdapterSettings != null)
             {
                 this.Logger.LogMessage("  StorageAdapterSettings:");
+                this.Logger.LogMessage($"  LockTimeoutSeconds: {configuration.StorageAdapterSettings.LockTimeoutSeconds}");
+                
                 if (configuration.StorageAdapterSettings.DirMaster != null && configuration.StorageAdapter == "DirMaster")
                 {
                     this.Logger.LogMessage($"    DirMaster ExecutablePath: {configuration.StorageAdapterSettings.DirMaster.ExecutablePath}");

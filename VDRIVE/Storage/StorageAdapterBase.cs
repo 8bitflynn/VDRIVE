@@ -24,11 +24,11 @@ namespace VDRIVE.Drive
             var prg = new List<byte>();
             ushort ramPtr = LOAD_ADDR;
 
-            // 1) PRG header: load address
+            // PRG header: load address
             prg.Add(LOAD_ADDR & 0xFF);
             prg.Add(LOAD_ADDR >> 8);
 
-            // 2) Build each line, always patching its “next” pointer
+            // Build each line, always patching its “next” pointer
             for (int i = 0; i < rawLines.Length; i++)
             {
                 bool isHeader = i == 0;
@@ -105,12 +105,9 @@ namespace VDRIVE.Drive
                     }
                 }
 
-                // append the text in PETSCII (uppercase)
-                // foreach (char c in content.ToUpperInvariant())
                 foreach (char c in content.ToUpperInvariant())
                 {
-                    //byte b = this.AsciiToPetscii(c);
-                    byte b = (byte)c;
+                    byte b = (byte)c; // TODO: map PETSCII as needed
                     line.Add(b);
                 }
 

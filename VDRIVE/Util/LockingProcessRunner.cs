@@ -18,7 +18,7 @@ namespace VDRIVE.Util
 
         private static readonly ConcurrentDictionary<string, ReaderWriterLockSlim> ImageLocks = new();   
 
-        public RunProcessResult RunProcessWithLock(RunProcessParameters runProcessParameters)
+        public RunProcessResult RunProcess(RunProcessParameters runProcessParameters)
         {
             if (runProcessParameters == null || string.IsNullOrWhiteSpace(runProcessParameters.ImagePath))
             {
@@ -28,14 +28,25 @@ namespace VDRIVE.Util
             ReaderWriterLockSlim readerWriterLockSlim = null;
             if (runProcessParameters.LockType != LockType.None)
             {
-                Logger.LogMessage($"{runProcessParameters.LockType.ToString()} lock acquired for {runProcessParameters.ImagePath}");
-
                 readerWriterLockSlim = GetImageLock(runProcessParameters.ImagePath);
 
+                Logger.LogMessage($"Acquiring {runProcessParameters.LockType.ToString().ToLower()} lock for {runProcessParameters.ImagePath}");
+
+                bool lockAcquired = false;
+                TimeSpan lockTimeout = TimeSpan.FromSeconds(runProcessParameters.LockTimeoutSeconds);
+
                 if (runProcessParameters.LockType == LockType.Write)
-                    readerWriterLockSlim.EnterWriteLock();
+                    lockAcquired = readerWriterLockSlim.TryEnterWriteLock(lockTimeout);
                 else
-                    readerWriterLockSlim.EnterReadLock();
+                    lockAcquired = readerWriterLockSlim.TryEnterReadLock(lockTimeout);
+
+                if (!lockAcquired)
+                {
+                    Logger.LogMessage($"{runProcessParameters.LockType} lock timed out for {runProcessParameters.ImagePath}", LogSeverity.Warning);
+                    return null;
+                }
+
+                Logger.LogMessage($"{runProcessParameters.LockType.ToString()} lock acquired for {runProcessParameters.ImagePath}");
             }
 
             try
@@ -81,7 +92,7 @@ namespace VDRIVE.Util
                     else
                         readerWriterLockSlim.ExitReadLock();
 
-                    Logger.LogMessage($"{(runProcessParameters.LockType == LockType.Write ? "Write" : "Read")} lock released for {runProcessParameters.ImagePath}");
+                    Logger.LogMessage($"{runProcessParameters.LockType.ToString()} lock released for {runProcessParameters.ImagePath}");
                 }
             }
         }

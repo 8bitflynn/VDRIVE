@@ -50,8 +50,9 @@ namespace VDRIVE.Storage.Impl
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
             runProcessParameters.LockType = LockType.Write;
+            runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
 
-            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
            
             SaveResponse saveResponse = new SaveResponse();
             if (!runProcessResult.HasError)
@@ -90,14 +91,14 @@ namespace VDRIVE.Storage.Impl
                     // thought about wrapping in D64 but seems unnecessary overhead
                     // and its less steps for user
                     FloppyPointer floppyPointer = floppyResolver.GetInsertedFloppyPointer();
-                    if (!floppyPointer.Equals(default(FloppyPointer)) && floppyPointer.ImagePath.ToLower().EndsWith(".prg"))
+                    if (!floppyPointer.Equals(default) && floppyPointer.ImagePath.ToLower().EndsWith(".prg"))
                     {
                         payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath);
                     }
                     else
                     {
                         string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer());
-                        string lineWithFirstFile = rawLines[1];
+                        string lineWithFirstFile = rawLines.FirstOrDefault(rawLine => rawLine.ToLower().Contains(".prg"));
 
                         // Match anything inside double quotes, including spaces
                         Match match = Regex.Match(lineWithFirstFile, "\"([^\"]*)\"");
@@ -160,8 +161,9 @@ namespace VDRIVE.Storage.Impl
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
             runProcessParameters.LockType = LockType.Read;
+            runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
 
-            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
             if (!runProcessResult.Output.ToLower().Contains("reading file"))
             {
@@ -227,8 +229,9 @@ namespace VDRIVE.Storage.Impl
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
             runProcessParameters.LockType = LockType.Read;
+            runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
 
-            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
             string[] rawLines = rawLines = runProcessResult.Output
                   .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);

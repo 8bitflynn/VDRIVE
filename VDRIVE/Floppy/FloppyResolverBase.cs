@@ -17,10 +17,11 @@ namespace VDRIVE.Floppy
             this.InsertedFloppyInfo = this.FloppyInfos.FirstOrDefault(fi => fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
             this.InsertedFloppyPointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == (floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8)));
 
-            if (!this.InsertedFloppyInfo.Equals(default(FloppyInfo)))
+            if (!this.InsertedFloppyPointer.Equals(default) && !this.InsertedFloppyPointer.Equals(default))
             {
                 string floppyName = new string(this.InsertedFloppyInfo.ImageName.TakeWhile(c => c != '\0').ToArray());
-                this.Logger.LogMessage($"Inserting floppy: {floppyName} ID={(floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8))}");
+                string fullFloppyPath = this.InsertedFloppyPointer.ImagePath;
+                this.Logger.LogMessage($"Inserting floppy: {floppyName} from {fullFloppyPath} ID={(floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8))}");
             }
             return this.InsertedFloppyInfo;
         }
@@ -61,15 +62,12 @@ namespace VDRIVE.Floppy
             this.FloppyPointers.Clear();
         }      
 
-        protected string ResolvePrimaryDisk(IEnumerable<string> extractFullFilePaths)
+        protected string ResolvePrimaryDisk(IEnumerable<string> extractFullFilePaths, IEnumerable<string> mediaExtensionsAllowed)
         {
             if (InsertedFloppyPointer.Equals(default))
                 return null;
 
-            var allowedExtensions = Configuration
-                .FloppyResolverSettings
-                .CommodoreSoftware
-                .MediaExtensionsAllowed
+            var allowedExtensions = mediaExtensionsAllowed
                 .Select(ext => ext.ToLowerInvariant())
                 .ToHashSet();
 

@@ -19,7 +19,6 @@ namespace VDRIVE
 
         public void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IStorageAdapter storageAdapter)
         {
-            byte[] sendBuffer = new byte[1];
             byte[] data = new byte[1];
             if (!networkStream.DataAvailable)
             {
@@ -122,6 +121,7 @@ namespace VDRIVE
 
                     case 0x04: // create floppy image
                         {
+                            // not implemented yet
                             int size = Marshal.SizeOf<NewFloppyRequest>();
 
                             byte[] buffer = new byte[size];
@@ -219,7 +219,7 @@ namespace VDRIVE
                 try
                 {
                     r = stream.Read(buffer, offset + read, count - read);
-                    this.Logger.LogMessage($"Received: {r} bytes ", LogSeverity.Info);
+                   // this.Logger.LogMessage($"Received: {r} bytes ", LogSeverity.Info); // debug SAVE 
                 }
                 catch
                 {

@@ -101,8 +101,9 @@ namespace VDRIVE.Drive.Impl
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
             runProcessParameters.LockType = LockType.Read;
+            runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
 
-            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
             // TODO: fix this to work with any extension
             string fulloutputPath = outPrgPath + ".prg";
@@ -162,8 +163,9 @@ namespace VDRIVE.Drive.Impl
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.DirMaster.ExecutablePath;
             runProcessParameters.LockType = LockType.Read;
+            runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
 
-            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
             string[] rawLines = runProcessResult.Output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             return rawLines;          
@@ -179,10 +181,10 @@ namespace VDRIVE.Drive.Impl
             destPtrFileData[1] = saveRequest.TargetAddressHi;
             payload.CopyTo(destPtrFileData, 2);
 
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder);
+            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
             if (!Directory.Exists(fullPath))
                 Directory.CreateDirectory(fullPath);
-
+         
             string safeName = new string(saveRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
             string tempPrgPath = Path.Combine(fullPath, safeName);
 
@@ -205,8 +207,9 @@ namespace VDRIVE.Drive.Impl
             runProcessParameters.Arguments = arguments;
             runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
             runProcessParameters.LockType = LockType.Write;
+            runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
 
-            RunProcessResult runProcessResult = this.ProcessRunner.RunProcessWithLock(runProcessParameters);
+            RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
             //TODO: add better error handling
 

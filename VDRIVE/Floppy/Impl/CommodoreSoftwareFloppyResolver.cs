@@ -52,7 +52,7 @@ namespace VDRIVE.Floppy.Impl
 
                             // attempt to get disk1
                             IEnumerable<string> extractedFilePaths = this.DecompressArchive(zippedFile);
-                            string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths);
+                            string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths, Configuration.FloppyResolverSettings.CommodoreSoftware.MediaExtensionsAllowed);
 
                             this.InsertedFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();                          
                             this.InsertedFloppyPointer.ImagePath = fullFilePath; // update to disk image extracted file path                        

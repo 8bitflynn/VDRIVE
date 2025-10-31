@@ -90,6 +90,8 @@ namespace VDRIVE.Floppy.Impl
 
         private List<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
         {
+            Logger.LogMessage($"Searching {root} for floppy images for description '{description}'");
+
             var results = new List<string>();
 
             if (string.IsNullOrWhiteSpace(root)) return results;
@@ -132,6 +134,9 @@ namespace VDRIVE.Floppy.Impl
             }
 
             if (!recurse)
+                return results;
+
+            if (results.Count >= this.Configuration.MaxSearchResults)
                 return results;
 
             IEnumerable<string> subDirectories;

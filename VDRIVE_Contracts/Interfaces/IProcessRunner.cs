@@ -4,6 +4,6 @@ namespace VDRIVE_Contracts.Interfaces
 {
     public interface IProcessRunner
     {
-        RunProcessResult RunProcessWithLock(RunProcessParameters runProcessParameters);
+        RunProcessResult RunProcess(RunProcessParameters runProcessParameters);
     }
 }

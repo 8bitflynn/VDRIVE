@@ -8,12 +8,12 @@ namespace VDRIVE
 {
     public class VDriveClient : IVDriveClient
     {
-        public VDriveClient(string ipAddress, int port, IConfiguration configuration, ILogger logger)
+        public VDriveClient(IConfiguration configuration, ILogger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
-            this.IPAddress = ipAddress;
-            this.Port = port;
+            this.IPAddress = this.Configuration.ClientAddress;
+            this.Port = this.Configuration.ClientPort.Value;
         }
         private readonly string IPAddress;
         private readonly int Port;

@@ -8,5 +8,6 @@ namespace VDRIVE_Contracts.Structures
         public string Arguments { get; set; }
         public string ExecutablePath { get; set; }     
         public LockType LockType { get; set; }
+        public int LockTimeoutSeconds { get; set; }
     }
 }

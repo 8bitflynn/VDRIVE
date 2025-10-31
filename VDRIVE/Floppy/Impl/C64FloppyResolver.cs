@@ -18,24 +18,21 @@ namespace VDRIVE.Floppy.Impl
 
             try
             {
-                using (HttpClient client = new HttpClient())
+                string downloadUrl = "https://www.c64.com/games/" + InsertedFloppyPointer.ImagePath;
+
+                byte[] zippedFile = DownloadFile(downloadUrl);
+                if (zippedFile == null)
                 {
-                    string downloadUrl = "https://www.c64.com/games/" + InsertedFloppyPointer.ImagePath;
-
-                    byte[] zippedFile = DownloadFile(downloadUrl);
-                    if (zippedFile == null)
-                    {
-                        Logger.LogMessage("Failed to download file.");
-                        return default;
-                    }
-
-                    // attempt to get disk1
-                    IEnumerable<string> extractedFilePaths = this.DecompressArchive(zippedFile);
-                    string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths);
-
-                    this.InsertedFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
-                    this.InsertedFloppyPointer.ImagePath = fullFilePath; // update to disk image extracted file path       
+                    Logger.LogMessage("Failed to download file.");
+                    return default;
                 }
+
+                // attempt to get disk1
+                IEnumerable<string> extractedFilePaths = this.DecompressArchive(zippedFile);
+                string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths, Configuration.FloppyResolverSettings.CommodoreSoftware.MediaExtensionsAllowed); // FIX
+
+                this.InsertedFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();
+                this.InsertedFloppyPointer.ImagePath = fullFilePath; // update to disk image extracted file path                 
             }
             catch (Exception exception)
             {
