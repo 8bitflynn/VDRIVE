@@ -1,6 +1,5 @@
 ; memory map
-; $c000-$c380 - jmp table
-; $c400-$c5d8 - up9600 bitbanger/vdrive
+; $c000 - jmp table
 ; $c5ff-$c5e4 - vars and constants (counts down from $c5ff)
 ; $c600 - rs232 input buffer
 ; $c700 - rs232 output buffer 
@@ -639,7 +638,7 @@ done_print
  
 
 ; bitbanger/vdrive chunked transfer
-*= $c400
+;*= $c390
 
 recv_data  
 
@@ -792,12 +791,13 @@ recv_bytes_left_check
 
 send_data        
         lda #$2b ; sync byte
-        jsr send_byte         
+        jsr send_byte        
         
 send_data_loop
         ldy #$00 ; not using y
         lda (dest_ptr_lo),y ; store at indirect location
-        jsr send_byte 
+        jsr send_byte   
+
         inc dest_ptr_lo
         bne skip_inc_dst_ptr2
         inc dest_ptr_hi; increment high byte to move to next page
@@ -847,8 +847,6 @@ skip_inc_dst_ptr2
         cmp #$02 ; resend last chunk
         beq adjust_pointers_resend_chunk
         cmp #$01 ; cancel? user cant really do that right now on server side?
-
-       ; rts
 
 bytes_left_check2
         ; check if there are any more bytes
@@ -921,7 +919,7 @@ delay_inner
         rts
 
 send_byte ; assumes a holds byte to send
-        jsr $c80c             
+        jsr $c80c  
         rts
 
 recv_byte ; a holds received byte        
@@ -966,7 +964,10 @@ rotate_index
         byte 0
 
 temp_search_term
-        text ""
+        byte 80
 
+; causes SAVE to fail so leaving separate for now
+;*=$c7fe
+;INCBIN "UP9600.PRG"
 
 
