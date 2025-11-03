@@ -43,7 +43,7 @@ VDRIVE supports two hardware configurations for connecting to the Commodore 64:
     - LOAD/SAVE support is in progress<br/>
     - Chunked LOAD is on the horizon<br/>
     - Performance and compatibility are expected to improve significantly<br/><br/>
-    - An assembley language version of the "vdrive.asm" will be committed to GitHub as soon as I can get it completly functional. It uses ACME assembler and WiC64 libraries.
+    - An assembly language version of the "vdrive.asm" will be committed to GitHub as soon as I can get it completly functional. It uses was ported from CBM Studio to ACME assembler and WiC64 libraries.
     WiC64 is likely to become the main hardware path for VDRIVE going forward as it should be faster and more compatible. However, both options will be maintained since the server-side logic remains the same.
   </p>
 </div>
