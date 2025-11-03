@@ -22,35 +22,43 @@ VDRIVE supports two hardware configurations for connecting to the Commodore 64:
 
 ---
 
-### WiC64 (ESP32-Based, Memory-Mapped)
+<h2>VDRIVE Hardware</h2>
 
-**Note:** [WiC64](https://wic64.net/web/) is being developed on now as a major upgrade from UP9600/ESP8266. Unlike serial-based solutions, WiC64 is memory-mapped directly to the C64, bypassing serial bottlenecks and potentially doubling VDRIVE throughput. This opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+<p>VDRIVE supports two hardware configurations for connecting to the Commodore 64:</p>
+<ul>
+  <li><strong>Primary Option (Future-Focused):</strong> WiC64 (ESP32-Based, Memory-Mapped)</li>
+  <li><strong>Legacy Option (Serial-Based):</strong> ESP8266 WiFi Modem</li>
+</ul>
 
-**Status Update (11/1/2025):**  
-Initial testing with WiC64 was successful.  
-- Search and Mount are already mocked and functional  
-- LOAD/SAVE support is in progress  
-- Chunked LOAD is on the horizon  
-- Performance and compatibility are expected to improve significantly
+<h3>WiC64 (ESP32-Based, Memory-Mapped)</h3>
 
-WiC64 is likely to become the main hardware path for VDRIVE going forward as it should be faster and more compatible but I plan on maintaing both as the server side will be the same for both.
+<div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
+  <strong>Note:</strong> <a href="https://wic64.net/web/" target="_blank">WiC64</a> is being developed now as a major upgrade from UP9600/ESP8266. Unlike serial-based solutions, WiC64 is memory-mapped directly to the C64, bypassing serial bottlenecks and potentially doubling VDRIVE throughput. This opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+  <br/><br/>
+  <img src="https://8bitflynn.io/Resources/Images/WiC64_ESP32_ESP8266.jpg" alt="WiC64 C64 Hardware on left and ESP8266 on right" width="250" align="right"/>
+  <p>
+    <strong>Status Update (11/1/2025):</strong><br/>
+    Initial testing with WiC64 was successful.<br/>
+    - Search and Mount are already mocked and functional<br/>
+    - LOAD/SAVE support is in progress<br/>
+    - Chunked LOAD is on the horizon<br/>
+    - Performance and compatibility are expected to improve significantly<br/><br/>
+    WiC64 is likely to become the main hardware path for VDRIVE going forward as it should be faster and more compatible. However, both options will be maintained since the server-side logic remains the same.
+  </p>
+</div>
 
----
+<h3>ESP8266 WiFi Modem (Serial-Based)</h3>
 
-### ESP8266 WiFi Modem (Serial-Based)
+<img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250" align="right"/>
 
-The ESP8266 acts as a wireless transport layer, communicating with the C64 via serial. This setup uses custom firmware to handle TCP-to-Serial bridging that should re-usable for other projects needing a relay / bridge.
+<p>The ESP8266 acts as a wireless transport layer, communicating with the C64 via serial. This setup uses custom firmware to handle TCP-to-Serial bridging that should be reusable for other projects needing a relay or bridge.</p>
 
-- **Modem Functionality**  
-  Flashed firmware handles all VDRIVE requests over WiFi.
+<ul>
+  <li><strong>Modem Functionality:</strong> Flashed firmware handles all VDRIVE requests over WiFi.</li>
+  <li><strong>Invisible to C64:</strong> The ESP8266 abstracts the transport layer, making it seamless for the C64 and other devices.</li>
+  <li><strong>DIY-Friendly:</strong> You can build your own using an ESP8266 chip and a C64 userport breakout board. Build instructions will be provided soon, though similar guides already exist. Pre-built units are also available from retro vendors or on eBay.</li>
+</ul>
 
-- **Invisible to C64**  
-  The ESP8266 abstracts the transport layer, making it seamless for the C64 and other devices.
-
-- **DIY-Friendly**  
-  You can build your own using an ESP8266 chip and a C64 userport breakout board. Build instructions will be provided soon, though similar guides already exist. Pre-built units are also available from retro vendors or on eBay.
-  
----
 
 ## VDRIVE StorageAdapters
 
