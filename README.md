@@ -21,7 +21,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 </br>
 </br>
   <p>
-    11/3/2025 - Initial testing with WiC64 is successful and I converted vvdrive.asm to ACME as WiC64 libraries use that assembler. Search and Mount already work and expect to have LOAD/SAVE working soon too! I plan on maintaining both vdrive (ESP8266) along with the new dvrive for (WiC64/ESP32).
+    11/3/2025 - Initial testing with <a href="https://wic64.net/web/" target="_blank">WIC64</a> is successful and I converted vvdrive.asm to ACME assembler as WiC64 libraries use that assembler. Search and Mount already mocked and function and expecting to have LOAD/SAVE working soon too! Both vdrive (UP9600/ESP8266) along with the new dvrive for (WiC64/ESP32). The WiC64 should be faster and more compatible but I won't know for sure until I get there!
   </p>
 </div>
 
