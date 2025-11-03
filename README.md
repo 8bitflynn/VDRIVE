@@ -17,8 +17,15 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 
 <div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
 <strong>Note:</strong> Exploring <a href="https://wic64.net/web/" target="_blank">WIC64</a> as a potential upgrade from UP9600 / ESP8266 for improved compatibility and performance. Since WIC64 is memory-mapped to the C64, it bypasses serial communication entirely—potentially doubling VDRIVE’s throughput. This also opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+
+</br>
+</br>
+  <p>
+    11/3/2025 - Initial testing with WiC64 is successful and I converted vvdrive.asm to ACME as WiC64 libraries use that assembler. Search and Mount work and expect to have LOAD/SAVE working soon too! FOr now I plan on maintaining both vdrive (ESP8266) and vdrive (WiC64/ESP32) as the original solution is cheaper and many C64 users will have an old WIFI modem avaiable if they want to try VDRIVE before committing to the WiC64. 
+  </p>
 </div>
 
+</br>
 
 <img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250" align="right"/>
 
