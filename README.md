@@ -13,31 +13,43 @@
 
 Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https://8bitflynn.io/Projects</a> when the dust settles.
 
-## VDRIVE Hardware
+## VDRIVE Hardware Options
 
-<div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
-<strong>Note:</strong> Exploring <a href="https://wic64.net/web/" target="_blank">WIC64</a> as a potential upgrade from UP9600 / ESP8266 for improved compatibility and performance. Since WIC64 is memory-mapped to the C64, it bypasses serial communication entirely—potentially doubling VDRIVE’s throughput. This also opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+VDRIVE supports two hardware configurations for connecting to the Commodore 64:
 
-</br>
-</br>
-  <p>
-    11/3/2025 - Initial testing with <a href="https://wic64.net/web/" target="_blank">WIC64</a> is successful and I converted vvdrive.asm to ACME assembler as WiC64 libraries use that assembler. Search and Mount already mocked and function and expecting to have LOAD/SAVE working soon too! Both vdrive (UP9600/ESP8266) along with the new dvrive for (WiC64/ESP32). The WiC64 should be faster and more compatible but one could use a ESP866 on one C64 and a WiC64 on the other and to the server its the same.
-  </p>
-</div>
+- **Primary Option (Future-Focused): WiC64 (ESP32-Based, Memory-Mapped)**
+- **Legacy Option (Serial-Based): ESP8266 WiFi Modem**
 
-</br>
+---
 
-<img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250" align="right"/>
+### WiC64 (ESP32-Based, Memory-Mapped)
 
-- **ESP8266 WiFi modem**  
-  Acts as the wireless transport layer. Flashed with custom firmware to handle all requests.
+**Note:** [WiC64](https://wic64.net/web/) is being developed on now as a major upgrade from UP9600/ESP8266. Unlike serial-based solutions, WiC64 is memory-mapped directly to the C64, bypassing serial bottlenecks and potentially doubling VDRIVE throughput. This opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
 
-- **ESP8266 WiFi**  
-  The firmware can be reused in other projects needing TCP-to-Serial bridging. This design makes the hardware "invisible" to the C64 and other connected devices. Thanks to this abstraction, partial VDRIVE functionality works in VICE 3.9 via its RS232-to-IP bridge.
+**Status Update (11/1/2025):**  
+Initial testing with WiC64 was successful.  
+- Search and Mount are already mocked and functional  
+- LOAD/SAVE support is in progress  
+- Chunked LOAD is on the horizon  
+- Performance and compatibility are expected to improve significantly
 
-- **ESP8266 / C64 BREAKOUT BOARD / DIY**  
-  These devices can be built using an ESP8266 chip and a Commodore 64 userport breakout board. I plan to providing build instructions when I get a chance, though similar guides already exist. There are also pre-built units from Retro Vendors or on eBay.
+WiC64 is likely to become the main hardware path for VDRIVE going forward as it should be faster and more compatible but I plan on maintaing both as the server side will be the same for both.
 
+---
+
+### ESP8266 WiFi Modem (Serial-Based)
+
+The ESP8266 acts as a wireless transport layer, communicating with the C64 via serial. This setup uses custom firmware to handle TCP-to-Serial bridging that should re-usable for other projects needing a relay / bridge.
+
+- **Modem Functionality**  
+  Flashed firmware handles all VDRIVE requests over WiFi.
+
+- **Invisible to C64**  
+  The ESP8266 abstracts the transport layer, making it seamless for the C64 and other devices.
+
+- **DIY-Friendly**  
+  You can build your own using an ESP8266 chip and a C64 userport breakout board. Build instructions will be provided soon, though similar guides already exist. Pre-built units are also available from retro vendors or on eBay.
+  
 ---
 
 ## VDRIVE StorageAdapters
