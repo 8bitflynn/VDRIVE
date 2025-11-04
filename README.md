@@ -13,29 +13,23 @@
 
 Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https://8bitflynn.io/Projects</a> when the dust settles.
 
-## VDRIVE Hardware Options
-
-VDRIVE supports two hardware configurations for connecting to the Commodore 64:
-
-- **Primary Option (Future-Focused): WiC64 (ESP32-Based, Memory-Mapped)**
-- **Legacy Option (Serial-Based): ESP8266 WiFi Modem**
-
----
-
 <h2>VDRIVE Hardware</h2>
 
 <p>VDRIVE supports two hardware configurations for connecting to the Commodore 64:</p>
 <ul>
-  <li><strong>Primary Option (Future-Focused):</strong> WiC64 (ESP32-Based, Memory-Mapped)</li>
-  <li><strong>Legacy Option (Serial-Based):</strong> ESP8266 WiFi Modem</li>
+  <li><strong>WiC64 Option (Future-Focused):</strong> WiC64 (ESP32-Based, Memory-Mapped)</li>
+  <li><strong>WiFi modem Option (Serial-Based):</strong> ESP8266 WiFi Modem</li>
 </ul>
 
 <h3>WiC64 (ESP32-Based, Memory-Mapped)</h3>
 
+  <img src="https://8bitflynn.io/Resources/Images/WiC64_ESP32_ESP8266.jpg" alt="WiC64 C64 Hardware on left and ESP8266 on right" width="250" align="right"/>
+
 <div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
   <strong>Note:</strong> <a href="https://wic64.net/web/" target="_blank">WiC64</a> is being developed now as a major upgrade from UP9600/ESP8266. Unlike serial-based solutions, WiC64 is memory-mapped directly to the C64, bypassing serial bottlenecks and potentially doubling VDRIVE throughput. This opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
-  <br/><br/>
-  <img src="https://8bitflynn.io/Resources/Images/WiC64_ESP32_ESP8266.jpg" alt="WiC64 C64 Hardware on left and ESP8266 on right" width="250" align="right"/>
+  <br/>
+  <br/>
+
   <p>
     <strong>Status Update (11/1/2025):</strong><br/>
     Initial testing with WiC64 was successful.<br/>
