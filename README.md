@@ -24,21 +24,17 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
 <h3>WiC64 (ESP32-Based, Memory-Mapped)</h3>
 
   <img src="https://8bitflynn.io/Resources/Images/WiC64_ESP32_ESP8266.jpg" alt="WiC64 C64 Hardware on left and ESP8266 on right" width="250" align="right"/>
-</br>
+
 <div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
   <strong>Note:</strong> <a href="https://wic64.net/web/" target="_blank">WiC64</a> is being developed now as a major upgrade from UP9600/ESP8266. Unlike serial-based solutions, WiC64 is memory-mapped directly to the C64, bypassing serial bottlenecks and potentially doubling VDRIVE throughput. This opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
   <br/>
   <br/>
 
   <p>
-    <strong>Status Update (11/1/2025):</strong><br/>
-    Initial testing with WiC64 was successful.<br/>
-    - Search and Mount are already mocked and functional<br/>
-    - LOAD/SAVE support is in progress<br/>
-    - Chunked LOAD is on the horizon<br/>
-    - Performance and compatibility are expected to improve significantly<br/><br/>
-    - An assembly language version of the "vdrive.asm" will be committed to GitHub as soon as I can get it completly functional. It uses was ported from CBM Studio to ACME assembler and WiC64 libraries.
-    WiC64 is likely to become the main hardware path for VDRIVE going forward as it should be faster and more compatible. However, both options will be maintained since the server-side logic remains the same.
+    <strong>Status Update (11/11/2025):</strong><br/>
+      - Beta vdrive_wic64.asm is now on GitHub along with supporting C#!
+      - VDRIVE / WiC64 works in Vice 3.9 so it can be tested out even without the hardware.
+      - Original relay will continue to be supported for now.
   </p>
 </div>
 
