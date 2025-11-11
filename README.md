@@ -13,25 +13,47 @@
 
 Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https://8bitflynn.io/Projects</a> when the dust settles.
 
-## VDRIVE Hardware
+<h2>VDRIVE Hardware</h2>
 
+<p>VDRIVE supports two hardware configurations for connecting to the Commodore 64:</p>
+<ul>
+  <li><strong>WiC64 Option (Future-Focused):</strong> WiC64 (ESP32-Based, Memory-Mapped)</li>
+  <li><strong>WiFi modem Option (Serial-Based):</strong> ESP8266 WiFi Modem</li>
+</ul>
+
+<h3>WiC64 (ESP32-Based, Memory-Mapped)</h3>
+
+  <img src="https://8bitflynn.io/Resources/Images/WiC64_ESP32_ESP8266.jpg" alt="WiC64 C64 Hardware on left and ESP8266 on right" width="250" align="right"/>
+</br>
 <div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
-<strong>Note:</strong> Exploring <a href="https://wic64.net/web/" target="_blank">WIC64</a> as a potential upgrade from UP9600 / ESP8266 for improved compatibility and performance. Since WIC64 is memory-mapped to the C64, it bypasses serial communication entirely—potentially doubling VDRIVE’s throughput. This also opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+  <strong>Note:</strong> <a href="https://wic64.net/web/" target="_blank">WiC64</a> is being developed now as a major upgrade from UP9600/ESP8266. Unlike serial-based solutions, WiC64 is memory-mapped directly to the C64, bypassing serial bottlenecks and potentially doubling VDRIVE throughput. This opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+  <br/>
+  <br/>
+
+  <p>
+    <strong>Status Update (11/1/2025):</strong><br/>
+    Initial testing with WiC64 was successful.<br/>
+    - Search and Mount are already mocked and functional<br/>
+    - LOAD/SAVE support is in progress<br/>
+    - Chunked LOAD is on the horizon<br/>
+    - Performance and compatibility are expected to improve significantly<br/><br/>
+    - An assembly language version of the "vdrive.asm" will be committed to GitHub as soon as I can get it completly functional. It uses was ported from CBM Studio to ACME assembler and WiC64 libraries.
+    WiC64 is likely to become the main hardware path for VDRIVE going forward as it should be faster and more compatible. However, both options will be maintained since the server-side logic remains the same.
+  </p>
 </div>
 
+<h3>ESP8266 WiFi Modem (Serial-Based)</h3>
 
 <img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250" align="right"/>
 
-- **ESP8266 WiFi modem**  
-  Acts as the wireless transport layer. Flashed with custom firmware to handle all requests.
+<p>The ESP8266 acts as a wireless transport layer, communicating with the C64 via serial. This setup uses custom firmware to handle TCP-to-Serial bridging that should be reusable for other projects needing a relay or bridge.</p>
 
-- **ESP8266 WiFi**  
-  The firmware can be reused in other projects needing TCP-to-Serial bridging. This design makes the hardware "invisible" to the C64 and other connected devices. Thanks to this abstraction, partial VDRIVE functionality works in VICE 3.9 via its RS232-to-IP bridge.
+<ul>
+  <li><strong>Modem Functionality:</strong> Flashed firmware handles all VDRIVE requests over WiFi.</li>
+  <li><strong>Invisible to C64:</strong> The ESP8266 abstracts the transport layer, making it seamless for the C64 and other devices.</li>
+  <li><strong>DIY-Friendly:</strong> You can build your own using an ESP8266 chip and a C64 userport breakout board. Build instructions will be provided soon, though similar guides already exist. Pre-built units are also available from retro vendors or on eBay.</li>
+</ul>
 
-- **ESP8266 / C64 BREAKOUT BOARD / DIY**  
-  These devices can be built using an ESP8266 chip and a Commodore 64 userport breakout board. I plan to providing build instructions when I get a chance, though similar guides already exist. There are also pre-built units from Retro Vendors or on eBay.
-
----
 
 ## VDRIVE StorageAdapters
 
