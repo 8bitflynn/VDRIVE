@@ -50,15 +50,21 @@ namespace VDRIVE.Protocol
 
                     string message = $"MOUNT OK (ID={imageId} {fileName})\r\n";
 
+                    // tacking on typical load commands
+                    // to save some typing on C64
                     if (fileName.ToLower().EndsWith(".prg"))
                     {
                         message += $"\r\nLOAD \"*\",8,1";
+                    }
+                    else
+                    {
+                        message += $"\r\nLOAD \"$\",8,1";
                     }
 
                     string payload = "\r\n" + string.Concat(message) + "\r\n" + "\0";
 
                     WriteResponse(response, payload);
-                    return;;
+                    return; ;
                 }
 
                 // --- SEARCH ---
@@ -67,6 +73,8 @@ namespace VDRIVE.Protocol
                 {
                     string sessionId = request.QueryString["session"] ?? "default";
                     string term = request.QueryString["q"] ?? "";
+
+                    this.Logger.LogMessage($"[SEARCH] SESSION={sessionId}, TERM={term}");
 
                     SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
                     searchFloppiesRequest.Operation = 5;
@@ -81,17 +89,12 @@ namespace VDRIVE.Protocol
                     }
                     else
                     {
-
                         var results = foundFloppys.Select(ff => $"{ff.IdLo} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
 
                         string payload = "\r\n" + string.Concat(results) + "\0";
                         WriteResponse(response, payload);
                     }
 
-                    // await WriteResponse(response, "HELLO FROM SERVER\0");
-
-
-                    this.Logger.LogMessage($"[SEARCH] SESSION={sessionId}, TERM={term}");
                     return;
                 }
 
@@ -107,7 +110,7 @@ namespace VDRIVE.Protocol
                         loadRequest.Operation = 3;
                         loadRequest.FileName = fileName.TrimEnd().ToArray();
                         loadRequest.FileNameLength = (byte)fileName.Length;
-                        storageAdapter.Load(loadRequest, floppyResolver, out fullFile);                       
+                        storageAdapter.Load(loadRequest, floppyResolver, out fullFile);
 
                         ushort dest_ptr_start = 0x00;
                         if (fullFile != null)
@@ -134,7 +137,7 @@ namespace VDRIVE.Protocol
                         }
 
 
-                        HandleRequestAsync(this.HttpListenerContext, fullFile);
+                        WritePayloadResponse(this.HttpListenerContext, fullFile);
 
                         fullFile = null;
                     }
@@ -167,7 +170,7 @@ namespace VDRIVE.Protocol
 
                 // --- Default 404 ---
                 response.StatusCode = 404;
-                 WriteResponse(response, "Not Found");
+                WriteResponse(response, "Not Found");
             }
             catch (Exception ex)
             {
@@ -200,18 +203,14 @@ namespace VDRIVE.Protocol
 
         }
 
-        async Task HandleRequestAsync(HttpListenerContext ctx, byte[] payload)
+        async Task WritePayloadResponse(HttpListenerContext httpListenerContext, byte[] payload)
         {
-            var resp = ctx.Response;
+            var resp = httpListenerContext.Response;
             resp.SendChunked = false;
             resp.ContentLength64 = payload == null ? 0 : payload.Length;
-            await resp.OutputStream.WriteAsync(payload, 0, payload.Length);
+            await resp.OutputStream.WriteAsync(payload, 0, payload == null ? 0 : payload.Length);
             await resp.OutputStream.FlushAsync();
             resp.Close();
-
-            // If you must wait before accepting the next chunk for some reason,
-            // do it outside of the request thread (e.g. scheduler, not Thread.Sleep).
-            // await Task.Delay(35);   // non-blocking
         }
 
         private async Task WriteResponse(HttpListenerResponse response, string text)
