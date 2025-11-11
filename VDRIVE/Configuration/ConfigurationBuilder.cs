@@ -49,6 +49,12 @@ namespace VDRIVE.Configuration
                 this.Logger.LogMessage("ServerOrClientMode is not set in configuration");
                 return false;
             }
+            
+            if (string.IsNullOrWhiteSpace(configuration.ServerType))
+            {
+                this.Logger.LogMessage("ServerType is not set in configuration");
+                return false;
+            }
 
             if (configuration.ServerOrClientMode != "Server" && configuration.ServerOrClientMode != "Client")
             {
@@ -164,15 +170,16 @@ namespace VDRIVE.Configuration
 
             this.Logger.LogMessage("VDRIVE Configuration:");
             this.Logger.LogMessage($"  StorageAdapter: {configuration.StorageAdapter}");
-            this.Logger.LogMessage($"  FloppyResolver: {configuration.FloppyResolver}");           
+            this.Logger.LogMessage($"  FloppyResolver: {configuration.FloppyResolver}");               
             this.Logger.LogMessage($"  TempPath: {configuration.TempPath}");
             this.Logger.LogMessage($"  TempFolder: {configuration.TempFolder}");
             this.Logger.LogMessage($"  ServerOrClientMode: {configuration.ServerOrClientMode}");
 
             if (configuration.ServerOrClientMode == "Server")
             {
+                this.Logger.LogMessage($"  ServerType: {configuration.ServerType}");
                 this.Logger.LogMessage($"  ServerListenAddress: {configuration.ServerListenAddress}");
-                this.Logger.LogMessage($"  ServerPort: {configuration.ServerPort}");
+                this.Logger.LogMessage($"  ServerPort: {configuration.ServerPort}");                
             }
 
             if (configuration.ServerOrClientMode == "Client")

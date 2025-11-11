@@ -7,7 +7,7 @@ namespace VDRIVE.Util
     {
         public void LogMessage(string message, LogSeverity logSeverity = LogSeverity.Info)
         {
-            Console.WriteLine($"[{DateTime.UtcNow:HH:mm:ss.fff}] #{Thread.CurrentThread.ManagedThreadId} {logSeverity}: {message}");
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] #{Thread.CurrentThread.ManagedThreadId} {logSeverity}: {message}");
         }
     }
 }

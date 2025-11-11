@@ -1,4 +1,5 @@
-﻿using VDRIVE;
+﻿using System.Runtime.CompilerServices;
+using VDRIVE;
 using VDRIVE.Configuration;
 using VDRIVE.Drive;
 using VDRIVE.Floppy;
@@ -36,16 +37,14 @@ namespace VDRIVE_Host
             switch (configuration.ServerOrClientMode)
             {
                 case "Server":                    
-                    // firmware is setup as client mode by default so run this in server mode
-                    // should allow multiple C64 connections to same disk image but
-                    // might need to put some locks in place for anything shared access         
-                    IVDriveServer server = new VDriveServer(configuration, logger);
+                    
+                    IVDriveServer server = VDriveFactory.CreateVDriveServer(configuration.ServerType, configuration, logger);
                     server.Start();
                     break;
 
                 case "Client":
                     // client mode is nice if you cannot change firewall settings as ESP8266 does not have a firewall!                 
-                    IVDriveClient client = new VDriveClient(configuration, logger);
+                    IVDriveClient client = VDriveFactory.CreateVDriveClient(configuration.ServerType, configuration, logger);
                     client.Start();
                     break;                
             }            

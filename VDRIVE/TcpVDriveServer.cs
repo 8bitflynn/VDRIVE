@@ -3,14 +3,15 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using VDRIVE.Drive;
 using VDRIVE.Floppy;
+using VDRIVE.Protocol;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class VDriveServer : IVDriveServer
+    public class TcpVDriveServer : IVDriveServer
     {
-        public VDriveServer(IConfiguration configuration, ILogger logger)
+        public TcpVDriveServer(IConfiguration configuration, ILogger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
@@ -50,7 +51,6 @@ namespace VDRIVE
                 Task.Run(() =>
                 {
                     // instance dependencies per client for concurrency
-                    IProtocolHandler protocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
                     IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
                     IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
                     IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
@@ -61,9 +61,10 @@ namespace VDRIVE
                     using (tcpClient)
                     using (NetworkStream networkStream = tcpClient.GetStream())
                     {
+                        IProtocolHandler protocolHandler = new TcpClientProtocolHandler(this.Configuration, this.Logger, tcpClient, networkStream);
                         while (tcpClient.Connected)
                         {
-                            protocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
+                            protocolHandler.HandleClient(floppyResolver, storageAdapter);
                         }
                     }
                 });

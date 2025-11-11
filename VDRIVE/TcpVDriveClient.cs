@@ -1,14 +1,15 @@
 ﻿using System.Net.Sockets;
 using VDRIVE.Drive;
 using VDRIVE.Floppy;
+using VDRIVE.Protocol;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class VDriveClient : IVDriveClient
+    public class TcpVDriveClient : IVDriveClient
     {
-        public VDriveClient(IConfiguration configuration, ILogger logger)
+        public TcpVDriveClient(IConfiguration configuration, ILogger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;
@@ -33,14 +34,14 @@ namespace VDRIVE
                 NetworkStream networkStream = tcpClient.GetStream();
 
                 // instance dependencies
-                IProtocolHandler protocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
+                IProtocolHandler protocolHandler = new TcpClientProtocolHandler(this.Configuration, this.Logger, tcpClient, networkStream);
                 IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
                 IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
                 IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {
-                    protocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
+                    protocolHandler.HandleClient(floppyResolver, storageAdapter);
                 }
             }
         }

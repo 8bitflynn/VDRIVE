@@ -107,7 +107,7 @@ namespace VDRIVE.Floppy.Impl
                 {
                     IEnumerable<FloppyInfo> floppyInfos = ScrapeResults(html);
 
-                    SearchFloppyResponse searchFloppyResponse = BuildSearchFloppyResponse(4096, floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04, (byte)floppyInfos.Count()); // more follows
+                    SearchFloppyResponse searchFloppyResponse = BuildSearchFloppyResponse(0x1000, floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04, (byte)floppyInfos.Count()); // more follows
                     foundFloppyInfos = floppyInfos.Take(Configuration.MaxSearchResults).ToArray();
                     searchFloppyResponse.ResultCount = (byte)foundFloppyInfos.Length;
 

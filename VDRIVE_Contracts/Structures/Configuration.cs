@@ -6,6 +6,7 @@ namespace VDRIVE_Contracts.Structures
     {
         public string StorageAdapter { get; set; }
         public string FloppyResolver { get; set; }
+        public string ServerType { get; set; }
         public ushort MaxSearchResults { get; set; }
         public string TempPath { get; set; }
         public string TempFolder { get; set; }
