@@ -21,13 +21,13 @@ namespace VDRIVE.Protocol
         {
             try
             {
-                var request = this.HttpListenerContext.Request;
-                var response = this.HttpListenerContext.Response;
+                HttpListenerRequest request = this.HttpListenerContext.Request;
+                HttpListenerResponse response = this.HttpListenerContext.Response;
 
                 response.SendChunked = false;
                 response.KeepAlive = true;
 
-                Console.WriteLine($"{request} {request.Url}");
+                this.Logger.LogMessage($"{request} {request.Url}");
 
                 // --- MOUNT ---
                 if (request.HttpMethod == "GET" &&
@@ -36,10 +36,9 @@ namespace VDRIVE.Protocol
                     string sessionId = (request.QueryString["session"] ?? "default").ToUpper();
                     string imageId = request.QueryString["id"] ?? "?";
 
-                    // Mimic: IVDriveCommandServer.Mount(sessionId, imageId)
                     this.Logger.LogMessage($"[Mount] session={sessionId}, image={imageId}");
 
-                    FloppyIdentifier floppyIdentifier = new FloppyIdentifier
+                    FloppyIdentifier floppyIdentifier = new FloppyIdentifier // right now only showing single page of results
                     {
                         IdLo = byte.Parse(imageId),
                         IdHi = 0
@@ -64,13 +63,14 @@ namespace VDRIVE.Protocol
                     string payload = "\r\n" + string.Concat(message) + "\r\n" + "\0";
 
                     WriteResponse(response, payload);
-                    return; ;
+                    return;
                 }
 
                 // --- SEARCH ---
                 if (request.HttpMethod == "GET" &&
                     request.Url.AbsolutePath.Equals("/search", StringComparison.OrdinalIgnoreCase))
                 {
+                    // TODO: add in paging support
                     string sessionId = request.QueryString["session"] ?? "default";
                     string term = request.QueryString["q"] ?? "";
 
@@ -90,7 +90,6 @@ namespace VDRIVE.Protocol
                     else
                     {
                         var results = foundFloppys.Select(ff => $"{ff.IdLo} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
-
                         string payload = "\r\n" + string.Concat(results) + "\0";
                         WriteResponse(response, payload);
                     }
@@ -101,53 +100,55 @@ namespace VDRIVE.Protocol
 
                 if (request.Url.AbsolutePath.Equals("/load", StringComparison.OrdinalIgnoreCase))
                 {
-                    try
+                    DateTime start = DateTime.Now;
+
+                    string fileName = request.QueryString["file"] ?? "";
+                    byte[] fullFile = null;
+
+                    this.Logger.LogMessage($"Loading {fileName} starting");
+
+                    LoadRequest loadRequest = new LoadRequest();
+                    loadRequest.Operation = 3;
+                    loadRequest.FileName = fileName.TrimEnd().ToArray();
+                    loadRequest.FileNameLength = (byte)fileName.Length;
+                    storageAdapter.Load(loadRequest, floppyResolver, out fullFile);
+
+                    ushort dest_ptr_start = 0x00;
+                    if (fullFile != null)
                     {
-                        string fileName = request.QueryString["file"] ?? "";
-                        byte[] fullFile = null;
+                        byte[] dest_ptr_bytes = fullFile.Take(2).ToArray();
+                        dest_ptr_start = (ushort)(fullFile[0] | (fullFile[1] << 8));
+                        this.Logger.LogMessage($"Start Address: 0x{dest_ptr_start:X4}");
 
-                        LoadRequest loadRequest = new LoadRequest();
-                        loadRequest.Operation = 3;
-                        loadRequest.FileName = fileName.TrimEnd().ToArray();
-                        loadRequest.FileNameLength = (byte)fileName.Length;
-                        storageAdapter.Load(loadRequest, floppyResolver, out fullFile);
+                        // check for known instant C64 crash addreses
+                        // to help stabalize during testing
+                        int end_dest_ptr = dest_ptr_start + fullFile.Length;
 
-                        ushort dest_ptr_start = 0x00;
-                        if (fullFile != null)
+                        if (IsValidLoadAddress(this.Logger, dest_ptr_start, end_dest_ptr))
                         {
-                            byte[] dest_ptr_bytes = fullFile.Take(2).ToArray();
-                            dest_ptr_start = (ushort)(fullFile[0] | (fullFile[1] << 8));
-                            this.Logger.LogMessage($"Start Address: 0x{dest_ptr_start:X4}");
-
-                            // check for known instant C64 crash addreses
-                            // to help stabalize during testing
-                            int end_dest_ptr = dest_ptr_start + fullFile.Length;
-
-                            if (IsValidLoadAddress(this.Logger, dest_ptr_start, end_dest_ptr))
-                            {
-                                // fullFile = fullFile.Skip(2).ToArray(); // skip destination pointer    
-                                int endAddress = dest_ptr_start + fullFile.Length - 1;
-                                this.Logger.LogMessage($"End Address: 0x{endAddress:X4}");
-                            }
-                            else
-                            {
-                                fullFile = null;
-                                //loadResponse.ResponseCode = 0x04; // file not found
-                            }
+                            // fullFile = fullFile.Skip(2).ToArray(); // skip destination pointer    
+                            int endAddress = dest_ptr_start + fullFile.Length - 1;
+                            this.Logger.LogMessage($"End Address: 0x{endAddress:X4}");
                         }
-
-
-                        WritePayloadResponse(this.HttpListenerContext, fullFile);
-
-                        fullFile = null;
+                        else
+                        {
+                            fullFile = null;
+                            //loadResponse.ResponseCode = 0x04; // file not found
+                        }
                     }
-                    catch (Exception ex)
+
+                    WritePayloadResponse(this.HttpListenerContext, fullFile);
+
+                    // TODO: send header with success flag / error code
+
+                    if (fullFile != null)
                     {
-                        this.Logger.LogMessage(ex.Message);
+                        DateTime end = DateTime.Now;
+                        Logger.LogMessage($"TimeTook:{((end - start).TotalMilliseconds / 1000).ToString("F3")} " + $"BytesPerSec:{(fullFile.Length / (end - start).TotalMilliseconds * 1000).ToString("F3")}");
                     }
 
-                    return; // prevent falling through to 404
-
+                    fullFile = null;
+                    return;
                 }
 
                 // --- SAVE ---

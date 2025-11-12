@@ -43,8 +43,9 @@ namespace VDRIVE
 
                 Task.Run(() =>
                 {
-                    // HACK for now mappng the local IP as the Session ID until 
-                    // the full session management is in place
+                    // HACK for now mapping the local IP as the Session ID until 
+                    // the full session management is in place so it will work
+                    // over internet.
                     Session session = null;
 
                     IPAddress clientIp = httpListenerContext.Request.RemoteEndPoint.Address;
@@ -67,7 +68,6 @@ namespace VDRIVE
                         VDriveClients.GetOrAdd(clientIp.ToString(), session);
                     }
 
-                    // TODO: this will need maintain session
                     IProtocolHandler httpProtocolHandler = new HttpClientProtocolHandler(this.Configuration, this.Logger, httpListenerContext);
                     httpProtocolHandler.HandleClient(session.FloppyResolver, session.StorageAdapter);
                 });
