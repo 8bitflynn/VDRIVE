@@ -150,8 +150,14 @@ namespace VDRIVE.Configuration
                     //return false;
                     break;
 
-                case "HcsvPsid":
-                    
+                case "HvscPsid":
+                    if (configuration.FloppyResolverSettings.HvscPsid == null ||
+                       string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.HvscPsid.BaseURL) ||
+                       string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.HvscPsid.ExecutablePath))
+                    {
+                        this.Logger.LogMessage("HvscPsid resolver settings are incomplete");
+                        return false;
+                    }
                     break;
 
 
@@ -232,6 +238,11 @@ namespace VDRIVE.Configuration
                     this.Logger.LogMessage($"    CommodoreSoftware BaseURL: {configuration.FloppyResolverSettings.CommodoreSoftware.BaseURL}");
                     this.Logger.LogMessage($"    CommodoreSoftware MediaExtensionsAllowed: {string.Join(',', configuration.FloppyResolverSettings.CommodoreSoftware.MediaExtensionsAllowed)}");
                     this.Logger.LogMessage($"    CommodoreSoftware IgnoredSearchKeywords: {string.Join(',', configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords)}");
+                }
+                if (configuration.FloppyResolver == "HvscPsid" && configuration.FloppyResolverSettings.HvscPsid != null)
+                {
+                    this.Logger.LogMessage($"    Hvsc BaseURL: {configuration.FloppyResolverSettings.HvscPsid.BaseURL}");
+                    this.Logger.LogMessage($"    Hvsc ExecutablePath: {string.Join(',', configuration.FloppyResolverSettings.HvscPsid.ExecutablePath)}");
                 }
             }
         }

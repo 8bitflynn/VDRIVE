@@ -16,7 +16,7 @@ namespace VDRIVE.Floppy
                     return new CommodoreSoftwareFloppyResolver(configuration, logger);
                 case "C64":
                     return new C64FloppyResolver(configuration, logger);
-                case "HcsvPsid":
+                case "HvscPsid":
                     return new HvscPsidFloppyResolver(configuration, logger, processRunner);
                 default:
                     throw new ArgumentException($"Unknown floppy resolver type: {resolverType}");

@@ -83,7 +83,7 @@ namespace VDRIVE.Floppy.Impl
             ushort searchResultIndexId = 1;
             foreach (Match match in matches)
             {
-                string imageName = match.Groups[2].Value.Trim();
+                string imageName = match.Groups[2].Value.Trim() + " " + match.Groups[3].Value.Trim();
                 if (Configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
                 {
                     // skip this result as it is ignored
@@ -152,11 +152,10 @@ namespace VDRIVE.Floppy.Impl
                         // Build minimal psid64 arguments
                         string arguments = $"-c -i 1 -o \"{prgOutputPath}\" \"{rawSidPath}\"";
 
-
                         RunProcessParameters runProcessParameters = new RunProcessParameters
                         {
                             ImagePath = @"C:\Programming\Tool\psid64-1.3-win32",
-                            ExecutablePath = Path.Combine(@"C:\Programming\Tool\psid64-1.3-win32", "psid64.exe"),
+                            ExecutablePath = this.Configuration.FloppyResolverSettings.HvscPsid.ExecutablePath,
                             Arguments = arguments,
                             LockType = LockType.Write,
                             LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds
@@ -164,8 +163,9 @@ namespace VDRIVE.Floppy.Impl
 
                         RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
-
-                        this.InsertedFloppyInfo.ImageName = Path.GetFileName(prgOutputPath).ToCharArray();
+                        // FIXME: hack to get extension in name
+                        this.InsertedFloppyInfo.ImageName = (new string(floppyInfo.ImageName).TrimEnd('\0') + ".prg").ToCharArray();
+                        this.InsertedFloppyInfo.ImageNameLength = (byte)this.InsertedFloppyInfo.ImageName.Length;
                         this.InsertedFloppyPointer.ImagePath = prgOutputPath; // update to disk image extracted file path   
 
                     }
@@ -177,19 +177,18 @@ namespace VDRIVE.Floppy.Impl
                 return default;
             }
 
-            return floppyInfo;
+            return this.InsertedFloppyInfo;
         }
 
         private string BuildHcsvSearchUrl(string searchTerm)
         {
-            return $"https://www.hvsc.c64.org/api/v1/sids?q={Uri.EscapeDataString(searchTerm)}";
+            return $"{this.Configuration.FloppyResolverSettings.HvscPsid.BaseURL}/api/v1/sids?q={Uri.EscapeDataString(searchTerm)}";
         }
 
 
         private string BuildHsvDownloadUrl(string downloadId)
         {
-            //https://www.hvsc.c64.org/download/sids/78963
-            return $"https://www.hvsc.c64.org/download/sids/{downloadId}";
+            return $"{this.Configuration.FloppyResolverSettings.HvscPsid.BaseURL}/download/sids/{downloadId}";
         }
     }
 }

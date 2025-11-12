@@ -11,15 +11,10 @@ namespace VDRIVE.Protocol
     {
         public TcpClientProtocolHandler(IConfiguration configuration, ILogger logger, TcpClient tcpClient, NetworkStream networkStream)
         {
-<<<<<<<< HEAD:VDRIVE/TcpClientProtocolHandler.cs
             this.Configuration = configuration;
             this.Logger = logger;
-========
-            Configuration = configuration;
-            Logger = logger;
->>>>>>>> bf54cae9e79b6d34c6bcdf1a1d461409db9e9c29:VDRIVE/Protocol/TcpClientProtocolHandler.cs
             this.tcpClient = tcpClient;
-            this.networkStream = networkStream;
+            this.networkStream = networkStream;        
         }
         private IConfiguration Configuration;
         private ILogger Logger;

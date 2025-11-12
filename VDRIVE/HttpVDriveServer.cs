@@ -34,43 +34,40 @@ namespace VDRIVE
             {
                 HttpListenerContext httpListenerContext = httpListener.GetContext();
                 HttpListenerRequest httpListenerRequest = httpListenerContext.Request;
-                HttpListenerResponse httpListenerResponse = httpListenerContext.Response;               
+                HttpListenerResponse httpListenerResponse = httpListenerContext.Response;
 
                 httpListenerResponse.SendChunked = false;
                 httpListenerResponse.KeepAlive = true;
 
                 Console.WriteLine($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
 
-                Task.Run(() =>
+                // HACK for now mapping the local IP as the Session ID until 
+                // the full session management is in place so it will work
+                // over internet.
+                Session session = null;
+
+                IPAddress clientIp = httpListenerContext.Request.RemoteEndPoint.Address;
+                if (VDriveClients.ContainsKey(clientIp.ToString()))
                 {
-                    // HACK for now mapping the local IP as the Session ID until 
-                    // the full session management is in place so it will work
-                    // over internet.
-                    Session session = null;
+                    session = VDriveClients[clientIp.ToString()];
+                }
+                else
+                {
+                    // instance dependencies per client for concurrency
+                    // and store in local session
+                    session = new Session();
+                    session.ProcessRunner = new LockingProcessRunner(this.Configuration, this.Logger);
+                    session.FloppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, session.ProcessRunner);
+                    session.StorageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, session.ProcessRunner, this.Configuration, this.Logger);
+                    session.ClientInfo = new ClientInfo();
+                    session.ClientInfo.SessionId = clientIp.ToString();
+                    session.ClientInfo.IPAddress = clientIp.ToString();
 
-                    IPAddress clientIp = httpListenerContext.Request.RemoteEndPoint.Address;
-                    if (VDriveClients.ContainsKey(clientIp.ToString()))
-                    {
-                        session = VDriveClients[clientIp.ToString()];                      
-                    }
-                    else
-                    {
-                        // instance dependencies per client for concurrency
-                        // and store in local session
-                        session = new Session();
-                        session.ProcessRunner = new LockingProcessRunner(this.Configuration, this.Logger);
-                        session.FloppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
-                        session.StorageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, session.ProcessRunner, this.Configuration, this.Logger);
-                        session.ClientInfo = new ClientInfo();
-                        session.ClientInfo.SessionId = clientIp.ToString();
-                        session.ClientInfo.IPAddress = clientIp.ToString();
+                    VDriveClients.GetOrAdd(clientIp.ToString(), session);
+                }
 
-                        VDriveClients.GetOrAdd(clientIp.ToString(), session);
-                    }
-
-                    IProtocolHandler httpProtocolHandler = new HttpClientProtocolHandler(this.Configuration, this.Logger, httpListenerContext);
-                    httpProtocolHandler.HandleClient(session.FloppyResolver, session.StorageAdapter);
-                });
+                IProtocolHandler httpProtocolHandler = new HttpClientProtocolHandler(this.Configuration, this.Logger, httpListenerContext);
+                httpProtocolHandler.HandleClient(session.FloppyResolver, session.StorageAdapter);
             }
         }
     }
