@@ -4,7 +4,7 @@ namespace VDRIVE_Contracts.Interfaces
 {
     public interface IProtocolHandler
     {
-        void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IStorageAdapter storageAdapter);
+        void HandleClient(IFloppyResolver floppyResolver, IStorageAdapter storageAdapter);
     }
 
 }

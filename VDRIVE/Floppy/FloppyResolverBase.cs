@@ -17,7 +17,7 @@ namespace VDRIVE.Floppy
             this.InsertedFloppyInfo = this.FloppyInfos.FirstOrDefault(fi => fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
             this.InsertedFloppyPointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == (floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8)));
 
-            if (!this.InsertedFloppyPointer.Equals(default) && !this.InsertedFloppyPointer.Equals(default))
+            if (!this.InsertedFloppyPointer.Equals(default(FloppyPointer)) && !this.InsertedFloppyPointer.Equals(default))
             {
                 string floppyName = new string(this.InsertedFloppyInfo.ImageName.TakeWhile(c => c != '\0').ToArray());
                 string fullFloppyPath = this.InsertedFloppyPointer.ImagePath;
@@ -81,10 +81,18 @@ namespace VDRIVE.Floppy
         {
             name = name.ToLowerInvariant();
 
-            if (name.Contains("disk1") || name.Contains("side1") || name.Contains("main") || name.Contains("boot"))
+            if (name.Contains("disk1") || name.Contains("side1") ||
+                name.Contains("disk 1") || name.Contains("side 1") ||
+                name.Contains("diska") || name.Contains("sidea") ||
+                name.Contains("disk a") || name.Contains("side a") ||
+                name.Contains("main") || name.Contains("boot"))
                 return 100;
 
-            if (name.Contains("disk2") || name.Contains("side2") || name.Contains("extra") || name.Contains("docs"))
+            if (name.Contains("disk2") || name.Contains("side2") ||
+                name.Contains("disk 2") || name.Contains("side 2") ||
+                name.Contains("diskb") || name.Contains("sideb") ||
+                name.Contains("disk b") || name.Contains("side b") ||
+                name.Contains("extra") || name.Contains("docs"))
                 return 50;
 
             if (name.Contains("readme") || name.Contains("manual"))

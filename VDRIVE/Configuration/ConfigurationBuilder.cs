@@ -144,6 +144,10 @@ namespace VDRIVE.Configuration
                     //return false;
                     break;
 
+                case "HcsvPsid":
+                    
+                    break;
+
 
                 default:
                     this.Logger.LogMessage($"Unknown FloppyResolver type: {configuration.FloppyResolver}");

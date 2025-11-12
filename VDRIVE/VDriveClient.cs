@@ -33,14 +33,14 @@ namespace VDRIVE
                 NetworkStream networkStream = tcpClient.GetStream();
 
                 // instance dependencies
-                IProtocolHandler protocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
+                IProtocolHandler protocolHandler = new TcpClientProtocolHandler(this.Configuration, this.Logger, tcpClient, networkStream);
                 IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
-                IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
+                IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, processRunner);
                 IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {
-                    protocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
+                    protocolHandler.HandleClient(floppyResolver, storageAdapter);
                 }
             }
         }

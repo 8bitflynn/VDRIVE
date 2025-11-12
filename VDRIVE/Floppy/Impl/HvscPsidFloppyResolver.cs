@@ -1,73 +1,21 @@
-﻿using System.Net;
+﻿using System.Data.SqlTypes;
+using System.Net;
 using System.Text.RegularExpressions;
+using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE.Floppy.Impl
 {
-    public class CommodoreSoftwareFloppyResolver : RemoteFloppyResolverBase, IFloppyResolver
+    public class HvscPsidFloppyResolver : RemoteFloppyResolverBase, IFloppyResolver
     {
-        public CommodoreSoftwareFloppyResolver(IConfiguration configuration, ILogger logger)
+        public HvscPsidFloppyResolver(IConfiguration configuration, ILogger logger, IProcessRunner processRunner)
         {
             Configuration = configuration;
             Logger = logger;
+            this.ProcessRunner = processRunner;
         }
-
-        public override FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier)
-        {
-            FloppyInfo floppyInfo = base.InsertFloppy(floppyIdentifier);
-
-            if (floppyInfo.Equals(default))
-            {
-                return floppyInfo;
-            }
-
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    string downloadPageUrl = BuildFullCommodoreSoftwarePath(InsertedFloppyPointer.ImagePath);
-                    HttpResponseMessage httpResponseMessage = client.PostAsync(downloadPageUrl, null).Result;
-                    string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
-
-                    if (httpResponseMessage.IsSuccessStatusCode)
-                    {
-                        var match = Regex.Match(html, @"([^""]+)""\s+aria-label=""Start download process""");
-
-                        if (match.Success)
-                        {
-                            string rawHref = match.Groups[1].Value;
-                            string decodedHref = WebUtility.HtmlDecode(rawHref);
-
-                            Logger.LogMessage("Extracted link: " + decodedHref);
-
-                            string commodoreSoftwareDownloadUrl = BuildFullCommodoreSoftwarePath(decodedHref);
-
-                            byte[] zippedFile = DownloadFile(commodoreSoftwareDownloadUrl);
-                            if (zippedFile == null)
-                            {
-                                Logger.LogMessage("Failed to download file.");
-                                return default;
-                            }
-
-                            // attempt to get disk1
-                            IEnumerable<string> extractedFilePaths = this.DecompressArchive(zippedFile);
-                            string fullFilePath = this.ResolvePrimaryDisk(extractedFilePaths, Configuration.FloppyResolverSettings.CommodoreSoftware.MediaExtensionsAllowed);
-
-                            this.InsertedFloppyInfo.ImageName = Path.GetFileName(fullFilePath).ToCharArray();                          
-                            this.InsertedFloppyPointer.ImagePath = fullFilePath; // update to disk image extracted file path                        
-                        }
-                    }
-                }
-            }
-            catch (Exception exception)
-            {
-                Logger.LogMessage("Failed to insert floppy: " + exception.Message);
-                return default;
-            }
-
-            return floppyInfo;
-        }       
+        private IProcessRunner ProcessRunner;
 
         public override SearchFloppyResponse SearchFloppys(SearchFloppiesRequest searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos)
         {
@@ -98,9 +46,9 @@ namespace VDRIVE.Floppy.Impl
 
             using (HttpClient client = new HttpClient())
             {
-                string searchUrl = BuildCommodoreSoftwareSearchUrl(searchTerm, mediaTypeCSV);
+                string searchUrl = BuildHcsvSearchUrl(searchTerm);
 
-                HttpResponseMessage httpResponseMessage = client.PostAsync(searchUrl, null).Result;
+                HttpResponseMessage httpResponseMessage = client.GetAsync(searchUrl).Result;
                 string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
 
                 if (httpResponseMessage.IsSuccessStatusCode)
@@ -128,7 +76,8 @@ namespace VDRIVE.Floppy.Impl
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
 
             // Match each result block
-            string pattern = @"<dt class=""result-title"">.*?<a href=""(.*?)"".*?>(.*?)</a>.*?</dt>.*?<dd class=""result-text"">.*?>(.*?)</dd>";
+            string pattern = @"\{""id"":(\d+),""title"":""([^""]+)"",""author"":""([^""]+)"",""released"":""([^""]+)""\}"
+;
             var matches = Regex.Matches(html, pattern, RegexOptions.Singleline);
 
             ushort searchResultIndexId = 1;
@@ -174,27 +123,73 @@ namespace VDRIVE.Floppy.Impl
             return floppyInfos;
         }
 
-        private string BuildCommodoreSoftwareSearchUrl(string searchTerm, string mediaType) // media type not currently used
+        public override FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier)
         {
-            string baseUrl = BuildFullCommodoreSoftwarePath("/search/search?");
-            var queryParams = new Dictionary<string, string>
-            {
-                { "searchword", searchTerm },
-                { "Search", "" },
-                { "task", "search" },
-                { "reset", "" },
-                { "searchphrase", "all" },
-                { "ordering", "popular" }, // newest
-                { "limit", "0" } // all
-            };
+            FloppyInfo floppyInfo = base.InsertFloppy(floppyIdentifier);
 
-            var queryString = string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={Uri.EscapeDataString(kvp.Value)}"));
-            return baseUrl + queryString;
+            if (floppyInfo.Equals(default))
+            {
+                return floppyInfo;
+            }
+
+            try
+            {
+                using (HttpClient client = new HttpClient())
+                {
+                    string downloadPageUrl = BuildHsvDownloadUrl(InsertedFloppyPointer.ImagePath);
+                    HttpResponseMessage httpResponseMessage = client.GetAsync(downloadPageUrl).Result;
+                    byte[] rawBytes = httpResponseMessage.Content.ReadAsByteArrayAsync().Result;
+
+                    if (httpResponseMessage.IsSuccessStatusCode)
+                    {
+                        // Save raw SID bytes to disk
+                        string rawSidPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder, "input.sid");
+                        File.WriteAllBytes(rawSidPath, rawBytes);
+
+                        // Define output PRG path
+                        string prgOutputPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder, "converted.prg");
+
+                        // Build minimal psid64 arguments
+                        string arguments = $"-c -i 1 -o \"{prgOutputPath}\" \"{rawSidPath}\"";
+
+
+                        RunProcessParameters runProcessParameters = new RunProcessParameters
+                        {
+                            ImagePath = @"C:\Programming\Tool\psid64-1.3-win32",
+                            ExecutablePath = Path.Combine(@"C:\Programming\Tool\psid64-1.3-win32", "psid64.exe"),
+                            Arguments = arguments,
+                            LockType = LockType.Write,
+                            LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds
+                        };
+
+                        RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
+
+
+                        this.InsertedFloppyInfo.ImageName = Path.GetFileName(prgOutputPath).ToCharArray();
+                        this.InsertedFloppyPointer.ImagePath = prgOutputPath; // update to disk image extracted file path   
+
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                Logger.LogMessage("Failed to insert floppy: " + exception.Message);
+                return default;
+            }
+
+            return floppyInfo;
         }
 
-        private string BuildFullCommodoreSoftwarePath(string relativePath)
+        private string BuildHcsvSearchUrl(string searchTerm)
         {
-            return this.Configuration.FloppyResolverSettings.CommodoreSoftware.BaseURL + relativePath;
+            return $"https://www.hvsc.c64.org/api/v1/sids?q={Uri.EscapeDataString(searchTerm)}";
+        }
+
+
+        private string BuildHsvDownloadUrl(string downloadId)
+        {
+            //https://www.hvsc.c64.org/download/sids/78963
+            return $"https://www.hvsc.c64.org/download/sids/{downloadId}";
         }
     }
 }

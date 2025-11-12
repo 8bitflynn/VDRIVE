@@ -50,9 +50,8 @@ namespace VDRIVE
                 Task.Run(() =>
                 {
                     // instance dependencies per client for concurrency
-                    IProtocolHandler protocolHandler = new ProtocolHandler(this.Configuration, this.Logger);
                     IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
-                    IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
+                    IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, processRunner);
                     IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
                     string ip = tcpClient.Client.RemoteEndPoint.ToString();
@@ -61,9 +60,10 @@ namespace VDRIVE
                     using (tcpClient)
                     using (NetworkStream networkStream = tcpClient.GetStream())
                     {
+                        IProtocolHandler protocolHandler = new TcpClientProtocolHandler(this.Configuration, this.Logger, tcpClient, networkStream);
                         while (tcpClient.Connected)
                         {
-                            protocolHandler.HandleClient(tcpClient, networkStream, floppyResolver, storageAdapter);
+                            protocolHandler.HandleClient(floppyResolver, storageAdapter);
                         }
                     }
                 });

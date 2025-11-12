@@ -7,17 +7,21 @@ using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE
 {
-    public class ProtocolHandler : IProtocolHandler
+    public class TcpClientProtocolHandler : IProtocolHandler
     {
-        public ProtocolHandler(IConfiguration configuration, ILogger logger)
+        public TcpClientProtocolHandler(IConfiguration configuration, ILogger logger, TcpClient tcpClient, NetworkStream networkStream)
         {
             this.Configuration = configuration;
             this.Logger = logger;
+            this.tcpClient = tcpClient;
+            this.networkStream = networkStream;
         }
         private IConfiguration Configuration;
         private ILogger Logger;
+        private TcpClient tcpClient;
+        private NetworkStream networkStream;  
 
-        public void HandleClient(TcpClient tcpClient, NetworkStream networkStream, IFloppyResolver floppyResolver, IStorageAdapter storageAdapter)
+        public void HandleClient(IFloppyResolver floppyResolver, IStorageAdapter storageAdapter)
         {
             byte[] data = new byte[1];
             if (!networkStream.DataAvailable)
