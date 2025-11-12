@@ -3,14 +3,15 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using VDRIVE.Drive;
 using VDRIVE.Floppy;
+using VDRIVE.Protocol;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE
 {
-    public class VDriveServer : IVDriveServer
+    public class TcpVDriveServer : IVDriveServer
     {
-        public VDriveServer(IConfiguration configuration, ILogger logger)
+        public TcpVDriveServer(IConfiguration configuration, ILogger logger)
         {
             this.Configuration = configuration;
             this.Logger = logger;

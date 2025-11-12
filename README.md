@@ -13,25 +13,43 @@
 
 Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https://8bitflynn.io/Projects</a> when the dust settles.
 
-## VDRIVE Hardware
+<h2>VDRIVE Hardware</h2>
+
+<p>VDRIVE supports two hardware configurations for connecting to the Commodore 64:</p>
+<ul>
+  <li><strong>WiC64 Option (Future-Focused):</strong> WiC64 (ESP32-Based, Memory-Mapped)</li>
+  <li><strong>WiFi modem Option (Serial-Based):</strong> ESP8266 WiFi Modem</li>
+</ul>
+
+<h3>WiC64 (ESP32-Based, Memory-Mapped)</h3>
+
+  <img src="https://8bitflynn.io/Resources/Images/WiC64_ESP32_ESP8266.jpg" alt="WiC64 C64 Hardware on left and ESP8266 on right" width="250" align="right"/>
 
 <div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
-<strong>Note:</strong> Exploring <a href="https://wic64.net/web/" target="_blank">WIC64</a> as a potential upgrade from UP9600 / ESP8266 for improved compatibility and performance. Since WIC64 is memory-mapped to the C64, it bypasses serial communication entirely—potentially doubling VDRIVE’s throughput. This also opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+  <strong>Note:</strong> <a href="https://wic64.net/web/" target="_blank">WiC64</a> is being developed now as a major upgrade from UP9600/ESP8266. Unlike serial-based solutions, WiC64 is memory-mapped directly to the C64, bypassing serial bottlenecks and potentially doubling VDRIVE throughput. This opens the possibility of running VDRIVE directly from cartridge, allowing binaries to load anywhere in memory.
+  <br/>
+  <br/>
+
+  <p>
+    <strong>Status Update (11/11/2025):</strong><br/>
+      - Beta vdrive_wic64.asm is now on GitHub along with supporting C#!
+      - VDRIVE / WiC64 works in Vice 3.9 so it can be tested out even without the hardware.
+      - Original relay will continue to be supported for now.
+  </p>
 </div>
 
+<h3>ESP8266 WiFi Modem (Serial-Based)</h3>
 
 <img src="https://8bitflynn.io/Resources/Images/ESP8266_C64_SerialHardware.jpg" alt="ESP8266 C64 Serial Hardware" width="250" align="right"/>
 
-- **ESP8266 WiFi modem**  
-  Acts as the wireless transport layer. Flashed with custom firmware to handle all requests.
+<p>The ESP8266 acts as a wireless transport layer, communicating with the C64 via serial. This setup uses custom firmware to handle TCP-to-Serial bridging that should be reusable for other projects needing a relay or bridge.</p>
 
-- **ESP8266 WiFi**  
-  The firmware can be reused in other projects needing TCP-to-Serial bridging. This design makes the hardware "invisible" to the C64 and other connected devices. Thanks to this abstraction, partial VDRIVE functionality works in VICE 3.9 via its RS232-to-IP bridge.
+<ul>
+  <li><strong>Modem Functionality:</strong> Flashed firmware handles all VDRIVE requests over WiFi.</li>
+  <li><strong>Invisible to C64:</strong> The ESP8266 abstracts the transport layer, making it seamless for the C64 and other devices.</li>
+  <li><strong>DIY-Friendly:</strong> You can build your own using an ESP8266 chip and a C64 userport breakout board. Build instructions will be provided soon, though similar guides already exist. Pre-built units are also available from retro vendors or on eBay.</li>
+</ul>
 
-- **ESP8266 / C64 BREAKOUT BOARD / DIY**  
-  These devices can be built using an ESP8266 chip and a Commodore 64 userport breakout board. I plan to providing build instructions when I get a chance, though similar guides already exist. There are also pre-built units from Retro Vendors or on eBay.
-
----
 
 ## VDRIVE StorageAdapters
 
@@ -67,17 +85,33 @@ Users search for disks using floppy resolvers and all search reseults return a *
 
 ---
 
+### Install Steps
+
 ## Install Steps
 
-### 1. Flash the ESP8266
-Burn `ESP8266_Firmware.ino` to your WiFi modem.
+### 1. Choose Your Connection Method
 
-To build the firmware using [Arduino IDE](https://www.arduino.cc/en/software), open **Preferences** and add this URL to **Additional Board Manager URLs**:  
-`http://arduino.esp8266.com/stable/package_esp8266com_index.json`  
+You can use VDRIVE with either:
+
+#### 🔌 A Direct ESP8266 Modem (requires flashing)
+- Burn `ESP8266_Firmware.ino` to your WiFi modem.
+- To build the firmware using [Arduino IDE](https://www.arduino.cc/en/software), open **Preferences** and add this URL to **Additional Board Manager URLs**:  
+  `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
+
+#### 📡 A WiC64 Relay (no flashing required)
+- Use a real **<a href="https://wic64.net/web/" target="_blank">WiC64</a>** device *or* enable WiC64 emulation in **VICE 3.9+**
 
 ### 2. Build the C64 Client
-- Assemble [`vdrive.asm`](https://github.com/8bitflynn/VDRIVE/blob/master/vdrive.asm) using [CBM Studio](https://www.ajordison.co.uk/download.html).  
-- Build [`UP9600.asm`](https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm) from Bo Zimmerman's repository.
+
+Choose the appropriate client for your setup:
+
+- **For direct ESP8266 modem use:**  
+  - Assemble [`vdrive.asm`](https://github.com/8bitflynn/VDRIVE/blob/master/vdrive.asm) using [CBM Studio](https://www.ajordison.co.uk/download.html).  
+  - Build [`UP9600.asm`](https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm) from Bo Zimmerman's repository.
+
+- **For WiC64 wireless interface (real or emulated):**  
+  - Assemble [`vdrive_wic64.asm`](https://github.com/8bitflynn/VDRIVE/blob/master/vdrive_wic64.asm) using [ACME cross assembler](https://github.com/meonwax/acme).  
+  - This version communicates via WiC64 through HTTP.
 
 ### 3. Configure the Server
 Edit `appsettings.json` to define the search paths VDRIVE should scan.  
@@ -90,26 +124,43 @@ VDRIVE runs on [any OS with .NET Core runtime](https://github.com/dotnet/core/bl
 **DirMaster** is Windows-only, but **VICE** supports multiple platforms (though not all are tested).
 
 ### 5. Test on Real Hardware
+
+#### If using ESP8266 Modem:
+
 From your Commodore 64:
 
-```
-LOAD "UP9600.prg",8,1
-LOAD "setupwifi.prg",8
-RUN
-```
+    LOAD "UP9600.prg",8,1
+    LOAD "setupwifi.prg",8
+    RUN
 
 Enter your WiFi credentials — stored in ESP8266 flash memory (setup is one-time).
 
 Then:
 
-```
-LOAD "UP9600.prg",8,1  : not needed if loaded already above
-LOAD "vdrive.prg",8,1
-SYS 49152   : Enable VDRIVE  
-SYS 49155   : Disable VDRIVE  
-SYS 49158   : Search for disk images  
-SYS 49161   : Mount a different floppy from previous search
-```
+    LOAD "UP9600.prg",8,1   : not needed if loaded already above
+    LOAD "vdrive.prg",8,1
+    SYS 49152   : Enable VDRIVE  
+    SYS 49155   : Disable VDRIVE  
+    SYS 49158   : Search for disk images  
+    SYS 49161   : Mount a different floppy from previous search
+
+---
+
+#### If using WiC64 Relay:
+
+From your Commodore 64:
+
+    LOAD "vdrive_wic64.prg",8,1
+
+Then:
+
+    SYS 49152   : Enable VDRIVE  
+    SYS 49155   : Disable VDRIVE  
+    SYS 49158   : Search for disk images  
+    SYS 49161   : Mount a different floppy from previous search
+
+> No need to load `UP9600.prg` or run `setupwifi.prg` — WiC64 handles communication directly.
+
 
 - Search results include sequence numbers and filenames/descriptions.  
 - Enter a number to mount a disk from the results.  
