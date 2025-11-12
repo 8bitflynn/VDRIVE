@@ -52,7 +52,7 @@ namespace VDRIVE
                 {
                     // instance dependencies per client for concurrency
                     IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
-                    IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger);
+                    IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, processRunner);
                     IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
                     string ip = tcpClient.Client.RemoteEndPoint.ToString();

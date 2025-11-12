@@ -85,17 +85,33 @@ Users search for disks using floppy resolvers and all search reseults return a *
 
 ---
 
+### Install Steps
+
 ## Install Steps
 
-### 1. Flash the ESP8266
-Burn `ESP8266_Firmware.ino` to your WiFi modem.
+### 1. Choose Your Connection Method
 
-To build the firmware using [Arduino IDE](https://www.arduino.cc/en/software), open **Preferences** and add this URL to **Additional Board Manager URLs**:  
-`http://arduino.esp8266.com/stable/package_esp8266com_index.json`  
+You can use VDRIVE with either:
+
+#### 🔌 A Direct ESP8266 Modem (requires flashing)
+- Burn `ESP8266_Firmware.ino` to your WiFi modem.
+- To build the firmware using [Arduino IDE](https://www.arduino.cc/en/software), open **Preferences** and add this URL to **Additional Board Manager URLs**:  
+  `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
+
+#### 📡 A WiC64 Relay (no flashing required)
+- Use a real **<a href="https://wic64.net/web/" target="_blank">WiC64</a>** device *or* enable WiC64 emulation in **VICE 3.9+**
 
 ### 2. Build the C64 Client
-- Assemble [`vdrive.asm`](https://github.com/8bitflynn/VDRIVE/blob/master/vdrive.asm) using [CBM Studio](https://www.ajordison.co.uk/download.html).  
-- Build [`UP9600.asm`](https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm) from Bo Zimmerman's repository.
+
+Choose the appropriate client for your setup:
+
+- **For direct ESP8266 modem use:**  
+  - Assemble [`vdrive.asm`](https://github.com/8bitflynn/VDRIVE/blob/master/vdrive.asm) using [CBM Studio](https://www.ajordison.co.uk/download.html).  
+  - Build [`UP9600.asm`](https://github.com/bozimmerman/Zimodem/blob/master/cbm8bit/src/up9600.asm) from Bo Zimmerman's repository.
+
+- **For WiC64 wireless interface (real or emulated):**  
+  - Assemble [`vdrive_wic64.asm`](https://github.com/8bitflynn/VDRIVE/blob/master/vdrive_wic64.asm) using [ACME cross assembler](https://github.com/meonwax/acme).  
+  - This version communicates via WiC64 through HTTP.
 
 ### 3. Configure the Server
 Edit `appsettings.json` to define the search paths VDRIVE should scan.  
@@ -108,26 +124,43 @@ VDRIVE runs on [any OS with .NET Core runtime](https://github.com/dotnet/core/bl
 **DirMaster** is Windows-only, but **VICE** supports multiple platforms (though not all are tested).
 
 ### 5. Test on Real Hardware
+
+#### If using ESP8266 Modem:
+
 From your Commodore 64:
 
-```
-LOAD "UP9600.prg",8,1
-LOAD "setupwifi.prg",8
-RUN
-```
+    LOAD "UP9600.prg",8,1
+    LOAD "setupwifi.prg",8
+    RUN
 
 Enter your WiFi credentials — stored in ESP8266 flash memory (setup is one-time).
 
 Then:
 
-```
-LOAD "UP9600.prg",8,1  : not needed if loaded already above
-LOAD "vdrive.prg",8,1
-SYS 49152   : Enable VDRIVE  
-SYS 49155   : Disable VDRIVE  
-SYS 49158   : Search for disk images  
-SYS 49161   : Mount a different floppy from previous search
-```
+    LOAD "UP9600.prg",8,1   : not needed if loaded already above
+    LOAD "vdrive.prg",8,1
+    SYS 49152   : Enable VDRIVE  
+    SYS 49155   : Disable VDRIVE  
+    SYS 49158   : Search for disk images  
+    SYS 49161   : Mount a different floppy from previous search
+
+---
+
+#### If using WiC64 Relay:
+
+From your Commodore 64:
+
+    LOAD "vdrive_wic64.prg",8,1
+
+Then:
+
+    SYS 49152   : Enable VDRIVE  
+    SYS 49155   : Disable VDRIVE  
+    SYS 49158   : Search for disk images  
+    SYS 49161   : Mount a different floppy from previous search
+
+> No need to load `UP9600.prg` or run `setupwifi.prg` — WiC64 handles communication directly.
+
 
 - Search results include sequence numbers and filenames/descriptions.  
 - Enter a number to mount a disk from the results.  

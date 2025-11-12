@@ -18,6 +18,7 @@ namespace VDRIVE_UnitTesting
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
+            IProcessRunner processRunner = new LockingProcessRunner(configuration, logger);
 
             if (!configBuilder.IsValidConfiguration(configuration))
             {
@@ -25,10 +26,10 @@ namespace VDRIVE_UnitTesting
             }
             
             SearchFloppiesRequest searchFloppyRequest = new SearchFloppiesRequest(); // input from C64
-            searchFloppyRequest.SearchTerm = "data4".ToArray();
+            searchFloppyRequest.SearchTerm = "ozzy".ToArray();
             searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
 
-            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
+            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger, processRunner);
             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo); // output to C64
 
 
@@ -43,7 +44,6 @@ namespace VDRIVE_UnitTesting
             loadRequest.FileName = "8bitintro".ToArray();
             loadRequest.FileNameLength = (byte)loadRequest.FileName.Length;
 
-            IProcessRunner processRunner = new LockingProcessRunner(configuration, logger);
             IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(configuration.StorageAdapter, processRunner, configuration, logger);
             LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload); // output to C64
         }
@@ -55,6 +55,7 @@ namespace VDRIVE_UnitTesting
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
+            IProcessRunner processRunner = new LockingProcessRunner(configuration, logger);
 
             if (!configBuilder.IsValidConfiguration(configuration))
             {
@@ -67,7 +68,7 @@ namespace VDRIVE_UnitTesting
             searchFloppyRequest.SearchTerm = "data4".ToArray();
             searchFloppyRequest.SearchTermLength = (byte)searchFloppyRequest.SearchTerm.Length;
 
-            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger);
+            IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(configuration.FloppyResolver, configuration, logger, processRunner);
             SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppyRequest, out FloppyInfo[] floppyInfo); // output to C64
 
             FloppyIdentifier floppyIdentifier = new FloppyIdentifier(); // input from C64 (user selected ID)
