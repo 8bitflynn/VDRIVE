@@ -153,7 +153,8 @@ namespace VDRIVE.Configuration
                 case "HvscPsid":
                     if (configuration.FloppyResolverSettings.HvscPsid == null ||
                        string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.HvscPsid.BaseURL) ||
-                       string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.HvscPsid.ExecutablePath))
+                       string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.HvscPsid.ExecutablePath) ||
+                       string.IsNullOrWhiteSpace(configuration.FloppyResolverSettings.HvscPsid.Arguments))
                     {
                         this.Logger.LogMessage("HvscPsid resolver settings are incomplete");
                         return false;
@@ -243,6 +244,7 @@ namespace VDRIVE.Configuration
                 {
                     this.Logger.LogMessage($"    Hvsc BaseURL: {configuration.FloppyResolverSettings.HvscPsid.BaseURL}");
                     this.Logger.LogMessage($"    Hvsc ExecutablePath: {string.Join(',', configuration.FloppyResolverSettings.HvscPsid.ExecutablePath)}");
+                    this.Logger.LogMessage($"    Hvsc Arguments: {configuration.FloppyResolverSettings.HvscPsid.Arguments}");
                 }
             }
         }

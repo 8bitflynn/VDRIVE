@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Text;
+using VDRIVE.Floppy.Impl;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
 
@@ -49,9 +50,10 @@ namespace VDRIVE.Protocol
 
                     string message = $"MOUNT OK (ID={imageId} {fileName})\r\n";
 
-                    // tacking on typical load commands
+                    // hack: tacking on typical load commands
                     // to save some typing on C64
-                    if (fileName.ToLower().EndsWith(".prg"))
+                    if (fileName.ToLower().EndsWith(".prg") ||
+                        floppyResolver.GetType() == typeof(HvscPsidFloppyResolver))
                     {
                         message += $"\r\nLOAD \"*\",8,1";
                     }

@@ -83,7 +83,7 @@ namespace VDRIVE.Floppy.Impl
             ushort searchResultIndexId = 1;
             foreach (Match match in matches)
             {
-                string imageName = match.Groups[2].Value.Trim() + " " + match.Groups[3].Value.Trim();
+                string imageName = match.Groups[2].Value.Trim() + " - " + match.Groups[3].Value.Trim();
                 if (Configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
                 {
                     // skip this result as it is ignored
@@ -142,15 +142,19 @@ namespace VDRIVE.Floppy.Impl
 
                     if (httpResponseMessage.IsSuccessStatusCode)
                     {
-                        // Save raw SID bytes to disk
-                        string rawSidPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder, "input.sid");
+                        string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
+                        if (!Directory.Exists(fullPath))
+                            Directory.CreateDirectory(fullPath);
+
+                        // Save raw SID bytes to disk for psid64
+                        string rawSidPath = Path.Combine(fullPath, "raw.sid");
                         File.WriteAllBytes(rawSidPath, rawBytes);
 
                         // Define output PRG path
-                        string prgOutputPath = Path.Combine(this.Configuration.TempPath, this.Configuration.TempFolder, "converted.prg");
+                        string prgOutputPath = Path.Combine(fullPath, "c64sid.prg");
 
                         // Build minimal psid64 arguments
-                        string arguments = $"-c -i 1 -o \"{prgOutputPath}\" \"{rawSidPath}\"";
+                        string arguments = $"{this.Configuration.FloppyResolverSettings.HvscPsid.Arguments} -o \"{prgOutputPath}\" \"{rawSidPath}\"";
 
                         RunProcessParameters runProcessParameters = new RunProcessParameters
                         {
@@ -164,10 +168,9 @@ namespace VDRIVE.Floppy.Impl
                         RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
                         // FIXME: hack to get extension in name
-                        this.InsertedFloppyInfo.ImageName = (new string(floppyInfo.ImageName).TrimEnd('\0') + ".prg").ToCharArray();
+                        this.InsertedFloppyInfo.ImageName = (new string(floppyInfo.ImageName).TrimEnd('\0')).ToCharArray();
                         this.InsertedFloppyInfo.ImageNameLength = (byte)this.InsertedFloppyInfo.ImageName.Length;
                         this.InsertedFloppyPointer.ImagePath = prgOutputPath; // update to disk image extracted file path   
-
                     }
                 }
             }
