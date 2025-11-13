@@ -73,6 +73,8 @@ Resolvers support:
 
 Users search for disks using floppy resolvers and all search reseults return a **sequence number** and a description or filename that can be selected to mount. 
 
+VDRIVE now has a <a href="https://github.com/8bitflynn/VDRIVE/blob/master/VDRIVE/Floppy/Impl/HvscPsidFloppyResolver.cs" target="_blank">HvscPsidFloppyResolver</a> that joins the search and download from <a href="https://www.hvsc.c64.org/" target="_blank">High Voltage Sid Collection</a> with the conversion to PRG from <a href="https://psid64.sourceforge.io/">PSID64</a> making the C64 a SID jukebox!
+
 ---
 
 ### Notes
