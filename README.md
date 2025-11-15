@@ -82,8 +82,6 @@ VDRIVE now has a <a href="https://github.com/8bitflynn/VDRIVE/blob/master/VDRIVE
 
 ### Install Steps
 
-## Install Steps
-
 ### 1. Choose Your Connection Method
 
 You can use VDRIVE with either:
