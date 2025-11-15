@@ -98,7 +98,7 @@ namespace VDRIVE.Storage.Impl
                     else
                     {
                         string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer());
-                        string lineWithFirstFile = rawLines.FirstOrDefault(rawLine => rawLine.ToLower().Contains(".prg"));
+                        string lineWithFirstFile = rawLines.FirstOrDefault(rawLine => rawLine.ToLower().Contains("prg"));
 
                         // Match anything inside double quotes, including spaces
                         Match match = Regex.Match(lineWithFirstFile, "\"([^\"]*)\"");

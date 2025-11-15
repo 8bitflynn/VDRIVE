@@ -76,8 +76,8 @@ namespace VDRIVE.Floppy.Impl
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
 
             // Match each result block
-            string pattern = @"\{""id"":(\d+),""title"":""([^""]+)"",""author"":""([^""]+)"",""released"":""([^""]+)""\}"
-;
+            string pattern = @"\{""id"":(\d+),""title"":""([^""]+)"",""author"":""([^""]+)"",""released"":""([^""]+)""\}";
+            
             var matches = Regex.Matches(html, pattern, RegexOptions.Singleline);
 
             ushort searchResultIndexId = 1;
