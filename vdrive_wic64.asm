@@ -1,34 +1,22 @@
 * = $c000
 
+; read only (by vdrive) ZP pointers and variables
 fnlen          = $b7
 lfn            = $b8
 filename       = $bb
 devnum         = $ba
 sec_addr       = $b9
 load_mode      = $a7
-; targ_addr_lo   = $a0
-; targ_addr_hi   = $a1
 start_addr_lo  = $c1
 start_addr_hi  = $c2
 
+; read/write indirect pointers
 temp_ptr_lo    = $fd
 temp_ptr_hi    = $fe
 dest_ptr_lo    = $ae
 dest_ptr_hi    = $af
 
-user_input_length    = $cef4
-org_iload_lo         = $cef5
-org_iload_hi         = $cef6
-org_isave_lo         = $cef7
-org_isave_hi         = $cef8
-vdrive_devnum        = $cef9
-vdrive_retcode       = $cefa
-temp_workspace1      = $cefb
-temp_workspace2      = $cefc
-temp_workspace3      = $cefd
-temp_workspace4      = $cefe
-temp_workspace5      = $ceff
-
+; jmp table for enable/disable/search/mount
 jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
@@ -41,6 +29,11 @@ jmp vdrive_mount_floppy
 enable_vdrive:   
     lda #$08
     sta vdrive_devnum
+
+    ; Initialize session to 0
+    lda #0
+    sta session_id
+    sta session_id+1
 
     sei
 
@@ -84,6 +77,7 @@ disable_vdrive:
     sta $0333
     rts
 
+; avoid ?OUT OF MEMORY errors by setting basic pointers to safe values
 cleanup_basic_pointers:
     lda #$01
     sta $2B       ; TXTPTR low
@@ -163,31 +157,64 @@ fn_copy_done:
     lda #$40                ; set a longer timeout
     sta wic64_timeout
 
-    ; Send HTTP POST with "load" endpoint and filename as POST data
-    lda #2                  ; index 2 = load prefix
-    ldx #<user_input  ; data pointer lo
-    ldy #>user_input  ; data pointer hi
-    jsr send_http_post
-    bcs load_fail
+    ; Prepend session ID to filename
+    jsr prepend_session_to_data
 
-    ; show loading
-    jsr $f5d2
+    ; Send HTTP POST with "load" endpoint (X/Y already point to response_buffer)
+    lda #2                  ; index 2 = load prefix
+    jsr send_http_post
+    bcc .load_post_ok
+    jmp load_fail
+.load_post_ok:
 
     ; receive response header
     +wic64_receive_header
-    bcs load_fail
+    bcc .load_hdr_ok
+    jmp load_fail
+.load_hdr_ok:
 
-    ; receive first two bytes (PRG load address) into dest_ptr_lo/hi
-    +wic64_set_response dest_ptr_lo
-    +wic64_receive dest_ptr_lo, 2
-    bcs load_fail
+    ; receive first 3 bytes (session + error_code) into response_buffer
+    +wic64_set_response response_buffer
+    +wic64_receive response_buffer, 3
+    bcc .load_got_status
+    jmp load_fail
+.load_got_status:
 
-    ; set runtime response pointer to the address we just received
+    ; Extract session ID from first 2 bytes
+    lda response_buffer
+    sta session_id
+    lda response_buffer+1
+    sta session_id+1
+
+    ; Store error code from byte 2
+    lda response_buffer+2
+    sta vdrive_retcode
+
+    ; Check error code - 0xff is success, anything else is error
+    cmp #$ff
+    bne load_error
+    
+    ; show loading message only on success
+    jsr $f5d2
+    
+    ; Success - receive 2 more bytes for load address
+    +wic64_receive response_buffer, 2
+    bcc .load_got_addr
+    jmp load_fail
+.load_got_addr:
+    
+    ; Extract PRG load address from response_buffer into dest_ptr
+    lda response_buffer
+    sta dest_ptr_lo
+    lda response_buffer+1
+    sta dest_ptr_hi
+
+    ; Set response pointer to the load address and receive remaining data directly
     lda dest_ptr_lo
     sta wic64_response
     lda dest_ptr_hi
     sta wic64_response+1
-
+    
     ; receive remaining bytes directly into the destination
     +wic64_receive
     bcs load_fail
@@ -197,22 +224,24 @@ fn_copy_done:
 load_done:     
     jsr compute_endaddress
     
-    lda #$ff
-    sta vdrive_retcode
-    lda vdrive_retcode
+    ; Return success with error code already in vdrive_retcode
     clc
     ldx dest_ptr_lo
     ldy dest_ptr_hi
+    lda vdrive_retcode
     rts
 
 load_fail:
     jmp common_fail
 
-handle_timeout:
-    jmp common_timeout_handler
-
-handle_error:
-    jmp common_error_handler
+load_error:
+    ; Error code already in vdrive_retcode
+    jsr cleanup_wic64
+    sec
+    ldx #0
+    ldy #0
+    lda vdrive_retcode
+    rts
 
 ; Consolidated handlers at end of file
 common_fail:
@@ -275,32 +304,24 @@ vdrive_search_floppies:
     bne .has_input
     jmp exit_search
 .has_input:
-
-   ;; lda #$01
-   ;; sta $d020
     
     jsr init_wic64
         
-    ; Send HTTP POST with "search" endpoint and search term as POST data
+    ; Prepend session ID to search term
+    jsr prepend_session_to_data
+    
+    ; Send HTTP POST with "search" endpoint (X/Y already point to response_buffer)
     lda #1                  ; index 1 = search prefix
-    ldx #<user_input  ; data pointer lo
-    ldy #>user_input  ; data pointer hi
     jsr send_http_post
     bcc .post_sent
     jmp exit_search
 .post_sent:
-
-    ; lda #$02
-   ; sta $d020
 
     ; Receive the response
     +wic64_receive_header
     bcc .got_header
     jmp exit_search
 .got_header:
-
-   ;  lda #$03
-    ;sta $d020
 
     ; Receive response body
     +wic64_set_response response_buffer
@@ -309,23 +330,40 @@ vdrive_search_floppies:
     jmp exit_search
 .data_received:
 
-    ;lda #$04
-   ; sta $d020
+    ; Extract session ID from first 2 bytes of response
+    lda response_buffer
+    sta session_id
+    lda response_buffer+1
+    sta session_id+1
 
     jsr cleanup_wic64   
-
-   ; lda #$05
-   ; sta $d020
         
-    ; Print response buffer
-    ;+print response_buffer
-    jsr print_response_buffer
+    ; Print response buffer starting at byte 2 (skip session header)
+    lda #<(response_buffer+2)
+    sta temp_ptr_lo
+    lda #>(response_buffer+2)
+    sta temp_ptr_hi
+    jsr print_from_ptr
 
 search_done:
     jmp vdrive_mount_floppy
 
 exit_search:
     rts  
+
+; Print from pointer in temp_ptr
+print_from_ptr:
+    ldy #0
+.loop:
+    lda (temp_ptr_lo),y
+    beq .done
+    jsr $ffd2
+    inc temp_ptr_lo
+    bne .loop
+    inc temp_ptr_hi
+    jmp .loop
+.done:
+    rts
 
 ; ----------------------
 ; Zero-terminated printing
@@ -385,10 +423,11 @@ vdrive_mount_floppy:
     lda #$40
     sta wic64_timeout
     
-    ; Send HTTP POST with "mount" endpoint and mount ID as POST data
+    ; Prepend session ID to mount ID
+    jsr prepend_session_to_data
+    
+    ; Send HTTP POST with "mount" endpoint (X/Y already point to response_buffer)
     lda #0                  ; index 0 = mount prefix
-    ldx #<user_input  ; data pointer lo
-    ldy #>user_input  ; data pointer hi
     jsr send_http_post
     bcs mount_floppy_exit
     
@@ -402,10 +441,20 @@ vdrive_mount_floppy:
     jmp mount_floppy_exit
 .mount_received:
     
+    ; Extract session ID from first 2 bytes of response
+    lda response_buffer
+    sta session_id
+    lda response_buffer+1
+    sta session_id+1
+    
     jsr cleanup_wic64
     
-    ; Print response buffer
-    jsr print_response_buffer
+    ; Print response buffer (skip session header)
+    lda #<(response_buffer+2)
+    sta temp_ptr_lo
+    lda #>(response_buffer+2)
+    sta temp_ptr_hi
+    jsr print_from_ptr
 
 mount_floppy_exit:
     rts
@@ -437,7 +486,27 @@ isave_handler:
     jmp (temp_ptr_lo)
 
 vdrive_save:
-    ; Copy filename from KERNAL into user_input
+    ; Print "SAVING <filename>" immediately before anything else
+    ; $bb/$bc and $b7 are already set up by KERNAL SETNAM
+    ldy #$51            ; Offset to "SAVING " message
+    jsr $f12f           ; Print "SAVING "
+    jsr $f5c1           ; Print filename (OUTFN)
+    lda #$0d            ; CR
+    jsr $ffd2           ; CHROUT - print carriage return
+    
+    ; Save $c1/$c2 (start address) for calculations
+    lda start_addr_lo
+    sta temp_workspace1
+    lda start_addr_hi
+    sta temp_workspace2
+    
+    ; Save $ae/$af (end address)
+    lda dest_ptr_lo
+    sta temp_workspace3
+    lda dest_ptr_hi
+    sta temp_workspace4
+    
+    ; Now copy filename from KERNAL into user_input
     ldy #0
 copy_fn_loop_save:
     cpy fnlen
@@ -449,49 +518,27 @@ copy_fn_loop_save:
 fn_copy_done_save:
     sty user_input_length
     
-    ; Print saving message
-    ldy #$51
-    jsr $f12f
-    
     jsr init_wic64
     
-    lda #$40
-    sta wic64_timeout
-    
-    ; Compute file data size: end ($ae/$af) - start ($c1/$c2)
-    ; Note: dest_ptr ($ae/$af) points one byte PAST the last byte
-    ; So end - start gives us the correct size without adding 1
+    ; Compute PRG data size: end - start
     sec
-    lda dest_ptr_lo
-    sbc start_addr_lo
-    sta temp_workspace1
-    lda dest_ptr_hi
-    sbc start_addr_hi
-    sta temp_workspace2
+    lda temp_workspace3  ; end_lo
+    sbc temp_workspace1  ; start_lo
+    sta temp_workspace5  ; data size lo
+    lda temp_workspace4  ; end_hi
+    sbc temp_workspace2  ; start_hi
+    sta temp_workspace6  ; data size hi
     
-    ; temp_workspace1/2 now holds raw data size
-    ; PRG format needs 2-byte header (load address) + data
-    ; Add 2 for the header
-    clc
-    lda temp_workspace1
-    adc #2
-    sta temp_workspace1
-    lda temp_workspace2
-    adc #0
-    sta temp_workspace2
-    
-    ; temp_workspace1/2 now holds PRG file size (header + data)
-    
-    ; Calculate total POST_DATA size: 1 (length) + filename length + PRG file size
+    ; Calculate total POST_DATA size: 2 (session) + 1 (length) + filename + 2 (PRG header) + data
     lda user_input_length
     clc
-    adc #1
+    adc #5                  ; 2 bytes session + 1 byte length + 2 byte PRG header
     clc
-    adc temp_workspace1
-    sta temp_workspace3  ; total size lo
+    adc temp_workspace5     ; add data size
+    sta temp_workspace5     ; reuse temp_workspace5 for total POST size lo
     lda #0
-    adc temp_workspace2
-    sta temp_workspace4  ; total size hi
+    adc temp_workspace6     ; add data size hi
+    sta temp_workspace6     ; reuse temp_workspace6 for total POST size hi
     
     ; Send POST_URL using simplified approach
     lda #3  ; index 3 = save prefix
@@ -523,9 +570,9 @@ fn_copy_done_save:
     sta http_request
     lda #WIC64_HTTP_POST_DATA
     sta http_request+1
-    lda temp_workspace3  ; total size lo
+    lda temp_workspace5  ; total POST size lo
     sta http_request+2
-    lda temp_workspace4  ; total size hi
+    lda temp_workspace6  ; total POST size hi
     sta http_request+3
     
     +wic64_set_request http_request
@@ -534,13 +581,27 @@ fn_copy_done_save:
     jmp save_fail
 .data_header_ok:
     
-    ; Send length byte
-    lda user_input_length
+    ; Send session ID first (2 bytes)
+    lda session_id
     sta temp_workspace5
     lda #1
     sta wic64_bytes_to_transfer
     lda #0
     sta wic64_bytes_to_transfer+1
+    +wic64_send temp_workspace5, ~wic64_bytes_to_transfer
+    bcc .session_lo_sent
+    jmp save_fail
+.session_lo_sent:
+    lda session_id+1
+    sta temp_workspace5
+    +wic64_send temp_workspace5, ~wic64_bytes_to_transfer
+    bcc .session_sent
+    jmp save_fail
+.session_sent:
+    
+    ; Send length byte
+    lda user_input_length
+    sta temp_workspace5
     +wic64_send temp_workspace5, ~wic64_bytes_to_transfer
     bcc .len_sent
     jmp save_fail
@@ -556,37 +617,42 @@ fn_copy_done_save:
     jmp save_fail
 .fn_sent:
     
-    ; Send 2-byte PRG header (load address)
-    ; Use $c1/$c2 as the load address (start of actual data)
-    ; Store in response_buffer temporarily
-    lda $c1
-    sta response_buffer
-    lda $c2
-    sta response_buffer+1
-    
-    +wic64_send response_buffer, 2
+    ; Send 2-byte PRG header (the load address where data should load)
+    ; This is the value in temp_workspace1/2 (the start address)
+    lda temp_workspace1
+    sta temp_workspace5
+    lda #1
+    sta wic64_bytes_to_transfer
+    lda #0
+    sta wic64_bytes_to_transfer+1
+    +wic64_send temp_workspace5, ~wic64_bytes_to_transfer
+    bcc .header_lo_sent
+    jmp save_fail
+.header_lo_sent:
+    lda temp_workspace2
+    sta temp_workspace5
+    +wic64_send temp_workspace5, ~wic64_bytes_to_transfer
     bcc .header_sent
     jmp save_fail
 .header_sent:
     
-    ; Send PRG data directly from memory
-    ; Build 16-bit pointer to $c1/$c2
-    ; Size is now temp_workspace1/2 - 2 (subtract the header we just sent)
+    ; Send program data from memory
+    ; Size: (end_addr) - (start_addr)
     sec
-    lda temp_workspace1
-    sbc #2
+    lda temp_workspace3
+    sbc temp_workspace1
     sta wic64_bytes_to_transfer
-    lda temp_workspace2
-    sbc #0
+    lda temp_workspace4
+    sbc temp_workspace2
     sta wic64_bytes_to_transfer+1
     
-    ; Must manually set wic64_request since address is in zero page variable
-    lda $c1
+    ; Set source pointer to start address
+    lda temp_workspace1
     sta wic64_request
-    lda $c2
+    lda temp_workspace2
     sta wic64_request+1
     
-    ; Call wic64_send directly (not macro) since we set everything manually
+    ; Send the program data
     jsr wic64_send
     bcc .data_sent
     jmp save_fail
@@ -594,6 +660,7 @@ fn_copy_done_save:
     
     ; Receive response header
     +wic64_receive_header
+
     bcc .got_resp_hdr
     jmp save_fail
 .got_resp_hdr:
@@ -605,10 +672,20 @@ fn_copy_done_save:
     jmp save_fail
 .got_resp:
     
+    ; Extract session ID from first 2 bytes of response
+    lda response_buffer
+    sta session_id
+    lda response_buffer+1
+    sta session_id+1
+    
     jsr cleanup_wic64
     
-    ; Print server response
-    jsr print_response_buffer
+    ; Print server response (skip session header + error code = 3 bytes)
+    lda #<(response_buffer+3)
+    sta temp_ptr_lo
+    lda #>(response_buffer+3)
+    sta temp_ptr_hi
+    jsr print_from_ptr
     
     clc
     rts
@@ -635,6 +712,49 @@ cleanup_wic64
     +wic64_unset_timeout_handler
     +wic64_unset_error_handler
     +wic64_finalize
+    rts
+
+; -----------------------------------
+; prepend_session_to_data
+; Prepends 2-byte session_id to data in user_input
+; Copies user_input to response_buffer with session header
+; Input: user_input (data), user_input_length (length)
+; Output: response_buffer ([session_lo][session_hi][data])
+;         user_input_length updated to include 2-byte session
+; Returns: X = pointer to response_buffer
+;          Y = high byte of response_buffer
+; -----------------------------------
+prepend_session_to_data:
+    ; Put session ID first (2 bytes)
+    lda session_id
+    sta response_buffer
+    lda session_id+1
+    sta response_buffer+1
+    
+    ; Put length byte at position 2
+    lda user_input_length
+    sta response_buffer+2
+    
+    ; Copy data after session + length
+    ldx #0
+.copy_loop:
+    cpx user_input_length
+    beq .copy_done
+    lda user_input,x
+    sta response_buffer+3,x
+    inx
+    jmp .copy_loop
+.copy_done:
+    
+    ; Update length to include session (2 bytes) + length byte (1 byte)
+    lda user_input_length
+    clc
+    adc #3
+    sta user_input_length
+    
+    ; Return pointer to response_buffer
+    ldx #<response_buffer
+    ldy #>response_buffer
     rts
 
 ; -----------------------------------
@@ -816,13 +936,41 @@ copy_done:
 post_data_ptr: !byte 0, 0
 payload_len_lo: !byte 0
 payload_len_hi: !byte 0
-size_prefix: !byte 0, 0  ; 2-byte size prefix from search response
+session_id: !byte 0, 0  ; 16-bit session ID from server
 
 timeout_error_message: !pet "?timeout error", $00
 status_request: !byte "R", WIC64_GET_STATUS_MESSAGE, $01, $00, $01
 status_prefix: !pet "?request failed: ", $00
 set_remote_timeout: !byte "R", WIC64_SET_REMOTE_TIMEOUT, $01, $00, $0a  ; 10 seconds
 no_response: !byte 0
+
+; Reserve space for variables at end to prevent overwrite
+user_input_length:
+    !byte 0
+org_iload_lo:
+    !byte 0
+org_iload_hi:
+    !byte 0
+org_isave_lo:
+    !byte 0
+org_isave_hi:
+    !byte 0
+vdrive_devnum:
+    !byte 0
+vdrive_retcode:
+    !byte 0
+temp_workspace1:
+    !byte 0
+temp_workspace2:
+    !byte 0
+temp_workspace3:
+    !byte 0
+temp_workspace4:
+    !byte 0
+temp_workspace5:
+    !byte 0
+temp_workspace6:
+    !byte 0
 
 ; table of prefix strings for GET-style requests with query parameters
 prefix_lo:
@@ -836,7 +984,7 @@ load_prefix:   !text "load",0
 save_prefix:   !text "save",0
 
 user_input:
-    !fill 80,0
+    !fill 32,0
 
 ; *** SERVER URL - Can be modified with BASIC config program ***
 ; To change: Load this PRG to $C000, modify bytes at http_url, save back
@@ -846,10 +994,12 @@ http_url:
     !fill 106,0  ; Pad to 128 bytes total (22 bytes used + 106 padding)
 
 http_path:
-    !fill 96,0 
+    !fill 32,0 
 
 http_request:
     !fill 256,0
 
 response_buffer:
     !fill 512,0     
+
+
