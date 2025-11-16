@@ -6,6 +6,8 @@ namespace VDRIVE_Contracts.Interfaces
     {
         public string StorageAdapter { get; set; } 
         public string FloppyResolver { get; set; } 
+        public string LoggingLevel { get; set; }
+        public int? SessionTimeoutMinutes { get; set; }
         public string ServerType { get; set; }
         public ushort MaxSearchResults { get; set; }
         public string TempPath { get; set; }

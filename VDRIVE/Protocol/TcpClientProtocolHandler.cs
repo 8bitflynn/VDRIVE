@@ -21,7 +21,7 @@ namespace VDRIVE.Protocol
         private TcpClient tcpClient;
         private NetworkStream networkStream;  
 
-        public void HandleClient(IFloppyResolver floppyResolver, IStorageAdapter storageAdapter)
+        public void HandleClient(ISessionProvider sessionManager)
         {
             byte[] data = new byte[1];
             if (!networkStream.DataAvailable)
@@ -29,6 +29,10 @@ namespace VDRIVE.Protocol
                 Thread.Sleep(10); // avoid tight loop
                 return;
             }
+
+            // For TCP use managed thread id as session id
+            ushort sessionId = (ushort)(Thread.CurrentThread.ManagedThreadId & 0xFFFF);
+            Session session = sessionManager.GetOrCreateSession(sessionId);            
 
             bool success = ReadNetworkStream(networkStream, data, 0, 1, TimeSpan.FromSeconds(Configuration.ReceiveTimeoutSeconds.Value));
             if (success && data[0] == 0x2b) // sync byte
@@ -55,7 +59,7 @@ namespace VDRIVE.Protocol
 
                             Logger.LogMessage($"Load Request: LOAD\"{new string(loadRequest.FileName)}\",{loadRequest.DeviceNum}{(loadRequest.SecondaryAddr != 0 ? "," + loadRequest.SecondaryAddr : "")}");
 
-                            LoadResponse loadResponse = storageAdapter.Load(loadRequest, floppyResolver, out byte[] payload);
+                            LoadResponse loadResponse = session.StorageAdapter.Load(loadRequest, session.FloppyResolver, out byte[] payload);
 
                             ushort dest_ptr_start = 0x00;
                             if (payload != null)
@@ -104,7 +108,7 @@ namespace VDRIVE.Protocol
                             // recv data
                             byte[] payload = ReceiveData(networkStream, saveRequest);
 
-                            SaveResponse saveResponse = storageAdapter.Save(saveRequest, floppyResolver, payload);
+                            SaveResponse saveResponse = session.StorageAdapter.Save(saveRequest, session.FloppyResolver, payload);
                         }
                         break;
 
@@ -117,7 +121,7 @@ namespace VDRIVE.Protocol
                             ReadNetworkStream(networkStream, buffer, 0, size, TimeSpan.FromSeconds(Configuration.ReceiveTimeoutSeconds.Value));
 
                             FloppyIdentifier floppyIdentifier = BinaryStructConverter.FromByteArray<FloppyIdentifier>(buffer);
-                            FloppyInfo floppyInfo = floppyResolver.InsertFloppy(floppyIdentifier);
+                            FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
 
                             // TODO: return response 
                         }
@@ -125,17 +129,15 @@ namespace VDRIVE.Protocol
 
                     case 0x04: // create floppy image
                         {
-                            // not implemented yet
-                            int size = Marshal.SizeOf<NewFloppyRequest>();
+                            //// not implemented yet
+                            //int size = Marshal.SizeOf<NewFloppyRequest>();
 
-                            byte[] buffer = new byte[size];
+                            //byte[] buffer = new byte[size];
 
-                            ReadNetworkStream(networkStream, buffer, 0, size, TimeSpan.FromSeconds(Configuration.ReceiveTimeoutSeconds.Value));
+                            //ReadNetworkStream(networkStream, buffer, 0, size, TimeSpan.FromSeconds(Configuration.ReceiveTimeoutSeconds.Value));
 
-                            NewFloppyRequest newFloppyRequest = BinaryStructConverter.FromByteArray<NewFloppyRequest>(buffer);
-                            //  NewFloppyResponse newFloppyResponse = storageAdapter.CreateFloppy(newFloppyRequest);
-
-
+                            //NewFloppyRequest newFloppyRequest = BinaryStructConverter.FromByteArray<NewFloppyRequest>(buffer);
+                            ////  NewFloppyResponse newFloppyResponse = storageAdapter.CreateFloppy(newFloppyRequest);
                         }
                         break;
 
@@ -149,7 +151,7 @@ namespace VDRIVE.Protocol
                             ReadNetworkStream(networkStream, buffer, 1, size - 1, TimeSpan.FromSeconds(Configuration.ReceiveTimeoutSeconds.Value));
 
                             SearchFloppiesRequest searchFloppiesRequest = BinaryStructConverter.FromByteArray<SearchFloppiesRequest>(buffer);
-                            SearchFloppyResponse searchFloppyResponse = floppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
+                            SearchFloppyResponse searchFloppyResponse = session.FloppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppyInfos);
 
                             // build the payload
                             List<byte> payload = new List<byte>();

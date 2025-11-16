@@ -44,6 +44,18 @@ namespace VDRIVE.Configuration
                 return false;
             }
 
+            if (string.IsNullOrWhiteSpace(configuration.LoggingLevel))
+            {
+                this.Logger.LogMessage("LoggingLevel is not set in configuration");
+                return false;
+            }
+
+            if (configuration.SessionTimeoutMinutes == 0)
+            {
+                this.Logger.LogMessage("SessionTimeoutMinutes is not set in configuration");
+                return false;
+            }
+
             if (string.IsNullOrWhiteSpace(configuration.ServerOrClientMode))
             {
                 this.Logger.LogMessage("ServerOrClientMode is not set in configuration");
@@ -181,7 +193,9 @@ namespace VDRIVE.Configuration
 
             this.Logger.LogMessage("VDRIVE Configuration:");
             this.Logger.LogMessage($"  StorageAdapter: {configuration.StorageAdapter}");
-            this.Logger.LogMessage($"  FloppyResolver: {configuration.FloppyResolver}");               
+            this.Logger.LogMessage($"  FloppyResolver: {configuration.FloppyResolver}");   
+            this.Logger.LogMessage($"  LoggingLevel: {configuration.LoggingLevel}");
+            this.Logger.LogMessage($"  SessionTimeoutMinutes: {configuration.SessionTimeoutMinutes}");
             this.Logger.LogMessage($"  TempPath: {configuration.TempPath}");
             this.Logger.LogMessage($"  TempFolder: {configuration.TempFolder}");
             this.Logger.LogMessage($"  ServerOrClientMode: {configuration.ServerOrClientMode}");

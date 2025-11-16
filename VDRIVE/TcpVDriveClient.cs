@@ -33,15 +33,18 @@ namespace VDRIVE
                 tcpClient.NoDelay = true;
                 NetworkStream networkStream = tcpClient.GetStream();
 
-                // instance dependencies
+                //// instance dependencies
+                ///
+                ISessionProvider sessionManager = new SessionProvider(this.Configuration);
+
                 IProtocolHandler protocolHandler = new TcpClientProtocolHandler(this.Configuration, this.Logger, tcpClient, networkStream);
-                IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
-                IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, processRunner);
-                IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
+                //IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);
+                //IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, processRunner);
+                //IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
                 while (tcpClient.Connected)
                 {
-                    protocolHandler.HandleClient(floppyResolver, storageAdapter);
+                    protocolHandler.HandleClient(sessionManager);
                 }
             }
         }

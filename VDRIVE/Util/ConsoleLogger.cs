@@ -5,9 +5,24 @@ namespace VDRIVE.Util
 {
     public class ConsoleLogger : ILogger
     {
+        public ConsoleLogger() : this(LogSeverity.Info)
+        {            
+        }
+
+        public ConsoleLogger(LogSeverity logSeverity)
+        {
+            this.LoggingSeverity = logSeverity;            
+        }
+        private LogSeverity LoggingSeverity = LogSeverity.Verbose;
+
         public void LogMessage(string message, LogSeverity logSeverity = LogSeverity.Info)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] #{Thread.CurrentThread.ManagedThreadId} {logSeverity}: {message}");
+            if (logSeverity < this.LoggingSeverity)
+            {
+                return;
+            }   
+
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] T#{Thread.CurrentThread.ManagedThreadId} {logSeverity}: {message}");
         }
     }
 }

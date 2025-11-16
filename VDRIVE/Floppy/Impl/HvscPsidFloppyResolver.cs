@@ -1,6 +1,4 @@
-﻿using System.Data.SqlTypes;
-using System.Net;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
@@ -11,8 +9,8 @@ namespace VDRIVE.Floppy.Impl
     {
         public HvscPsidFloppyResolver(IConfiguration configuration, ILogger logger, IProcessRunner processRunner)
         {
-            Configuration = configuration;
-            Logger = logger;
+            this.Configuration = configuration;
+            this.Logger = logger;
             this.ProcessRunner = processRunner;
         }
         private IProcessRunner ProcessRunner;
@@ -42,7 +40,7 @@ namespace VDRIVE.Floppy.Impl
                 mediaTypeCSV = string.Join(',', Configuration.FloppyResolverSettings.Local.MediaExtensionsAllowed);
             }
 
-            Logger.LogMessage($"Searching Commodore.Software.com for description '{searchTerm}' and media type '{mediaTypeCSV}'");
+            Logger.LogMessage($"Searching High Voltage Sid Collection for description '{searchTerm}' and media type '{mediaTypeCSV}'");
 
             using (HttpClient client = new HttpClient())
             {
@@ -83,12 +81,7 @@ namespace VDRIVE.Floppy.Impl
             ushort searchResultIndexId = 1;
             foreach (Match match in matches)
             {
-                string imageName = match.Groups[2].Value.Trim() + " - " + match.Groups[3].Value.Trim();
-                if (Configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
-                {
-                    // skip this result as it is ignored
-                    continue;
-                }
+                string imageName = match.Groups[2].Value.Trim() + " - " + match.Groups[3].Value.Trim();             
 
                 FloppyInfo floppyInfo = new FloppyInfo();
                 floppyInfo.IdLo = (byte)searchResultIndexId;
@@ -142,7 +135,7 @@ namespace VDRIVE.Floppy.Impl
 
                     if (httpResponseMessage.IsSuccessStatusCode)
                     {
-                        string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
+                        string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder,  Thread.CurrentThread.ManagedThreadId.ToString());
                         if (!Directory.Exists(fullPath))
                             Directory.CreateDirectory(fullPath);
 

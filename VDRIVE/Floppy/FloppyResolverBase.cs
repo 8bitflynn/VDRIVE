@@ -7,6 +7,7 @@ namespace VDRIVE.Floppy
     {
         protected IConfiguration Configuration;
         protected ILogger Logger;
+        protected ISessionProvider SessionProvider;
         protected FloppyInfo InsertedFloppyInfo; // info returned to C64
         protected List<FloppyInfo> FloppyInfos = new List<FloppyInfo>(); // C64 friendly floppy info
         protected FloppyPointer InsertedFloppyPointer; // join to FloppyInfo.Id for long path

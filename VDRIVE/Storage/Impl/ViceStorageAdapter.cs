@@ -16,67 +16,92 @@ namespace VDRIVE.Storage.Impl
         }
 
         SaveResponse IStorageAdapter.Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
-        {         
-            byte[] destPtrFileData = new byte[payload.Length + 2];
-            destPtrFileData[0] = saveRequest.TargetAddressLo;
-            destPtrFileData[1] = saveRequest.TargetAddressHi;
-            payload.CopyTo(destPtrFileData, 2);
-
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
-            if (!Directory.Exists(fullPath))
-                Directory.CreateDirectory(fullPath);
-
-            string safeName = new string(saveRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
-            string tempPrgPath = Path.Combine(fullPath, safeName);
-
-            File.WriteAllBytes(tempPrgPath, destPtrFileData);
-
-            string fileSpec = $"@8:{safeName}";
-            string imagePath = floppyResolver.GetInsertedFloppyPointer().ImagePath;
-
-            bool isVice3 = Configuration.StorageAdapterSettings.Vice.Version.StartsWith("3.");
-            bool forceDeleteFirst = Configuration.StorageAdapterSettings.Vice.ForceDeleteFirst;
-
-            string arguments = $"\"{imagePath}\"";
-
-            if (isVice3 && forceDeleteFirst)
+        {
+            try
             {
-                arguments += $" -delete \"{fileSpec}\""; // 2.4 behavior
+                FloppyPointer floppyPointer = floppyResolver.GetInsertedFloppyPointer();
+                if (floppyPointer.Equals(default(FloppyPointer)))
+                {
+                    payload = null;
+                    return new SaveResponse { ResponseCode = 0x04 }; // file not foudn                    
+                }
+
+                byte[] destPtrFileData = new byte[payload.Length + 2];
+                destPtrFileData[0] = saveRequest.TargetAddressLo;
+                destPtrFileData[1] = saveRequest.TargetAddressHi;
+                payload.CopyTo(destPtrFileData, 2);
+
+                string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
+                if (!Directory.Exists(fullPath))
+                    Directory.CreateDirectory(fullPath);
+
+                string safeName = new string(saveRequest.FileName.TakeWhile(c => c != '\0').ToArray()).ToLowerInvariant();
+                string tempPrgPath = Path.Combine(fullPath, safeName);
+
+                File.WriteAllBytes(tempPrgPath, destPtrFileData);
+
+                string fileSpec = $"@8:{safeName}";
+                string imagePath = floppyResolver.GetInsertedFloppyPointer().ImagePath;
+
+                bool isVice3 = Configuration.StorageAdapterSettings.Vice.Version.StartsWith("3.");
+                bool forceDeleteFirst = Configuration.StorageAdapterSettings.Vice.ForceDeleteFirst;
+
+                string arguments = $"\"{imagePath}\"";
+
+                if (isVice3 && forceDeleteFirst)
+                {
+                    arguments += $" -delete \"{fileSpec}\""; // 2.4 behavior
+                }
+                arguments += $" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit";
+
+                RunProcessParameters runProcessParameters = new RunProcessParameters();
+                runProcessParameters.ImagePath = imagePath;
+                runProcessParameters.Arguments = arguments;
+                runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+                runProcessParameters.LockType = LockType.Write;
+                runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
+
+                RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
+
+                SaveResponse saveResponse = new SaveResponse();
+                if (!runProcessResult.HasError)
+                {
+                    saveResponse.ResponseCode = (byte)0xff;
+                    Logger.LogMessage($"File written to Image: {safeName}");
+                }
+                else
+                {
+                    saveResponse.ResponseCode = (byte)0x04;
+                }
+
+                if (File.Exists(tempPrgPath))
+                {
+                    File.Delete(tempPrgPath); // cleanup temp file
+                }
+
+                return saveResponse;
             }
-            arguments += $" -write \"{tempPrgPath}\" \"{fileSpec}\" -quit";
-
-            RunProcessParameters runProcessParameters = new RunProcessParameters();
-            runProcessParameters.ImagePath = imagePath;
-            runProcessParameters.Arguments = arguments;
-            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
-            runProcessParameters.LockType = LockType.Write;
-            runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
-
-            RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
-           
-            SaveResponse saveResponse = new SaveResponse();
-            if (!runProcessResult.HasError)
+            catch (Exception exception)
             {
-                saveResponse.ResponseCode = (byte)0xff;
-                Logger.LogMessage($"File written to Image: {safeName}");                
-            }
-            else
-            {
-                saveResponse.ResponseCode = (byte)0x04;
-            }
+                Logger.LogMessage(exception.Message, LogSeverity.Error);
 
-            if (File.Exists(tempPrgPath))
-            {
-                File.Delete(tempPrgPath); // cleanup temp file
-            }         
-
-            return saveResponse;
+                payload = null;
+                return new SaveResponse { ResponseCode = 0x04 }; 
+            }           
         }
 
         LoadResponse IStorageAdapter.Load(LoadRequest loadRequest, IFloppyResolver floppyResolver, out byte[] payload)
         {
             try
             {
+                FloppyPointer floppyPointer = floppyResolver.GetInsertedFloppyPointer();
+                if (floppyPointer.Equals(default(FloppyPointer)))
+                {
+                    payload = null;
+                    return BuildLoadResponse(loadRequest, null, 0x04); // file not found    
+                }
+
+
                 byte responseCode = 0xff; // success
                 string filename = new string(loadRequest.FileName).TrimEnd('\0');
 
@@ -90,7 +115,7 @@ namespace VDRIVE.Storage.Impl
                     // by just mounting the PRG and loading with "*"
                     // thought about wrapping in D64 but seems unnecessary overhead
                     // and its less steps for user
-                    FloppyPointer floppyPointer = floppyResolver.GetInsertedFloppyPointer();
+                    
                     if (!floppyPointer.Equals(default) && floppyPointer.ImagePath.ToLower().EndsWith(".prg"))
                     {
                         payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath);

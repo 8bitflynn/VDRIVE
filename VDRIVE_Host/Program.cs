@@ -1,13 +1,6 @@
-﻿using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using VDRIVE;
+﻿using VDRIVE;
 using VDRIVE.Configuration;
-using VDRIVE.Drive;
-using VDRIVE.Floppy;
-using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
-using VDRIVE_Contracts.Structures;
 
 namespace VDRIVE_Host
 {
@@ -23,7 +16,7 @@ namespace VDRIVE_Host
         /// <param name="args"></param>
         static void Main(string[] args)
         {
-            ILogger logger = new VDRIVE.Util.ConsoleLogger();
+            ILogger logger = new VDRIVE.Util.ConsoleLogger(VDRIVE_Contracts.Enums.LogSeverity.Verbose);
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();

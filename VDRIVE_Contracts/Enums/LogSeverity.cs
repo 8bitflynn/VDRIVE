@@ -2,9 +2,11 @@
 {
     public enum LogSeverity
     {
-        Info = 0,
-        Warning = 1,
-        Error = 2,
-        Critical = 3
+        NotSet = 0,
+        Verbose = 1,
+        Info = 2,
+        Warning = 3,
+        Error = 4,
+        Critical = 5      
     }
 }

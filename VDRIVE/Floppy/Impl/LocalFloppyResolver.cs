@@ -90,7 +90,7 @@ namespace VDRIVE.Floppy.Impl
 
         private List<string> TraverseFolder(string root, string description, IEnumerable<string> extensions = null, bool recurse = true)
         {
-            Logger.LogMessage($"Searching {root} for floppy images for description '{description}'");
+            Logger.LogMessage($"Searching {root} for floppy images for description '{description}'", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
 
             var results = new List<string>();
 
