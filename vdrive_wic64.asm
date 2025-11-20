@@ -1,6 +1,8 @@
 * = $c000
 
-; read only (by vdrive) ZP pointers and variables
+; ZP pointers and variables
+; set by KERNAL SETNAM before ILOAD/ISAVE
+; or by external code needing to LOAD/SAVE ram
 fnlen          = $b7
 lfn            = $b8
 filename       = $bb
@@ -21,6 +23,7 @@ jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
 jmp vdrive_mount_floppy
+jmp reboot_wic64
 
 !src "wic64.h"
 !src "wic64.asm"
@@ -62,6 +65,11 @@ enable_vdrive:
     ; set basic to safe values to avoid ?OUT OF MEMORY errors
     jsr cleanup_basic_pointers
 
+    ; Set remote timeout once at enable
+    +wic64_initialize
+    +wic64_execute set_remote_timeout, response_buffer
+    +wic64_finalize
+
     rts
 
 disable_vdrive:
@@ -94,6 +102,7 @@ cleanup_basic_pointers:
 
     lda #$08
     sta $2E       ; VARTAB high
+    
     sta $32       ; ARYTAB high
     sta $34       ; STREND high
     sta $36       ; FRETOP high
@@ -103,7 +112,6 @@ cleanup_basic_pointers:
 
 iload_handler:   
 
-    ; Save A/X/Y and P in workspaces (no stack juggling needed)
     sta temp_workspace1
     stx temp_workspace2
     sty temp_workspace3
@@ -153,9 +161,6 @@ fn_copy_done:
     jsr $f5af
 
     jsr init_wic64
-
-    lda #$40                ; set a longer timeout
-    sta wic64_timeout
 
     ; Prepend session ID to filename
     jsr prepend_session_to_data
@@ -301,9 +306,7 @@ vdrive_search_floppies:
     
     ; check if user entered anything
     lda user_input_length
-    bne .has_input
-    jmp exit_search
-.has_input:
+    beq exit_search  ; Exit immediately if empty, don't prompt for mount
     
     jsr init_wic64
         
@@ -335,20 +338,29 @@ vdrive_search_floppies:
     sta session_id
     lda response_buffer+1
     sta session_id+1
-
-    jsr cleanup_wic64   
         
-    ; Print response buffer starting at byte 2 (skip session header)
+    ; Print response buffer starting at byte 2 (skip session header only)
     lda #<(response_buffer+2)
     sta temp_ptr_lo
     lda #>(response_buffer+2)
     sta temp_ptr_hi
     jsr print_from_ptr
 
+    jsr cleanup_wic64   
+
 search_done:
+    ; hack until search returns the result count in headers
+    ; Check if server returned empty results or "No results" message
+    lda response_buffer+4
+    beq exit_search         ; Empty response, skip mount
+    cmp #'N'                ; Starts with 'N' (likely "No results")?
+    beq exit_search         ; Skip mount
+    cmp #'0'                ; Starts with '0' (zero results)?
+    beq exit_search         ; Skip mount
     jmp vdrive_mount_floppy
 
 exit_search:
+    jsr cleanup_wic64
     rts  
 
 ; Print from pointer in temp_ptr
@@ -414,14 +426,12 @@ done:
 vdrive_mount_floppy:
     jsr get_user_input
     
+    ; Always init WIC64 even if empty input (to ensure cleanup happens)
+    jsr init_wic64
+    
     ; check if user entered anything
     lda user_input_length
     beq mount_floppy_exit
-    
-    jsr init_wic64
-    
-    lda #$40
-    sta wic64_timeout
     
     ; Prepend session ID to mount ID
     jsr prepend_session_to_data
@@ -457,6 +467,8 @@ vdrive_mount_floppy:
     jsr print_from_ptr
 
 mount_floppy_exit:
+    jsr cleanup_wic64
+mount_floppy_exit_no_cleanup:
     rts
 
 isave_handler:
@@ -701,10 +713,11 @@ handle_wic64_error:
 
 init_wic64
     +wic64_initialize
+    +wic64_dont_disable_irqs
     +wic64_set_timeout_handler handle_wic64_timeout
     +wic64_set_error_handler handle_wic64_error
 
-    lda #$20 ; longer timeout
+    lda #$c0 ; generous timeout (192 decimal)
     sta wic64_timeout
     rts
 
@@ -712,6 +725,31 @@ cleanup_wic64
     +wic64_unset_timeout_handler
     +wic64_unset_error_handler
     +wic64_finalize
+    rts
+
+reboot_wic64:
+    ; Send WIC64 reboot command to clear stale state
+    ; This helps with soft resets via IDE64 boot button
+    +wic64_initialize
+    lda #"R"
+    sta http_request
+    lda #WIC64_REBOOT
+    sta http_request+1
+    lda #0
+    sta http_request+2
+    sta http_request+3
+    +wic64_set_request http_request
+    +wic64_send_header
+    jsr wic64_send
+    ; Wait a moment for ESP to reboot (roughly 0.5 seconds)
+    ldx #$ff
+.outer_loop:
+    ldy #$ff
+.inner_loop:
+    dey
+    bne .inner_loop
+    dex
+    bne .outer_loop
     rts
 
 ; -----------------------------------
@@ -941,7 +979,7 @@ session_id: !byte 0, 0  ; 16-bit session ID from server
 timeout_error_message: !pet "?timeout error", $00
 status_request: !byte "R", WIC64_GET_STATUS_MESSAGE, $01, $00, $01
 status_prefix: !pet "?request failed: ", $00
-set_remote_timeout: !byte "R", WIC64_SET_REMOTE_TIMEOUT, $01, $00, $0a  ; 10 seconds
+set_remote_timeout: !byte "R", WIC64_SET_REMOTE_TIMEOUT, $01, $00, $0f  ; 15 seconds
 no_response: !byte 0
 
 ; Reserve space for variables at end to prevent overwrite
@@ -1000,6 +1038,6 @@ http_request:
     !fill 256,0
 
 response_buffer:
-    !fill 512,0     
+    !fill 512,0
 
 
