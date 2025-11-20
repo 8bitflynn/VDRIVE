@@ -50,8 +50,7 @@ namespace VDRIVE.Protocol
                         this.Logger.LogMessage($"[LOAD] Invalid request: {ex.Message}");
                         
                         LoadResponse errorResponse = new LoadResponse { ResponseCode = 0x04 };
-                        WriteLoadResponse(this.HttpListenerContext, new byte[0], errorResponse, 
-                            sessionManager.GetOrCreateSession(0)); // Use default session for errors
+                        WriteLoadResponse(this.HttpListenerContext, new byte[0], errorResponse, sessionManager.GetOrCreateSession(0)); // Use default session for errors
                         return;
                     }
 
@@ -82,6 +81,13 @@ namespace VDRIVE.Protocol
                             this.Logger.LogMessage($"End Address: 0x{endAddress:X4}");
                             
                             responsePayload = fullFile;
+
+                            if (!IsValidLoadAddress(this.Logger, dest_ptr_start, endAddress))
+                            {                    
+                                // Invalid load address - reject load
+                                loadResponse.ResponseCode = 0x04; // File not found
+                                responsePayload = new byte[0];
+                            }
                         }
                         else
                         {
@@ -92,8 +98,7 @@ namespace VDRIVE.Protocol
                     {
                         this.Logger.LogMessage("[Load] Invalid request - empty filename");
                     }
-
-                    // Always send response - never return without responding
+                   
                     WriteLoadResponse(this.HttpListenerContext, responsePayload, loadResponse, session);
                     return;
                 }
@@ -180,10 +185,6 @@ namespace VDRIVE.Protocol
                     
                     this.Logger.LogMessage($"[SEARCH] TERM={searchTerm} *** [SESSIONID] = {searchRequest.SessionId}");
 
-                    // search is entry to create new session as all other operations
-                    // need a set of "found" floppies so that mount can refer to them
-                    // even if session ID is 0, we create a new session
-                    // load/save will return an error if session ID is 0
                     Session session = sessionManager.GetOrCreateSession(searchRequest.SessionId);
 
                     SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
@@ -192,6 +193,7 @@ namespace VDRIVE.Protocol
                     searchFloppiesRequest.SearchTermLength = (byte)searchTerm.Length;
 
                     SearchFloppyResponse searchFloppyResponse = session.FloppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppys);
+                    
                     if (searchFloppyResponse.ResultCount == 0)
                     {
                         string payload = "\r\n" + string.Concat("NO RESULTS FOUND\r\n") + "\0";
@@ -200,7 +202,8 @@ namespace VDRIVE.Protocol
                     else
                     {
                         var results = foundFloppys.Select(ff => $"{ff.IdLo} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
-                        string payload = $"\r\n\r\nSESSION-ID:{session.SessionId}\r\n\r\n" + string.Concat(results) + "\0";
+                        string fromMessage = $"\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{searchTerm}\"";
+                        string payload = $"{fromMessage}\r\n\r\n" + string.Concat(results) + "\0";
 
                         // TODO: make sure payload is less than max size for a single page
                         WriteResponse(httpListenerResponse, payload, session);
@@ -249,21 +252,22 @@ namespace VDRIVE.Protocol
                     FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
                     string fileName = new string(floppyInfo.ImageName).TrimEnd('\0');
 
-                    string message = $"MOUNT OK (ID={imageId} {fileName})\r\n";
+                    string message = $"\r\nFLOPPY INSERTED (ID={imageId} {fileName})";
 
                     // HACK: returning typical load commands based on type
                     // to save some typing on C64
+                    // TODO: add configuration option to disable this behavior
                     if (fileName.ToLower().EndsWith("prg") ||
                         session.FloppyResolver.GetType() == typeof(HvscPsidFloppyResolver))
                     {
-                        message += $"\r\nLOAD \"*\",8,1";
+                        message += $"\r\n\r\nLOAD \"*\",8,1";
                     }
                     else
                     {
-                        message += $"\r\nLOAD \"$\",8";
+                        message += $"\r\n\r\nLOAD \"$\",8";
                     }
 
-                    string payload = "\r\n" + string.Concat(message) + "\r\n" + "\0";
+                    string payload = "\r\n" + string.Concat(message) + "\0";
 
                     WriteResponse(httpListenerResponse, payload, session);
                     return;
@@ -346,14 +350,22 @@ namespace VDRIVE.Protocol
                                     0xFFFE, // KERNAL IRQ
                                     0xFFFA, // KERNAL NMI
                                     0xEA38, // LOAD address IRQ
-                                    0xC000  // VDRIVE location
+                                    0xC000,  // VDRIVE location
+                                    0xD000, // WiC64 registers
                                 };
 
-            if (rejectedLoadAddresses.Any(r => r == dest_ptr_start)
-                || end_dest_ptr >= 0xc000)
+            if (rejectedLoadAddresses.Any(r => r == dest_ptr_start))                
             {
-                logger.LogMessage($"Warning: invalid load address or end address 0x{dest_ptr_start:X4}-0x{end_dest_ptr:X4}, rejecting load to prevent C64 lockup");
+                logger.LogMessage($"Invalid load address or end address 0x{dest_ptr_start:X4}-0x{end_dest_ptr:X4}, rejecting load to prevent C64 lockup", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                 return false;
+            }
+
+            if (end_dest_ptr >= 0xc032)
+            {
+                // should be able to overlap some vdrive memory safely before crashing
+                // but it will likely not function correctly but this should 
+                // allow a few more bytes for loading data
+                logger.LogMessage($"Load end address 0x{end_dest_ptr:X4} overlaps VDRIVE memory area", VDRIVE_Contracts.Enums.LogSeverity.Warning);
             }
 
             return true;
@@ -425,7 +437,7 @@ namespace VDRIVE.Protocol
             {
                 List<byte> msgWithSession = new List<byte>();
                 msgWithSession.Add((byte)(session.SessionId & 0xFF));
-                msgWithSession.Add((byte)(session.SessionId >> 8));
+                msgWithSession.Add((byte)(session.SessionId >> 8));                
                 msgWithSession.AddRange(fullResponse);
                 fullResponse = msgWithSession.ToArray();
             }
@@ -435,6 +447,33 @@ namespace VDRIVE.Protocol
             response.ContentLength64 = fullResponse.Length;
 
             response.OutputStream.Write(fullResponse, 0, fullResponse.Length);
+            response.OutputStream.Flush();
+            response.Close();
+        }
+
+        private void WriteSearchResponse(HttpListenerResponse response, string text, int resultCount, Session session = null)
+        {
+            // Create HTTP response header
+            HttpSearchResponse httpResponse = HttpSearchResponse.Create(
+                session?.SessionId ?? 0,
+                (byte)resultCount
+            );
+
+            // Serialize header + text payload
+            List<byte> fullResponse = new List<byte>();
+            fullResponse.AddRange(BinaryStructConverter.ToByteArray(httpResponse));
+            
+            // Add text payload
+            if (!string.IsNullOrEmpty(text))
+            {
+                fullResponse.AddRange(Encoding.ASCII.GetBytes(text));
+            }
+
+            response.StatusCode = 200;
+            response.ContentType = "text/plain";
+            response.ContentLength64 = fullResponse.Count;
+
+            response.OutputStream.Write(fullResponse.ToArray(), 0, fullResponse.Count);
             response.OutputStream.Flush();
             response.Close();
         }

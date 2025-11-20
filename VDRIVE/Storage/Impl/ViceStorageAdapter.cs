@@ -152,7 +152,7 @@ namespace VDRIVE.Storage.Impl
             }
             catch (Exception exception)
             {
-                Logger.LogMessage(exception.Message, LogSeverity.Error);
+                Logger.LogMessage($"{exception.Message} {exception.ToString()}", LogSeverity.Critical);
 
                 payload = null;
                 return BuildLoadResponse(loadRequest, payload, 0x04); // file not found 
