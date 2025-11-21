@@ -127,7 +127,7 @@ namespace VDRIVE.Floppy.Impl
                 var fileExt = fi.Extension.ToLowerInvariant();
 
                 bool extMatches = extSet == null || extSet.Contains(fileExt);
-                bool descMatches = string.IsNullOrEmpty(desc) || name.IndexOf(desc, StringComparison.OrdinalIgnoreCase) >= 0;
+                bool descMatches = string.IsNullOrEmpty(desc) || MatchesC64Wildcard(name, desc);
 
                 if (extMatches && descMatches)
                     results.Add(fi.FullName);
@@ -165,6 +165,75 @@ namespace VDRIVE.Floppy.Impl
             }
 
             return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        /// <summary>
+        /// Matches filename against C64-style wildcard pattern.
+        /// * matches any number of characters (including zero)
+        /// ? matches exactly one character
+        /// </summary>
+        private bool MatchesC64Wildcard(string filename, string pattern)
+        {
+            // If pattern contains no wildcards, fall back to simple substring match for backwards compatibility
+            if (!pattern.Contains('*') && !pattern.Contains('?'))
+            {
+                return filename.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            return MatchWildcardRecursive(filename, pattern, 0, 0);
+        }
+
+        /// <summary>
+        /// Recursive wildcard matching algorithm.
+        /// </summary>
+        private bool MatchWildcardRecursive(string text, string pattern, int textIndex, int patternIndex)
+        {
+            // Both exhausted = match
+            if (patternIndex == pattern.Length && textIndex == text.Length)
+                return true;
+
+            // Pattern exhausted but text remains = no match
+            if (patternIndex == pattern.Length)
+                return false;
+
+            // Handle * wildcard
+            if (pattern[patternIndex] == '*')
+            {
+                // Try matching zero or more characters
+                // First, skip consecutive asterisks
+                while (patternIndex < pattern.Length && pattern[patternIndex] == '*')
+                    patternIndex++;
+
+                // If pattern ends with *, it matches everything remaining
+                if (patternIndex == pattern.Length)
+                    return true;
+
+                // Try matching from current position onwards
+                for (int i = textIndex; i <= text.Length; i++)
+                {
+                    if (MatchWildcardRecursive(text, pattern, i, patternIndex))
+                        return true;
+                }
+                return false;
+            }
+
+            // Text exhausted but pattern has non-wildcard chars = no match
+            if (textIndex == text.Length)
+                return false;
+
+            // Handle ? wildcard (matches exactly one character)
+            if (pattern[patternIndex] == '?')
+            {
+                return MatchWildcardRecursive(text, pattern, textIndex + 1, patternIndex + 1);
+            }
+
+            // Handle regular character (case-insensitive)
+            if (char.ToUpperInvariant(text[textIndex]) == char.ToUpperInvariant(pattern[patternIndex]))
+            {
+                return MatchWildcardRecursive(text, pattern, textIndex + 1, patternIndex + 1);
+            }
+
+            return false;
         }
     }
 }

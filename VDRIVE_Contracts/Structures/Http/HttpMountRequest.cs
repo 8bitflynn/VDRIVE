@@ -9,10 +9,10 @@ namespace VDRIVE_Contracts.Structures.Http
     public class HttpMountRequest
     {
         public ushort SessionId;
-        public byte ImageIdLength;
+        public byte ImageIdOrFileNameLength;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
-        public byte[] ImageId; // image ID padded with 0x00
+        public byte[] ImageIdOrFilename; // image ID padded with 0x00
 
         public static HttpMountRequest ParseFromBytes(byte[] data)
         {
@@ -23,24 +23,24 @@ namespace VDRIVE_Contracts.Structures.Http
 
             var request = new HttpMountRequest();
             request.SessionId = sessionId;
-            request.ImageIdLength = imageIdLength;
-            request.ImageId = new byte[16]; // Initialize full array
+            request.ImageIdOrFileNameLength = imageIdLength;
+            request.ImageIdOrFilename = new byte[32]; // Initialize full array
 
             // Copy actual image ID data
             if (imageIdLength > 0 && data.Length >= 3 + imageIdLength)
             {
-                Array.Copy(data, 3, request.ImageId, 0, Math.Min((int)imageIdLength, 16));
+                Array.Copy(data, 3, request.ImageIdOrFilename, 0, Math.Min((int)imageIdLength, 16));
             }
 
             return request;
         }
 
-        public string GetImageIdString()
+        public string GetImageIdOrFilenameString()
         {
-            if (ImageId == null || ImageIdLength == 0)
+            if (ImageIdOrFilename == null || ImageIdOrFileNameLength == 0)
                 return string.Empty;
                 
-            return Encoding.ASCII.GetString(ImageId, 0, ImageIdLength);
+            return Encoding.ASCII.GetString(ImageIdOrFilename, 0, ImageIdOrFileNameLength);
         }
     }
 }

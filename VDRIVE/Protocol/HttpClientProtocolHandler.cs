@@ -202,7 +202,7 @@ namespace VDRIVE.Protocol
                     else
                     {
                         var results = foundFloppys.Select(ff => $"{ff.IdLo} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
-                        string fromMessage = $"\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{searchTerm}\"";
+                        string fromMessage = $"\r\n\r\nWELCOME TO VDRIVE BETA!\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{searchTerm}\"";
                         string payload = $"{fromMessage}\r\n\r\n" + string.Concat(results) + "\0";
 
                         // TODO: make sure payload is less than max size for a single page
@@ -235,24 +235,37 @@ namespace VDRIVE.Protocol
                     }
 
                     // Extract clean data from parsed request
-                    string imageId = mountRequest.GetImageIdString().TrimEnd();
+                    string imageIdOfFilename = mountRequest.GetImageIdOrFilenameString().TrimEnd();
                     
-                    this.Logger.LogMessage($"[Mount] image={imageId}");
+                    this.Logger.LogMessage($"[Mount] image={imageIdOfFilename}");
 
                     Session session = sessionManager.GetOrCreateSession(mountRequest.SessionId);
 
-                    // FIXME: only showing single page of results
-                    // need to implement paging
-                    FloppyIdentifier floppyIdentifier = new FloppyIdentifier
+                    FloppyIdentifier floppyIdentifier;
+                    if (imageIdOfFilename.Length <= 3 && int.TryParse(imageIdOfFilename, out int imageIdInt))
                     {
-                        IdLo = byte.Parse(imageId),
-                        IdHi = 0
-                    };
+                        // Mount by ID
+                        floppyIdentifier = new FloppyIdentifier
+                        {
+                            IdLo = byte.Parse(imageIdOfFilename),
+                            IdHi = 0
+                        };
+                    }
+                    else
+                    {
+                        // Find floppy by name
+                        floppyIdentifier = session.FloppyResolver.FindFloppyIdentifierByName(imageIdOfFilename);
+                        if (floppyIdentifier.Equals(default(FloppyIdentifier)))
+                        {
+                            WriteResponse(httpListenerResponse, "\r\nERROR: FLOPPY NOT FOUND\0", session);
+                            return;
+                        }
+                    }
 
                     FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
                     string fileName = new string(floppyInfo.ImageName).TrimEnd('\0');
 
-                    string message = $"\r\nFLOPPY INSERTED (ID={imageId} {fileName})";
+                    string message = $"\r\nFLOPPY INSERTED (ID={floppyInfo.IdLo} {fileName})";
 
                     // HACK: returning typical load commands based on type
                     // to save some typing on C64
@@ -288,20 +301,14 @@ namespace VDRIVE.Protocol
         {
             if (request.ContentType?.Contains("multipart/form-data") != true)
             {
-                using (var memoryStream = new MemoryStream())
-                {
-                    request.InputStream.CopyTo(memoryStream);
-                    return memoryStream.ToArray();
-                }
+                return ReadRequestStream(request);
             }
 
             // Read entire body as bytes
-            byte[] fullBody;
-            using (var memoryStream = new MemoryStream())
-            {
-                request.InputStream.CopyTo(memoryStream);
-                fullBody = memoryStream.ToArray();
-            }
+            byte[] fullBody = ReadRequestStream(request);
+
+            if (fullBody.Length == 0)
+                return new byte[0];
 
             // Find the "data" field by searching for the header pattern in bytes (NOT string)
             byte[] headerPattern = Encoding.ASCII.GetBytes("Content-Disposition: form-data; name=\"data\"");
@@ -337,6 +344,65 @@ namespace VDRIVE.Protocol
             byte[] result = new byte[length];
             Array.Copy(fullBody, dataStart, result, 0, length);
             return result;
+        }
+
+        private byte[] ReadRequestStream(HttpListenerRequest request)
+        {
+            try
+            {
+                // Check if Content-Length is specified
+                if (request.ContentLength64 > 0)
+                {
+                    byte[] buffer = new byte[request.ContentLength64];
+                    int totalRead = 0;
+                    int bytesRead;
+                    
+                    // Read with timeout protection
+                    using (var stream = request.InputStream)
+                    {
+                        while (totalRead < buffer.Length)
+                        {
+                            bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                            if (bytesRead == 0)
+                                break; // Stream ended prematurely
+                            totalRead += bytesRead;
+                        }
+                    }
+                    
+                    return totalRead == buffer.Length ? buffer : buffer.Take(totalRead).ToArray();
+                }
+                else
+                {
+                    // Fallback: read until stream ends (with buffer limit to prevent memory issues)
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        int maxSize = 10 * 1024 * 1024; // 10MB limit
+                        
+                        using (var stream = request.InputStream)
+                        {
+                            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                            {
+                                memoryStream.Write(buffer, 0, bytesRead);
+                                
+                                if (memoryStream.Length > maxSize)
+                                {
+                                    this.Logger.LogMessage($"Request body exceeds maximum size of {maxSize} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        return memoryStream.ToArray();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.Logger.LogMessage($"Error reading request stream: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                return new byte[0];
+            }
         }
 
         private static bool IsValidLoadAddress(ILogger logger, ushort dest_ptr_start, int end_dest_ptr)
@@ -447,33 +513,6 @@ namespace VDRIVE.Protocol
             response.ContentLength64 = fullResponse.Length;
 
             response.OutputStream.Write(fullResponse, 0, fullResponse.Length);
-            response.OutputStream.Flush();
-            response.Close();
-        }
-
-        private void WriteSearchResponse(HttpListenerResponse response, string text, int resultCount, Session session = null)
-        {
-            // Create HTTP response header
-            HttpSearchResponse httpResponse = HttpSearchResponse.Create(
-                session?.SessionId ?? 0,
-                (byte)resultCount
-            );
-
-            // Serialize header + text payload
-            List<byte> fullResponse = new List<byte>();
-            fullResponse.AddRange(BinaryStructConverter.ToByteArray(httpResponse));
-            
-            // Add text payload
-            if (!string.IsNullOrEmpty(text))
-            {
-                fullResponse.AddRange(Encoding.ASCII.GetBytes(text));
-            }
-
-            response.StatusCode = 200;
-            response.ContentType = "text/plain";
-            response.ContentLength64 = fullResponse.Count;
-
-            response.OutputStream.Write(fullResponse.ToArray(), 0, fullResponse.Count);
             response.OutputStream.Flush();
             response.Close();
         }

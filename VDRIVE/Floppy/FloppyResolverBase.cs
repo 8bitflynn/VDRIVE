@@ -29,8 +29,53 @@ namespace VDRIVE.Floppy
 
         public FloppyInfo InsertFloppy(FloppyInfo floppyInfo) // easier locally
         {
-            FloppyIdentifier floppyIdentifier = new FloppyIdentifier { IdLo = floppyInfo.IdLo, IdHi = floppyInfo.IdHi };
-            return ((IFloppyResolver)this).InsertFloppy(floppyIdentifier);
+            if (floppyInfo.ImageNameLength == 0)
+            {
+                FloppyIdentifier floppyIdentifier = new FloppyIdentifier { IdLo = floppyInfo.IdLo, IdHi = floppyInfo.IdHi };
+                return ((IFloppyResolver)this).InsertFloppy(floppyIdentifier);
+            }
+            else
+            {
+                FloppyIdentifier floppyIdentifier = FindFloppyIdentifierByName(new string(floppyInfo.ImageName).TrimEnd('\0'));
+                if (floppyIdentifier.Equals(default(FloppyIdentifier)))
+                {
+                    this.Logger.LogMessage("Floppy not found: " + new string(floppyInfo.ImageName.TakeWhile(c => c != '\0').ToArray()));
+                    return default(FloppyInfo);
+                }
+                
+                return ((IFloppyResolver)this).InsertFloppy(floppyIdentifier);
+            }
+        }
+
+        public FloppyIdentifier FindFloppyIdentifierByName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return default;
+            }
+
+            char[] nameChars = name.PadRight(64, '\0').ToArray();
+            FloppyInfo foundFloppyInfo = this.FloppyInfos.FirstOrDefault(fi => fi.ImageName.SequenceEqual(nameChars));
+            
+            if (foundFloppyInfo.Equals(default(FloppyInfo)))
+            {
+                this.Logger.LogMessage($"Floppy identifier not found for name: {name}");
+                return default;
+            }
+
+            return new FloppyIdentifier { IdLo = foundFloppyInfo.IdLo, IdHi = foundFloppyInfo.IdHi };
+        }
+
+        public FloppyInfo FindFloppyInfoByIdentifier(FloppyIdentifier floppyIdentifier)
+        {
+            FloppyInfo foundFloppyInfo = this.FloppyInfos.FirstOrDefault(fi => fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
+            
+            if (foundFloppyInfo.Equals(default(FloppyInfo)))
+            {
+                this.Logger.LogMessage($"Floppy info not found for identifier: {(floppyIdentifier.IdLo | (floppyIdentifier.IdHi << 8))}");
+            }
+
+            return foundFloppyInfo;
         }
 
         public FloppyInfo EjectFloppy()

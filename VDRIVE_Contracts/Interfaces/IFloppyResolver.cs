@@ -10,5 +10,9 @@ namespace VDRIVE_Contracts.Interfaces
         FloppyInfo GetInsertedFloppyInfo();
         FloppyPointer GetInsertedFloppyPointer();        
         FloppyInfo EjectFloppy();
+        
+        // New lookup methods - return default(struct) if not found
+        FloppyIdentifier FindFloppyIdentifierByName(string name);
+        FloppyInfo FindFloppyInfoByIdentifier(FloppyIdentifier floppyIdentifier);
     }
 }
