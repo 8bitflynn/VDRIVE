@@ -22,10 +22,10 @@ dest_ptr_hi    = $af
 jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
-jmp vdrive_search_direct
 jmp vdrive_mount_floppy
-jmp vdrive_mount_direct
 jmp reboot_wic64
+jmp vdrive_search_direct
+jmp vdrive_mount_direct
 
 ; API constants for programmatic access
 !word user_input          ; $C015: Pointer to 64-byte input buffer
