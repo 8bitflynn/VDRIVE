@@ -22,8 +22,14 @@ dest_ptr_hi    = $af
 jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
+jmp vdrive_search_direct
 jmp vdrive_mount_floppy
+jmp vdrive_mount_direct
 jmp reboot_wic64
+
+; API constants for programmatic access
+!word user_input          ; $C015: Pointer to 64-byte input buffer
+!word user_input_length   ; $C017: Pointer to length byte
 
 !src "wic64.h"
 !src "wic64.asm"
@@ -214,6 +220,21 @@ fn_copy_done:
     lda response_buffer+1
     sta dest_ptr_hi
 
+    ; Check secondary address to determine final load address
+    ; SA=0: Always use PRG file's address (BASIC LOAD without ,1)
+    ; SA=1: Use PRG file's address (BASIC LOAD with ,1 or machine code load)
+    ; For machine code: if caller wants custom address, they set SA=2
+    lda sec_addr
+    cmp #2
+    bcc .use_prg_address    ; SA=0 or SA=1: use PRG address
+    
+    ; SA=2+: use custom address from $AE/$AF (for machine code multi-load)
+    lda start_addr_lo
+    sta dest_ptr_lo
+    lda start_addr_hi
+    sta dest_ptr_hi
+
+.use_prg_address:
     ; Set response pointer to the load address and receive remaining data directly
     lda dest_ptr_lo
     sta wic64_response
@@ -303,7 +324,15 @@ compute_endaddress
 
 vdrive_search_floppies:
     jsr get_user_input
+    lda #1              ; flag: 1 = interactive (auto-mount after search)
+    sta interactive_mode
+    jmp search_common
     
+vdrive_search_direct:
+    lda #0              ; flag: 0 = programmatic (no auto-mount)
+    sta interactive_mode
+    
+search_common:
     ; check if user entered anything
     lda user_input_length
     beq exit_search  ; Exit immediately if empty, don't prompt for mount
@@ -339,12 +368,17 @@ vdrive_search_floppies:
     lda response_buffer+1
     sta session_id+1
         
+    ; Print response buffer only in interactive mode
+    lda interactive_mode
+    beq .skip_print         ; programmatic mode (0), skip printing
+    
     ; Print response buffer starting at byte 2 (skip session header only)
     lda #<(response_buffer+2)
     sta temp_ptr_lo
     lda #>(response_buffer+2)
     sta temp_ptr_hi
     jsr print_from_ptr
+.skip_print:
 
     jsr cleanup_wic64   
 
@@ -357,6 +391,12 @@ search_done:
     beq exit_search         ; Skip mount
     cmp #'0'                ; Starts with '0' (zero results)?
     beq exit_search         ; Skip mount
+    
+    ; Check interactive mode: if programmatic, exit without mounting
+    lda interactive_mode
+    beq exit_search         ; programmatic mode (0), exit
+    
+    ; Interactive mode: continue to mount prompt
     jmp vdrive_mount_floppy
 
 exit_search:
@@ -425,7 +465,15 @@ done:
 
 vdrive_mount_floppy:
     jsr get_user_input
+    lda #1              ; flag: 1 = interactive (show results)
+    sta interactive_mode
+    jmp mount_common
     
+vdrive_mount_direct:
+    lda #0              ; flag: 0 = programmatic (no printing)
+    sta interactive_mode
+    
+mount_common:
     ; Always init WIC64 even if empty input (to ensure cleanup happens)
     jsr init_wic64
     
@@ -458,6 +506,10 @@ vdrive_mount_floppy:
     sta session_id+1
     
     jsr cleanup_wic64
+    
+    ; Print response buffer only in interactive mode
+    lda interactive_mode
+    beq mount_floppy_exit   ; programmatic mode (0), skip printing and exit
     
     ; Print response buffer (skip session header)
     lda #<(response_buffer+2)
@@ -784,11 +836,14 @@ prepend_session_to_data:
     jmp .copy_loop
 .copy_done:
     
-    ; Update length to include session (2 bytes) + length byte (1 byte)
+    ; Calculate total length (session + length byte + data)
+    ; Store in payload_len_lo for use by send_http_post
     lda user_input_length
     clc
     adc #3
-    sta user_input_length
+    sta payload_len_lo
+    lda #0
+    sta payload_len_hi
     
     ; Return pointer to response_buffer
     ldx #<response_buffer
@@ -851,10 +906,10 @@ send_http_post:
     cmp #3                  ; save mode?
     beq .post_use_save_size
     
-    ; Load/mount/search: use user_input_length
-    lda user_input_length
+    ; Load/mount/search: use payload_len_lo/hi (set by prepend_session_to_data)
+    lda payload_len_lo
     sta http_request+2
-    lda #0
+    lda payload_len_hi
     sta http_request+3
     jmp .post_send_data
     
@@ -997,6 +1052,8 @@ vdrive_devnum:
     !byte 0
 vdrive_retcode:
     !byte 0
+interactive_mode:
+    !byte 0  ; 0 = programmatic (no prompts), 1 = interactive (prompts)
 temp_workspace1:
     !byte 0
 temp_workspace2:
@@ -1022,7 +1079,7 @@ load_prefix:   !text "load",0
 save_prefix:   !text "save",0
 
 user_input:
-    !fill 32,0
+    !fill 64,0
 
 ; *** SERVER URL - Can be modified with BASIC config program ***
 ; To change: Load this PRG to $C000, modify bytes at http_url, save back
