@@ -23,19 +23,22 @@ jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
 jmp vdrive_mount_floppy
-jmp reboot_wic64
 jmp vdrive_search_direct
 jmp vdrive_mount_direct
+jmp reboot_wic64
 
-; API constants for programmatic access
-!word user_input          ; $C015: Pointer to 64-byte input buffer
-!word user_input_length   ; $C017: Pointer to length byte
+* = $c015
+api_user_input_ptr:
+    !word user_input          ; $C015: Pointer to 64-byte input buffer
+api_user_input_len_ptr:
+    !word user_input_length   ; $C017: Pointer to length byte
 
 !src "wic64.h"
 !src "wic64.asm"
 !src "macros.asm"
 
 enable_vdrive:   
+
     lda #$08
     sta vdrive_devnum
 
@@ -1085,8 +1088,8 @@ user_input:
 ; To change: Load this PRG to $C000, modify bytes at http_url, save back
 ; Format: Null-terminated string, max 128 bytes
 http_url:
-    !text "http://192.168.1.222/",0
-    !fill 106,0  ; Pad to 128 bytes total (22 bytes used + 106 padding)
+    !text "http://wdvjnablal.a.pinggy.link/",0
+    !fill 95,0  ; Pad to 128 bytes total (33 bytes used + 95 padding)
 
 http_path:
     !fill 32,0 
