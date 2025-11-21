@@ -996,8 +996,8 @@ copy_base_safe:
     sta http_request,y
     inx
     iny
-    ; prevent payload from overflowing http_request (max payload = 251 bytes)
-    cpx #251
+    ; prevent payload from overflowing http_request (max payload = 124 bytes for 128-byte buffer)
+    cpx #124
     bcs base_copied
     jmp copy_base_safe
 base_copied:
@@ -1012,8 +1012,8 @@ copy_path_safe:
     sta http_request+4,X
     inx
     iny
-    ; prevent payload overflow (max payload = 251 bytes)
-    cpx #251
+    ; prevent payload overflow (max payload = 124 bytes for 128-byte buffer)
+    cpx #124
     bcs copy_done
     jmp copy_path_safe
 copy_done:
@@ -1088,14 +1088,17 @@ user_input:
 ; To change: Load this PRG to $C000, modify bytes at http_url, save back
 ; Format: Null-terminated string, max 128 bytes
 http_url:
-    !text "http://wdvjnablal.a.pinggy.link/",0
-    !fill 95,0  ; Pad to 128 bytes total (33 bytes used + 95 padding)
+    !text "http://192.168.1.222/",0
+    !fill 106,0  ; Pad to 128 bytes total (22 bytes used + 106 padding)
 
 http_path:
     !fill 32,0 
 
+; Place buffers naturally after code to maximize available space before I/O ($D000)
+; http_request: 128 bytes (header + max 124-byte payload)
+; response_buffer: 512 bytes for search results
 http_request:
-    !fill 256,0
+    !fill 128,0
 
 response_buffer:
     !fill 512,0
