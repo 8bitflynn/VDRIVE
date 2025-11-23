@@ -40,12 +40,9 @@ api_user_input_len_ptr:
 enable_vdrive:   
 
     lda #$08
-    sta vdrive_devnum
-
-    ; Initialize session to 0
-    lda #0
-    sta session_id
-    sta session_id+1
+    sta vdrive_devnum    
+    
+    jsr init_vars
 
     sei
 
@@ -94,6 +91,23 @@ disable_vdrive:
     sta $0333
     rts
 
+init_vars:
+
+    ; Initialize session to 0
+    lda #0
+    sta session_id
+    sta session_id+1
+    
+    ; Clear working variables to default values
+    sta user_input_length
+    sta vdrive_retcode
+    sta interactive_mode
+    sta post_data_ptr
+    sta post_data_ptr+1
+    sta payload_len_lo
+    sta payload_len_hi
+    rts
+
 ; avoid ?OUT OF MEMORY errors by setting basic pointers to safe values
 cleanup_basic_pointers:
     lda #$01
@@ -107,7 +121,6 @@ cleanup_basic_pointers:
     sta $33       ; STREND low
     sta $35       ; FRETOP low
     sta $2F       ; ARYTAB low
-
 
     lda #$08
     sta $2E       ; VARTAB high
@@ -127,23 +140,23 @@ iload_handler:
  
     php
     pla
-    sta temp_workspace4      ; save P explicitly (we’ll PLP later with its value)
+    sta temp_workspace4      
 
-    ; Intercept only our virtual device
+    ; Intercept only vdrive
     lda vdrive_devnum
     cmp devnum
     beq vdrive_load
 
     ; Not our device: restore state and tail-call original ILOAD
     lda temp_workspace4
-    pha                     ; put saved P back on stack
+    pha                    
     plp
     lda org_iload_lo
     sta temp_ptr_lo
     lda org_iload_hi
     sta temp_ptr_hi
     ldx temp_workspace2
-    stx $c3                 ; restore X to KERNAL scratch (as your original did)
+    stx $c3                
     ldy temp_workspace3
     sty $c4
     lda temp_workspace1
@@ -406,16 +419,25 @@ exit_search:
     jsr cleanup_wic64
     rts  
 
-; Print from pointer in temp_ptr
+; Print from pointer in temp_ptr (max 512 bytes for safety)
 print_from_ptr:
     ldy #0
+    ldx #0              ; byte counter low
+    stx temp_workspace1
+    ldx #2              ; byte counter high (max 512 = $0200)
+    stx temp_workspace2
 .loop:
     lda (temp_ptr_lo),y
-    beq .done
+    beq .done           ; null terminator
     jsr $ffd2
     inc temp_ptr_lo
-    bne .loop
+    bne .no_carry
     inc temp_ptr_hi
+.no_carry:
+    inc temp_workspace1
+    bne .loop
+    inc temp_workspace2
+    beq .done           ; hit 512 byte limit
     jmp .loop
 .done:
     rts
@@ -772,7 +794,7 @@ init_wic64
     +wic64_set_timeout_handler handle_wic64_timeout
     +wic64_set_error_handler handle_wic64_error
 
-    lda #$c0 ; generous timeout (192 decimal)
+    lda #$ff ; max timeout (255 decimal)
     sta wic64_timeout
     rts
 
@@ -946,6 +968,15 @@ send_http_post:
     jmp .post_fail
     
 .post_success:
+    ; Clear response buffer to prevent garbage from previous operations
+    ldx #0
+    lda #0
+.clear_loop:
+    sta response_buffer,x
+    sta response_buffer+$100,x
+    inx
+    bne .clear_loop
+    
     clc
     rts
     
@@ -1086,13 +1117,13 @@ user_input:
 
 ; *** SERVER URL - Can be modified with BASIC config program ***
 ; To change: Load this PRG to $C000, modify bytes at http_url, save back
-; Format: Null-terminated string, max 128 bytes
+; Format: Null-terminated string, max 80 bytes
 http_url:
-    !text "http://192.168.1.222/",0
-    !fill 106,0  ; Pad to 128 bytes total (22 bytes used + 106 padding)
+    !text "http://192.168.1.100/",0
+    !fill 59,0  ; Pad to 80 bytes total (21 bytes used + 59 padding)
 
 http_path:
-    !fill 32,0 
+    !fill 16,0 
 
 ; Place buffers naturally after code to maximize available space before I/O ($D000)
 ; http_request: 128 bytes (header + max 124-byte payload)
