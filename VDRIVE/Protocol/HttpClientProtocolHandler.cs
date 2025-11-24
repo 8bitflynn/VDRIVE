@@ -171,29 +171,6 @@ namespace VDRIVE.Protocol
                     byte[] searchFloppyBytes = ParseMultipartDataBytes(httpListenerRequest);
                     
                     this.Logger.LogMessage($"[SEARCH-TIMING] Body parsed in {(DateTime.Now - startTime).TotalMilliseconds:F0}ms, received {searchFloppyBytes.Length} bytes");
-                    
-                    // DIAGNOSTIC: Show exactly what we received
-                    if (searchFloppyBytes.Length > 0)
-                    {
-                        // Show hex dump
-                        string hexDump = string.Join(" ", searchFloppyBytes.Select(b => b.ToString("X2")));
-                        this.Logger.LogMessage($"[SEARCH-DEBUG] Hex dump ({searchFloppyBytes.Length} bytes): {hexDump}");
-                        
-                        // Show ASCII representation (for debugging)
-                        string asciiDump = string.Join("", searchFloppyBytes.Select(b => b >= 32 && b < 127 ? (char)b : '.'));
-                        this.Logger.LogMessage($"[SEARCH-DEBUG] ASCII: [{asciiDump}]");
-                        
-                        // Parse and show the expected struct fields
-                        if (searchFloppyBytes.Length >= 6)
-                        {
-                            ushort sessionId = (ushort)(searchFloppyBytes[0] | (searchFloppyBytes[1] << 8));
-                            byte searchTermLength = searchFloppyBytes[2];
-                            string searchTermActual = Encoding.ASCII.GetString(searchFloppyBytes, 3, Math.Min(searchTermLength, searchFloppyBytes.Length - 3));
-                            
-                            this.Logger.LogMessage($"[SEARCH-DEBUG] Parsed: SessionId=0x{sessionId:X4} ({sessionId}), SearchTermLength={searchTermLength}, SearchTerm='{searchTermActual}'");
-                            this.Logger.LogMessage($"[SEARCH-DEBUG] Expected 6 bytes minimum (2+1+3 for 'PRG'), got {searchFloppyBytes.Length} bytes (extra {searchFloppyBytes.Length - 6} bytes)");
-                        }
-                    }
 
                     // Use HttpSearchFloppyRequest for clean parsing
                     HttpSearchFloppyRequest searchRequest;
@@ -210,13 +187,13 @@ namespace VDRIVE.Protocol
 
                     // Extract clean data from parsed request
                     string searchTerm = new string(searchRequest.SearchTerm, 0, searchRequest.SearchTermLength).TrimEnd();
-
+                        
                     this.Logger.LogMessage($"[SEARCH] TERM={searchTerm} *** [SESSIONID] = {searchRequest.SessionId}");
-
+                        
                     Session session = sessionManager.GetOrCreateSession(searchRequest.SessionId);
 
-                    // Check if this is a pagination command (+/- with optional number)
-                    if (searchTerm.StartsWith("+") || searchTerm.StartsWith("-"))
+                    // Check if this is a pagination command (+/- with optional number) - CHECK THIS FIRST
+                    if ((searchTerm.StartsWith("+") || searchTerm.StartsWith("-")) && session.CachedSearchResults != null && session.CachedSearchResults.Length > 0)
                     {
                         HandleSearchPagination(httpListenerResponse, session, searchTerm);
                         return;
@@ -347,6 +324,13 @@ namespace VDRIVE.Protocol
 
                     Session session = sessionManager.GetOrCreateSession(mountRequest.SessionId);
 
+                    // Check if this is a pagination command (+/- with optional number)
+                    if (imageIdOfFilename.StartsWith("+") || imageIdOfFilename.StartsWith("-"))
+                    {
+                        HandleSearchPagination(httpListenerResponse, session, imageIdOfFilename);
+                        return;
+                    }
+
                     FloppyIdentifier floppyIdentifier;
                     ushort fullId;
                     if (imageIdOfFilename.Length <= 5 && int.TryParse(imageIdOfFilename, out int imageIdInt))
@@ -472,9 +456,6 @@ namespace VDRIVE.Protocol
             byte[] result = new byte[length];
             Array.Copy(fullBody, dataStart, result, 0, length);
             
-            // DIAGNOSTIC: Log what we extracted
-            this.Logger.LogMessage($"[PARSE-DEBUG] Extracted {length} bytes from multipart form (fullBody={fullBody.Length}, dataStart={dataStart}, dataEnd={dataEnd})");
-            
             return result;
         }
 
@@ -488,49 +469,81 @@ namespace VDRIVE.Protocol
                     byte[] buffer = new byte[request.ContentLength64];
                     int totalRead = 0;
                     int bytesRead;
+                    int maxAttempts = 10; // Maximum read attempts before giving up
+                    int attemptCount = 0;
                     
                     // Read with timeout protection
                     using (var stream = request.InputStream)
                     {
-                        // Set read timeout (30 seconds - more generous for slow connections)
+                        // Set read timeout (1 second per attempt = max 10 seconds total)
                         try
                         {
-                            stream.ReadTimeout = 30000;
+                            stream.ReadTimeout = 1000;
                         }
                         catch (InvalidOperationException)
                         {
                             // ReadTimeout not supported on this stream, continue without it
                         }
                         
-                        while (totalRead < buffer.Length)
+                        while (totalRead < buffer.Length && attemptCount < maxAttempts)
                         {
-                            bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
-                            if (bytesRead == 0)
+                            attemptCount++;
+                            
+                            try
                             {
-                                // Stream ended prematurely
-                                this.Logger.LogMessage($"Stream ended prematurely. Expected {buffer.Length} bytes, got {totalRead} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
-                                break;
+                                bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                                
+                                if (bytesRead == 0)
+                                {
+                                    // No data available yet - wait briefly and retry
+                                    if (attemptCount < maxAttempts)
+                                    {
+                                        System.Threading.Thread.Sleep(100); // Wait 100ms before retry
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        // Stream ended prematurely after max attempts
+                                        this.Logger.LogMessage($"Stream ended after {attemptCount} attempts. Expected {buffer.Length} bytes, got {totalRead} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                        break;
+                                    }
+                                }
+                                
+                                totalRead += bytesRead;
                             }
-                            totalRead += bytesRead;
+                            catch (System.IO.IOException ioEx) when (ioEx.Message.Contains("timeout"))
+                            {
+                                // Read timeout - retry
+                                this.Logger.LogMessage($"Read timeout on attempt {attemptCount}/{maxAttempts}. Bytes read so far: {totalRead}/{buffer.Length}", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                
+                                if (attemptCount >= maxAttempts)
+                                {
+                                    this.Logger.LogMessage($"Max attempts reached. Giving up.", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                                    break;
+                                }
+                            }
                         }
                     }
                     
                     // Return whatever we managed to read
                     byte[] result = totalRead == buffer.Length ? buffer : buffer.Take(totalRead).ToArray();
                     
-                    // DIAGNOSTIC: Log complete hex dump of entire request body
+                    // Log complete hex dump at verbose level
                     if (result.Length > 0)
                     {
-                        this.Logger.LogMessage($"[READ-DEBUG] Complete request body hex dump ({result.Length} bytes):");
+                        this.Logger.LogMessage($"Complete request body hex dump ({result.Length} bytes):", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                         
-                        // Log in 16-byte rows for readability
                         for (int i = 0; i < result.Length; i += 16)
                         {
                             int rowLength = Math.Min(16, result.Length - i);
                             string hexPart = string.Join(" ", result.Skip(i).Take(rowLength).Select(b => b.ToString("X2")));
                             string asciiPart = string.Join("", result.Skip(i).Take(rowLength).Select(b => b >= 32 && b < 127 ? (char)b : '.'));
-                            this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}");
+                            this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                         }
+                    }
+                    else
+                    {
+                        this.Logger.LogMessage($"No data read from stream. Content-Length was {buffer.Length}, attempts={attemptCount}", VDRIVE_Contracts.Enums.LogSeverity.Error);
                     }
                     
                     return result;
@@ -549,7 +562,7 @@ namespace VDRIVE.Protocol
                             // Set read timeout for fallback path too
                             try
                             {
-                                stream.ReadTimeout = 30000;
+                                stream.ReadTimeout = 1000;
                             }
                             catch (InvalidOperationException)
                             {
@@ -570,17 +583,17 @@ namespace VDRIVE.Protocol
                         
                         byte[] result = memoryStream.ToArray();
                         
-                        // DIAGNOSTIC: Log complete hex dump for fallback path too
+                        // Log complete hex dump at verbose level
                         if (result.Length > 0)
                         {
-                            this.Logger.LogMessage($"[READ-DEBUG] Complete request body hex dump (no Content-Length, {result.Length} bytes):");
+                            this.Logger.LogMessage($"Complete request body hex dump (no Content-Length, {result.Length} bytes):", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                             
                             for (int i = 0; i < result.Length; i += 16)
                             {
                                 int rowLength = Math.Min(16, result.Length - i);
                                 string hexPart = string.Join(" ", result.Skip(i).Take(rowLength).Select(b => b.ToString("X2")));
                                 string asciiPart = string.Join("", result.Skip(i).Take(rowLength).Select(b => b >= 32 && b < 127 ? (char)b : '.'));
-                                this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}");
+                                this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                             }
                         }
                         
@@ -790,8 +803,11 @@ namespace VDRIVE.Protocol
                 pageResultsList.Add($"{fullId} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
             }
 
-            // Build message with pagination info
-            string fromMessage = $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
+            // Build message - only show intro on first page
+            string fromMessage = pageNumber == 0 
+                ? $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n"
+                : $"\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
+            
             string pageInfo = $"\r\nPAGE {pageNumber + 1} OF {totalPages} ({totalResults} RESULTS)";
             string navInfo = "\r\n(+/- TO PAGE, ID TO MOUNT)";
             string payload = fromMessage + string.Concat(pageResultsList) + pageInfo + navInfo + "\0";

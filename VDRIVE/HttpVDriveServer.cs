@@ -27,7 +27,7 @@ namespace VDRIVE
             httpListener.Start();
 
             this.Logger.LogMessage($"Listening on {this.Configuration.ServerListenAddress}:{this.Configuration.ServerPort}");
-
+              
             while (true)
             {
                 HttpListenerContext httpListenerContext = httpListener.GetContext(); // blocking
