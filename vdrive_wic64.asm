@@ -22,27 +22,27 @@ dest_ptr_hi    = $af
 jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
-jmp vdrive_search_direct
 jmp vdrive_mount_floppy
+jmp vdrive_search_direct
 jmp vdrive_mount_direct
 jmp reboot_wic64
 
-; API constants for programmatic access
-!word user_input          ; $C015: Pointer to 64-byte input buffer
-!word user_input_length   ; $C017: Pointer to length byte
+* = $c015
+api_user_input_ptr:
+    !word user_input          ; $C015: Pointer to 64-byte input buffer
+api_user_input_len_ptr:
+    !word user_input_length   ; $C017: Pointer to length byte
 
 !src "wic64.h"
 !src "wic64.asm"
 !src "macros.asm"
 
 enable_vdrive:   
-    lda #$08
-    sta vdrive_devnum
 
-    ; Initialize session to 0
-    lda #0
-    sta session_id
-    sta session_id+1
+    lda #$08
+    sta vdrive_devnum    
+    
+    jsr init_vars
 
     sei
 
@@ -91,6 +91,23 @@ disable_vdrive:
     sta $0333
     rts
 
+init_vars:
+
+    ; Initialize session to 0
+    lda #0
+    sta session_id
+    sta session_id+1
+    
+    ; Clear working variables to default values
+    sta user_input_length
+    sta vdrive_retcode
+    sta interactive_mode
+    sta post_data_ptr
+    sta post_data_ptr+1
+    sta payload_len_lo
+    sta payload_len_hi
+    rts
+
 ; avoid ?OUT OF MEMORY errors by setting basic pointers to safe values
 cleanup_basic_pointers:
     lda #$01
@@ -104,7 +121,6 @@ cleanup_basic_pointers:
     sta $33       ; STREND low
     sta $35       ; FRETOP low
     sta $2F       ; ARYTAB low
-
 
     lda #$08
     sta $2E       ; VARTAB high
@@ -124,23 +140,23 @@ iload_handler:
  
     php
     pla
-    sta temp_workspace4      ; save P explicitly (we’ll PLP later with its value)
+    sta temp_workspace4      
 
-    ; Intercept only our virtual device
+    ; Intercept only vdrive
     lda vdrive_devnum
     cmp devnum
     beq vdrive_load
 
     ; Not our device: restore state and tail-call original ILOAD
     lda temp_workspace4
-    pha                     ; put saved P back on stack
+    pha                    
     plp
     lda org_iload_lo
     sta temp_ptr_lo
     lda org_iload_hi
     sta temp_ptr_hi
     ldx temp_workspace2
-    stx $c3                 ; restore X to KERNAL scratch (as your original did)
+    stx $c3                
     ldy temp_workspace3
     sty $c4
     lda temp_workspace1
@@ -323,6 +339,10 @@ compute_endaddress
     rts
 
 vdrive_search_floppies:
+    ; Clear session for new search
+    lda #0
+    sta session_id
+    sta session_id+1
     jsr get_user_input
     lda #1              ; flag: 1 = interactive (auto-mount after search)
     sta interactive_mode
@@ -396,23 +416,122 @@ search_done:
     lda interactive_mode
     beq exit_search         ; programmatic mode (0), exit
     
-    ; Interactive mode: continue to mount prompt
-    jmp vdrive_mount_floppy
+    ; Interactive mode: continue to paging loop
+    jmp page_loop
 
 exit_search:
     jsr cleanup_wic64
+    rts
+
+; -----------------------------------
+; page_loop
+; After search results, prompt for mount number or paging command
+; +/-/+N/-N for paging, number/filename for mounting
+; Empty input exits
+; WiC64 stays initialized for entire session
+; -----------------------------------
+page_loop:
+    jsr get_user_input
+    
+    ; Check if empty - exit if so
+    lda user_input_length
+    beq exit_page_loop      ; Empty input, exit
+    
+    ; Check if first char is + or -
+    lda user_input
+    cmp #'+'
+    beq do_page_request
+    cmp #'-'
+    beq do_page_request
+    
+    ; Not paging, treat as mount request
+    ; Skip get_user_input in mount path since we already have input
+    lda #1
+    sta interactive_mode
+    jmp mount_common
+
+; -----------------------------------
+; do_page_request
+; Send paging request (+/-/+N/-N) to server
+; WiC64 initialized and finalized per request
+; -----------------------------------
+do_page_request:
+    ; Init WiC64 for this request
+    jsr init_wic64
+    
+    ; Prepend session to page command
+    jsr prepend_session_to_data
+    
+    ; Send as search request (index 1)
+    lda #1
+    jsr send_http_post
+    bcc .page_post_sent
+    jmp page_fail
+.page_post_sent:
+    
+    ; Receive response
+    +wic64_receive_header
+    bcc .page_got_header
+    jmp page_fail
+.page_got_header:
+    
+    +wic64_set_response response_buffer
+    +wic64_receive
+    bcc .page_data_received
+    jmp page_fail
+.page_data_received:
+    
+    ; Update session from response
+    lda response_buffer
+    sta session_id
+    lda response_buffer+1
+    sta session_id+1
+    
+    ; Print results (skip 2-byte session header)
+    lda #<(response_buffer+2)
+    sta temp_ptr_lo
+    lda #>(response_buffer+2)
+    sta temp_ptr_hi
+    jsr print_from_ptr
+    
+    ; Cleanup WiC64 after this request
+    jsr cleanup_wic64
+    
+    jmp page_loop
+
+page_fail:
+    ; Cleanup WiC64 on failure
+    jsr cleanup_wic64
+    ; Print error and return to page loop
+    lda #<page_error_msg
+    sta temp_ptr_lo
+    lda #>page_error_msg
+    sta temp_ptr_hi
+    jsr print_from_ptr
+    jmp page_loop
+
+exit_page_loop:
     rts  
 
-; Print from pointer in temp_ptr
+; Print from pointer in temp_ptr (max 512 bytes for safety)
 print_from_ptr:
     ldy #0
+    ldx #0              ; byte counter low
+    stx temp_workspace1
+    ldx #2              ; byte counter high (max 512 = $0200)
+    stx temp_workspace2
 .loop:
     lda (temp_ptr_lo),y
-    beq .done
+    beq .done           ; null terminator
     jsr $ffd2
     inc temp_ptr_lo
-    bne .loop
+    bne .no_carry
     inc temp_ptr_hi
+.no_carry:
+    inc temp_workspace1
+    bne .loop
+    inc temp_workspace2
+    beq .done           ; hit 512 byte limit
     jmp .loop
 .done:
     rts
@@ -445,6 +564,15 @@ print_response_done
     rts
 
 get_user_input:
+    ; Clear user_input buffer first
+    ldx #0
+    lda #0
+.clear_input:
+    sta user_input,x
+    inx
+    cpx #64
+    bne .clear_input
+    
     lda #$0d
     jsr $ffd2
     lda #'>' 
@@ -472,6 +600,7 @@ vdrive_mount_floppy:
 vdrive_mount_direct:
     lda #0              ; flag: 0 = programmatic (no printing)
     sta interactive_mode
+    ; Fall through to mount_common
     
 mount_common:
     ; Always init WIC64 even if empty input (to ensure cleanup happens)
@@ -769,7 +898,7 @@ init_wic64
     +wic64_set_timeout_handler handle_wic64_timeout
     +wic64_set_error_handler handle_wic64_error
 
-    lda #$c0 ; generous timeout (192 decimal)
+    lda #$ff ; max timeout (255 decimal)
     sta wic64_timeout
     rts
 
@@ -879,7 +1008,12 @@ send_http_post:
     bcc .post_header_ok
     jmp .post_fail
 .post_header_ok:
-    +wic64_send
+    ; Set wic64_bytes_to_transfer from POST_URL header
+    lda http_request+2
+    sta wic64_bytes_to_transfer
+    lda http_request+3
+    sta wic64_bytes_to_transfer+1
+    jsr wic64_send
     bcc .post_url_sent
     jmp .post_fail
 .post_url_sent:
@@ -894,6 +1028,14 @@ send_http_post:
     bcc .post_ack_done
     jmp .post_fail
 .post_ack_done:
+    
+    ; Clear http_request buffer to prevent URL garbage in POST_DATA header
+    ldx #0
+    lda #0
+.clear_http_request:
+    sta http_request,x
+    inx
+    bpl .clear_http_request
     
     ; Prepare POST_DATA request header
     lda #"R"
@@ -937,8 +1079,13 @@ send_http_post:
     lda post_data_ptr+1
     sta wic64_request+1
     
-    ; Send the actual data
-    +wic64_send
+    ; Send the actual data with explicit size from header
+    lda http_request+2
+    sta wic64_bytes_to_transfer
+    lda http_request+3
+    sta wic64_bytes_to_transfer+1
+    
+    jsr wic64_send
     bcc .post_success
     jmp .post_fail
     
@@ -993,8 +1140,8 @@ copy_base_safe:
     sta http_request,y
     inx
     iny
-    ; prevent payload from overflowing http_request (max payload = 251 bytes)
-    cpx #251
+    ; prevent payload from overflowing http_request (max payload = 124 bytes for 128-byte buffer)
+    cpx #124
     bcs base_copied
     jmp copy_base_safe
 base_copied:
@@ -1009,8 +1156,8 @@ copy_path_safe:
     sta http_request+4,X
     inx
     iny
-    ; prevent payload overflow (max payload = 251 bytes)
-    cpx #251
+    ; prevent payload overflow (max payload = 124 bytes for 128-byte buffer)
+    cpx #124
     bcs copy_done
     jmp copy_path_safe
 copy_done:
@@ -1032,6 +1179,7 @@ payload_len_hi: !byte 0
 session_id: !byte 0, 0  ; 16-bit session ID from server
 
 timeout_error_message: !pet "?timeout error", $00
+page_error_msg: !pet $0d, "?page error", $0d, $00
 status_request: !byte "R", WIC64_GET_STATUS_MESSAGE, $01, $00, $01
 status_prefix: !pet "?request failed: ", $00
 set_remote_timeout: !byte "R", WIC64_SET_REMOTE_TIMEOUT, $01, $00, $0f  ; 15 seconds
@@ -1083,18 +1231,16 @@ user_input:
 
 ; *** SERVER URL - Can be modified with BASIC config program ***
 ; To change: Load this PRG to $C000, modify bytes at http_url, save back
-; Format: Null-terminated string, max 128 bytes
+; Format: Null-terminated string, max 80 bytes
 http_url:
     !text "http://192.168.1.222/",0
-    !fill 106,0  ; Pad to 128 bytes total (22 bytes used + 106 padding)
+    !fill 59,0  ; Pad to 80 bytes total (21 bytes used + 59 padding)
 
 http_path:
-    !fill 32,0 
+    !fill 16,0 
 
 http_request:
-    !fill 256,0
+    !fill 128,0
 
 response_buffer:
-    !fill 512,0
-
-
+    !fill 512,0  ; 512 bytes response buffer at end of code
