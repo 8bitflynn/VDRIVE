@@ -339,6 +339,10 @@ compute_endaddress
     rts
 
 vdrive_search_floppies:
+    ; Clear session for new search
+    lda #0
+    sta session_id
+    sta session_id+1
     jsr get_user_input
     lda #1              ; flag: 1 = interactive (auto-mount after search)
     sta interactive_mode
@@ -412,11 +416,101 @@ search_done:
     lda interactive_mode
     beq exit_search         ; programmatic mode (0), exit
     
-    ; Interactive mode: continue to mount prompt
-    jmp vdrive_mount_floppy
+    ; Interactive mode: continue to paging loop
+    jmp page_loop
 
 exit_search:
     jsr cleanup_wic64
+    rts
+
+; -----------------------------------
+; page_loop
+; After search results, prompt for mount number or paging command
+; +/-/+N/-N for paging, number/filename for mounting
+; Empty input exits
+; WiC64 stays initialized for entire session
+; -----------------------------------
+page_loop:
+    jsr get_user_input
+    
+    ; Check if empty - exit if so
+    lda user_input_length
+    beq exit_page_loop      ; Empty input, exit
+    
+    ; Check if first char is + or -
+    lda user_input
+    cmp #'+'
+    beq do_page_request
+    cmp #'-'
+    beq do_page_request
+    
+    ; Not paging, treat as mount request
+    ; Skip get_user_input in mount path since we already have input
+    lda #1
+    sta interactive_mode
+    jmp mount_common
+
+; -----------------------------------
+; do_page_request
+; Send paging request (+/-/+N/-N) to server
+; WiC64 initialized and finalized per request
+; -----------------------------------
+do_page_request:
+    ; Init WiC64 for this request
+    jsr init_wic64
+    
+    ; Prepend session to page command
+    jsr prepend_session_to_data
+    
+    ; Send as search request (index 1)
+    lda #1
+    jsr send_http_post
+    bcc .page_post_sent
+    jmp page_fail
+.page_post_sent:
+    
+    ; Receive response
+    +wic64_receive_header
+    bcc .page_got_header
+    jmp page_fail
+.page_got_header:
+    
+    +wic64_set_response response_buffer
+    +wic64_receive
+    bcc .page_data_received
+    jmp page_fail
+.page_data_received:
+    
+    ; Update session from response
+    lda response_buffer
+    sta session_id
+    lda response_buffer+1
+    sta session_id+1
+    
+    ; Print results (skip 2-byte session header)
+    lda #<(response_buffer+2)
+    sta temp_ptr_lo
+    lda #>(response_buffer+2)
+    sta temp_ptr_hi
+    jsr print_from_ptr
+    
+    ; Cleanup WiC64 after this request
+    jsr cleanup_wic64
+    
+    jmp page_loop
+
+page_fail:
+    ; Cleanup WiC64 on failure
+    jsr cleanup_wic64
+    ; Print error and return to page loop
+    lda #<page_error_msg
+    sta temp_ptr_lo
+    lda #>page_error_msg
+    sta temp_ptr_hi
+    jsr print_from_ptr
+    jmp page_loop
+
+exit_page_loop:
     rts  
 
 ; Print from pointer in temp_ptr (max 512 bytes for safety)
@@ -470,6 +564,15 @@ print_response_done
     rts
 
 get_user_input:
+    ; Clear user_input buffer first
+    ldx #0
+    lda #0
+.clear_input:
+    sta user_input,x
+    inx
+    cpx #64
+    bne .clear_input
+    
     lda #$0d
     jsr $ffd2
     lda #'>' 
@@ -497,6 +600,7 @@ vdrive_mount_floppy:
 vdrive_mount_direct:
     lda #0              ; flag: 0 = programmatic (no printing)
     sta interactive_mode
+    ; Fall through to mount_common
     
 mount_common:
     ; Always init WIC64 even if empty input (to ensure cleanup happens)
@@ -904,7 +1008,12 @@ send_http_post:
     bcc .post_header_ok
     jmp .post_fail
 .post_header_ok:
-    +wic64_send
+    ; Set wic64_bytes_to_transfer from POST_URL header
+    lda http_request+2
+    sta wic64_bytes_to_transfer
+    lda http_request+3
+    sta wic64_bytes_to_transfer+1
+    jsr wic64_send
     bcc .post_url_sent
     jmp .post_fail
 .post_url_sent:
@@ -919,6 +1028,14 @@ send_http_post:
     bcc .post_ack_done
     jmp .post_fail
 .post_ack_done:
+    
+    ; Clear http_request buffer to prevent URL garbage in POST_DATA header
+    ldx #0
+    lda #0
+.clear_http_request:
+    sta http_request,x
+    inx
+    bpl .clear_http_request
     
     ; Prepare POST_DATA request header
     lda #"R"
@@ -962,21 +1079,17 @@ send_http_post:
     lda post_data_ptr+1
     sta wic64_request+1
     
-    ; Send the actual data
-    +wic64_send
+    ; Send the actual data with explicit size from header
+    lda http_request+2
+    sta wic64_bytes_to_transfer
+    lda http_request+3
+    sta wic64_bytes_to_transfer+1
+    
+    jsr wic64_send
     bcc .post_success
     jmp .post_fail
     
 .post_success:
-    ; Clear response buffer to prevent garbage from previous operations
-    ldx #0
-    lda #0
-.clear_loop:
-    sta response_buffer,x
-    sta response_buffer+$100,x
-    inx
-    bne .clear_loop
-    
     clc
     rts
     
@@ -1066,6 +1179,7 @@ payload_len_hi: !byte 0
 session_id: !byte 0, 0  ; 16-bit session ID from server
 
 timeout_error_message: !pet "?timeout error", $00
+page_error_msg: !pet $0d, "?page error", $0d, $00
 status_request: !byte "R", WIC64_GET_STATUS_MESSAGE, $01, $00, $01
 status_prefix: !pet "?request failed: ", $00
 set_remote_timeout: !byte "R", WIC64_SET_REMOTE_TIMEOUT, $01, $00, $0f  ; 15 seconds
@@ -1119,19 +1233,14 @@ user_input:
 ; To change: Load this PRG to $C000, modify bytes at http_url, save back
 ; Format: Null-terminated string, max 80 bytes
 http_url:
-    !text "http://192.168.1.100/",0
+    !text "http://192.168.1.222/",0
     !fill 59,0  ; Pad to 80 bytes total (21 bytes used + 59 padding)
 
 http_path:
     !fill 16,0 
 
-; Place buffers naturally after code to maximize available space before I/O ($D000)
-; http_request: 128 bytes (header + max 124-byte payload)
-; response_buffer: 512 bytes for search results
 http_request:
     !fill 128,0
 
 response_buffer:
-    !fill 512,0
-
-
+    !fill 512,0  ; 512 bytes response buffer at end of code
