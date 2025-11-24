@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using VDRIVE.Floppy.Impl;
 using VDRIVE.Util;
@@ -164,7 +165,35 @@ namespace VDRIVE.Protocol
                 // SEARCH
                 if (httpListenerRequest.HttpMethod == "POST" && httpListenerRequest.Url.AbsolutePath.Equals("/search", StringComparison.OrdinalIgnoreCase))
                 {
+                    DateTime startTime = DateTime.Now;
+                    this.Logger.LogMessage($"[SEARCH-TIMING] Request received, starting to parse body. ContentLength={httpListenerRequest.ContentLength64}");
+                    
                     byte[] searchFloppyBytes = ParseMultipartDataBytes(httpListenerRequest);
+                    
+                    this.Logger.LogMessage($"[SEARCH-TIMING] Body parsed in {(DateTime.Now - startTime).TotalMilliseconds:F0}ms, received {searchFloppyBytes.Length} bytes");
+                    
+                    // DIAGNOSTIC: Show exactly what we received
+                    if (searchFloppyBytes.Length > 0)
+                    {
+                        // Show hex dump
+                        string hexDump = string.Join(" ", searchFloppyBytes.Select(b => b.ToString("X2")));
+                        this.Logger.LogMessage($"[SEARCH-DEBUG] Hex dump ({searchFloppyBytes.Length} bytes): {hexDump}");
+                        
+                        // Show ASCII representation (for debugging)
+                        string asciiDump = string.Join("", searchFloppyBytes.Select(b => b >= 32 && b < 127 ? (char)b : '.'));
+                        this.Logger.LogMessage($"[SEARCH-DEBUG] ASCII: [{asciiDump}]");
+                        
+                        // Parse and show the expected struct fields
+                        if (searchFloppyBytes.Length >= 6)
+                        {
+                            ushort sessionId = (ushort)(searchFloppyBytes[0] | (searchFloppyBytes[1] << 8));
+                            byte searchTermLength = searchFloppyBytes[2];
+                            string searchTermActual = Encoding.ASCII.GetString(searchFloppyBytes, 3, Math.Min(searchTermLength, searchFloppyBytes.Length - 3));
+                            
+                            this.Logger.LogMessage($"[SEARCH-DEBUG] Parsed: SessionId=0x{sessionId:X4} ({sessionId}), SearchTermLength={searchTermLength}, SearchTerm='{searchTermActual}'");
+                            this.Logger.LogMessage($"[SEARCH-DEBUG] Expected 6 bytes minimum (2+1+3 for 'PRG'), got {searchFloppyBytes.Length} bytes (extra {searchFloppyBytes.Length - 6} bytes)");
+                        }
+                    }
 
                     // Use HttpSearchFloppyRequest for clean parsing
                     HttpSearchFloppyRequest searchRequest;
@@ -175,18 +204,86 @@ namespace VDRIVE.Protocol
                     catch (ArgumentException ex)
                     {
                         this.Logger.LogMessage($"[SEARCH] Invalid request: {ex.Message}");
-                        // Send error response but don't hang the client
                         WriteResponse(httpListenerResponse, "ERROR: Invalid search request", null);
                         return;
                     }
 
                     // Extract clean data from parsed request
-                    string searchTerm = Encoding.ASCII.GetString(searchRequest.SearchTerm, 0, searchRequest.SearchTermLength).TrimEnd();
-                    
+                    string searchTerm = new string(searchRequest.SearchTerm, 0, searchRequest.SearchTermLength).TrimEnd();
+
                     this.Logger.LogMessage($"[SEARCH] TERM={searchTerm} *** [SESSIONID] = {searchRequest.SessionId}");
 
                     Session session = sessionManager.GetOrCreateSession(searchRequest.SessionId);
 
+                    // Check if this is a pagination command (+/- with optional number)
+                    if (searchTerm.StartsWith("+") || searchTerm.StartsWith("-"))
+                    {
+                        HandleSearchPagination(httpListenerResponse, session, searchTerm);
+                        return;
+                    }
+
+                    // Check if this is a mount command (any non-empty term that doesn't start with +/-)
+                    if (!string.IsNullOrEmpty(searchTerm) && session.CachedSearchResults != null && session.CachedSearchResults.Length > 0)
+                    {
+                        // Treat as mount request - forward to mount logic
+                        this.Logger.LogMessage($"[SEARCH] Treating '{searchTerm}' as mount request");
+                        
+                        FloppyIdentifier floppyIdentifier;
+                        ushort fullId;
+                        
+                        if (searchTerm.Length <= 5 && int.TryParse(searchTerm, out int imageIdInt))
+                        {
+                            // Mount by ID
+                            if (imageIdInt < 0 || imageIdInt > 65535)
+                            {
+                                WriteResponse(httpListenerResponse, "\r\nERROR: INVALID FLOPPY ID\0", session);
+                                return;
+                            }
+
+                            fullId = (ushort)imageIdInt;
+                            floppyIdentifier = new FloppyIdentifier
+                            {
+                                IdLo = (byte)(fullId & 0xFF),
+                                IdHi = (byte)(fullId >> 8)
+                            };
+                            
+                            this.Logger.LogMessage($"[SEARCH->MOUNT] Mounting by ID: {imageIdInt} (IdLo={floppyIdentifier.IdLo}, IdHi={floppyIdentifier.IdHi})");
+                        }
+                        else
+                        {
+                            // Find floppy by name
+                            floppyIdentifier = session.FloppyResolver.FindFloppyIdentifierByName(searchTerm);
+                            if (floppyIdentifier.Equals(default(FloppyIdentifier)))
+                            {
+                                WriteResponse(httpListenerResponse, "\r\nERROR: FLOPPY NOT FOUND\0", session);
+                                return;
+                            }
+                        }
+
+                        FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
+                        string fileName = new string(floppyInfo.ImageName).TrimEnd('\0');
+                        
+                        fullId = (ushort)(floppyInfo.IdLo | (floppyInfo.IdHi << 8));
+
+                        string message = $"\r\nFLOPPY INSERTED (ID={fullId} {fileName})";
+
+                        if (fileName.ToLower().EndsWith("prg") ||
+                            session.FloppyResolver.GetType() == typeof(HvscPsidFloppyResolver))
+                        {
+                            message += $"\r\n\r\nLOAD \"*\",8,1";
+                        }
+                        else
+                        {
+                            message += $"\r\n\r\nLOAD \"$\",8";
+                        }
+
+                        string payload = "\r\n" + string.Concat(message) + "\0";
+                        WriteResponse(httpListenerResponse, payload, session);
+                        return;
+                    }
+
+                    // New search - perform the actual search
+                    DateTime searchStart = DateTime.Now;
                     SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
                     searchFloppiesRequest.Operation = 5;
                     searchFloppiesRequest.SearchTerm = searchTerm.ToArray();
@@ -194,19 +291,28 @@ namespace VDRIVE.Protocol
 
                     SearchFloppyResponse searchFloppyResponse = session.FloppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppys);
                     
+                    this.Logger.LogMessage($"[SEARCH-TIMING] Search completed in {(DateTime.Now - searchStart).TotalMilliseconds:F0}ms, found {foundFloppys?.Length ?? 0} results");
+                    
                     if (searchFloppyResponse.ResultCount == 0)
                     {
+                        // Clear cached results 
+                        session.CachedSearchResults = null;
+                        session.LastSearchTerm = null;
+                        session.CurrentSearchPage = 0;
+                        
                         string payload = "\r\n" + string.Concat("NO RESULTS FOUND\r\n") + "\0";
                         WriteResponse(httpListenerResponse, payload, session);
+                        this.Logger.LogMessage($"[SEARCH-TIMING] TOTAL request time: {(DateTime.Now - startTime).TotalMilliseconds:F0}ms");
                     }
                     else
                     {
-                        var results = foundFloppys.Select(ff => $"{ff.IdLo} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
-                        string fromMessage = $"\r\n\r\nWELCOME TO VDRIVE BETA!\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{searchTerm}\"";
-                        string payload = $"{fromMessage}\r\n\r\n" + string.Concat(results) + "\0";
-
-                        // TODO: make sure payload is less than max size for a single page
-                        WriteResponse(httpListenerResponse, payload, session);
+                        // Cache results for pagination
+                        session.CachedSearchResults = foundFloppys;
+                        session.LastSearchTerm = searchTerm;
+                        session.CurrentSearchPage = 0;
+                        
+                        // Display first page
+                        DisplaySearchPage(httpListenerResponse, session, 0, startTime);
                     }
 
                     return;
@@ -242,14 +348,24 @@ namespace VDRIVE.Protocol
                     Session session = sessionManager.GetOrCreateSession(mountRequest.SessionId);
 
                     FloppyIdentifier floppyIdentifier;
-                    if (imageIdOfFilename.Length <= 3 && int.TryParse(imageIdOfFilename, out int imageIdInt))
+                    ushort fullId;
+                    if (imageIdOfFilename.Length <= 5 && int.TryParse(imageIdOfFilename, out int imageIdInt))
                     {
-                        // Mount by ID
+                        // Mount by ID - parse as ushort (0-65535)
+                        if (imageIdInt < 0 || imageIdInt > 65535)
+                        {
+                            WriteResponse(httpListenerResponse, "\r\nERROR: INVALID FLOPPY ID\0", session);
+                            return;
+                        }
+
+                        fullId = (ushort)imageIdInt;
                         floppyIdentifier = new FloppyIdentifier
                         {
-                            IdLo = byte.Parse(imageIdOfFilename),
-                            IdHi = 0
+                            IdLo = (byte)(fullId & 0xFF),
+                            IdHi = (byte)(fullId >> 8)
                         };
+                        
+                        this.Logger.LogMessage($"[Mount] Mounting by ID: {imageIdInt} (IdLo={floppyIdentifier.IdLo}, IdHi={floppyIdentifier.IdHi})");
                     }
                     else
                     {
@@ -264,8 +380,11 @@ namespace VDRIVE.Protocol
 
                     FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
                     string fileName = new string(floppyInfo.ImageName).TrimEnd('\0');
+                    
+                    // Calculate full ID for display
+                    fullId = (ushort)(floppyInfo.IdLo | (floppyInfo.IdHi << 8));
 
-                    string message = $"\r\nFLOPPY INSERTED (ID={floppyInfo.IdLo} {fileName})";
+                    string message = $"\r\nFLOPPY INSERTED (ID={fullId} {fileName})";
 
                     // HACK: returning typical load commands based on type
                     // to save some typing on C64
@@ -325,16 +444,25 @@ namespace VDRIVE.Protocol
 
             dataStart += 4; // Skip past the \r\n\r\n
 
-            // Find the boundary to extract just the payload
-            string boundary = "--" + request.ContentType.Split(new[] { "boundary=" }, StringSplitOptions.None)[1];
-            byte[] boundaryBytes = Encoding.ASCII.GetBytes(boundary);
-            int dataEnd = FindBytes(fullBody, boundaryBytes, dataStart);
-            if (dataEnd < 0)
-                dataEnd = fullBody.Length;
-
-            // Back up over any trailing CRLF before the boundary
-            while (dataEnd > dataStart && (fullBody[dataEnd - 1] == 10 || fullBody[dataEnd - 1] == 13))
-                dataEnd--;
+            // Find the CRLF before the closing boundary (not the boundary itself)
+            // The structure is: [data]\r\n--boundary--
+            // We want to find the \r\n that comes BEFORE the boundary
+            byte[] crlf = new byte[] { 13, 10 };
+            int dataEnd = fullBody.Length;
+            
+            // Search backwards from the end to find the last \r\n before boundary
+            for (int i = fullBody.Length - 1; i >= dataStart + 1; i--)
+            {
+                if (fullBody[i - 1] == 13 && fullBody[i] == 10)
+                {
+                    // Check if this \r\n is followed by "--" (boundary marker)
+                    if (i + 1 < fullBody.Length && fullBody[i + 1] == 45 && i + 2 < fullBody.Length && fullBody[i + 2] == 45)
+                    {
+                        dataEnd = i - 1; // Exclude the \r\n itself
+                        break;
+                    }
+                }
+            }
 
             // Extract the data as pure bytes (NO string conversion)
             int length = dataEnd - dataStart;
@@ -343,6 +471,10 @@ namespace VDRIVE.Protocol
 
             byte[] result = new byte[length];
             Array.Copy(fullBody, dataStart, result, 0, length);
+            
+            // DIAGNOSTIC: Log what we extracted
+            this.Logger.LogMessage($"[PARSE-DEBUG] Extracted {length} bytes from multipart form (fullBody={fullBody.Length}, dataStart={dataStart}, dataEnd={dataEnd})");
+            
             return result;
         }
 
@@ -360,16 +492,48 @@ namespace VDRIVE.Protocol
                     // Read with timeout protection
                     using (var stream = request.InputStream)
                     {
+                        // Set read timeout (30 seconds - more generous for slow connections)
+                        try
+                        {
+                            stream.ReadTimeout = 30000;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // ReadTimeout not supported on this stream, continue without it
+                        }
+                        
                         while (totalRead < buffer.Length)
                         {
                             bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
                             if (bytesRead == 0)
-                                break; // Stream ended prematurely
+                            {
+                                // Stream ended prematurely
+                                this.Logger.LogMessage($"Stream ended prematurely. Expected {buffer.Length} bytes, got {totalRead} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                break;
+                            }
                             totalRead += bytesRead;
                         }
                     }
                     
-                    return totalRead == buffer.Length ? buffer : buffer.Take(totalRead).ToArray();
+                    // Return whatever we managed to read
+                    byte[] result = totalRead == buffer.Length ? buffer : buffer.Take(totalRead).ToArray();
+                    
+                    // DIAGNOSTIC: Log complete hex dump of entire request body
+                    if (result.Length > 0)
+                    {
+                        this.Logger.LogMessage($"[READ-DEBUG] Complete request body hex dump ({result.Length} bytes):");
+                        
+                        // Log in 16-byte rows for readability
+                        for (int i = 0; i < result.Length; i += 16)
+                        {
+                            int rowLength = Math.Min(16, result.Length - i);
+                            string hexPart = string.Join(" ", result.Skip(i).Take(rowLength).Select(b => b.ToString("X2")));
+                            string asciiPart = string.Join("", result.Skip(i).Take(rowLength).Select(b => b >= 32 && b < 127 ? (char)b : '.'));
+                            this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}");
+                        }
+                    }
+                    
+                    return result;
                 }
                 else
                 {
@@ -382,6 +546,16 @@ namespace VDRIVE.Protocol
                         
                         using (var stream = request.InputStream)
                         {
+                            // Set read timeout for fallback path too
+                            try
+                            {
+                                stream.ReadTimeout = 30000;
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                // ReadTimeout not supported on this stream, continue without it
+                            }
+                            
                             while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
                             {
                                 memoryStream.Write(buffer, 0, bytesRead);
@@ -394,9 +568,30 @@ namespace VDRIVE.Protocol
                             }
                         }
                         
-                        return memoryStream.ToArray();
+                        byte[] result = memoryStream.ToArray();
+                        
+                        // DIAGNOSTIC: Log complete hex dump for fallback path too
+                        if (result.Length > 0)
+                        {
+                            this.Logger.LogMessage($"[READ-DEBUG] Complete request body hex dump (no Content-Length, {result.Length} bytes):");
+                            
+                            for (int i = 0; i < result.Length; i += 16)
+                            {
+                                int rowLength = Math.Min(16, result.Length - i);
+                                string hexPart = string.Join(" ", result.Skip(i).Take(rowLength).Select(b => b.ToString("X2")));
+                                string asciiPart = string.Join("", result.Skip(i).Take(rowLength).Select(b => b >= 32 && b < 127 ? (char)b : '.'));
+                                this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}");
+                            }
+                        }
+                        
+                        return result;
                     }
                 }
+            }
+            catch (IOException ex)
+            {
+                this.Logger.LogMessage($"IO error reading request stream: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                return new byte[0];
             }
             catch (Exception ex)
             {
@@ -534,6 +729,110 @@ namespace VDRIVE.Protocol
                     return i;
             }
             return -1;
+        }
+
+        private void HandleSearchPagination(HttpListenerResponse response, Session session, string paginationCommand)
+        {
+            if (session.CachedSearchResults == null || session.CachedSearchResults.Length == 0)
+            {
+                WriteResponse(response, "\r\nERROR: NO SEARCH RESULTS TO PAGINATE\r\nPERFORM A SEARCH FIRST\0", session);
+                return;
+            }
+
+            int pageSize = this.Configuration.SearchPageSize;
+            int totalPages = (int)Math.Ceiling((double)session.CachedSearchResults.Length / pageSize);
+
+            // Parse pagination command: +, -, +N, -N
+            int pageOffset = 1; // Default to 1 page
+            bool isForward = paginationCommand.StartsWith("+");
+            
+            string numericPart = paginationCommand.Substring(1).Trim();
+            if (!string.IsNullOrEmpty(numericPart) && int.TryParse(numericPart, out int parsedOffset))
+            {
+                pageOffset = Math.Abs(parsedOffset);
+            }
+
+            // Calculate new page
+            int newPage = isForward 
+                ? session.CurrentSearchPage + pageOffset 
+                : session.CurrentSearchPage - pageOffset;
+
+            // Clamp to valid range
+            newPage = Math.Max(0, Math.Min(newPage, totalPages - 1));
+
+            this.Logger.LogMessage($"[PAGINATION] Command={paginationCommand}, CurrentPage={session.CurrentSearchPage}, NewPage={newPage}, TotalPages={totalPages}");
+
+            // Display the requested page
+            DisplaySearchPage(response, session, newPage, null);
+        }
+
+        private void DisplaySearchPage(HttpListenerResponse response, Session session, int pageNumber, DateTime? startTime)
+        {
+            DateTime buildStart = DateTime.Now;
+            
+            int pageSize = this.Configuration.SearchPageSize;
+            int totalResults = session.CachedSearchResults.Length;
+            int totalPages = (int)Math.Ceiling((double)totalResults / pageSize);
+
+            // Update current page
+            session.CurrentSearchPage = pageNumber;
+
+            // Calculate page bounds
+            int startIndex = pageNumber * pageSize;
+            int endIndex = Math.Min(startIndex + pageSize, totalResults);
+
+            // Get results for this page
+            var pageResultsList = new List<string>();
+            for (int i = startIndex; i < endIndex; i++)
+            {
+                var ff = session.CachedSearchResults[i];
+                ushort fullId = (ushort)(ff.IdLo | (ff.IdHi << 8));
+                pageResultsList.Add($"{fullId} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
+            }
+
+            // Build message with pagination info
+            string fromMessage = $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
+            string pageInfo = $"\r\nPAGE {pageNumber + 1} OF {totalPages} ({totalResults} RESULTS)";
+            string navInfo = "\r\n(+/- TO PAGE, ID TO MOUNT)";
+            string payload = fromMessage + string.Concat(pageResultsList) + pageInfo + navInfo + "\0";
+
+            // Check payload size and trim if needed
+            const int maxPayloadSize = 512 - 2;
+            int originalCount = pageResultsList.Count;
+            while (Encoding.ASCII.GetByteCount(payload) > maxPayloadSize && pageResultsList.Count > 0)
+            {
+                pageResultsList.RemoveAt(pageResultsList.Count - 1);
+                payload = fromMessage + string.Concat(pageResultsList) + pageInfo + navInfo + "\0";
+            }
+
+            // SEND RESPONSE FIRST - Before any logging!
+            DateTime sendStart = DateTime.Now;
+            WriteResponse(response, payload, session);
+            
+            // Now log everything AFTER response is sent
+            if (startTime.HasValue)
+            {
+                this.Logger.LogMessage($"[SEARCH-TIMING] Response built in {(DateTime.Now - buildStart).TotalMilliseconds:F0}ms");
+            }
+            
+            if (pageResultsList.Count < originalCount)
+            {
+                this.Logger.LogMessage($"[SEARCH] Payload truncated from {originalCount} to {pageResultsList.Count} results to fit within 510 bytes");
+            }
+            
+            if (startTime.HasValue)
+            {
+                this.Logger.LogMessage($"[SEARCH-TIMING] Response sent in {(DateTime.Now - sendStart).TotalMilliseconds:F0}ms");
+                this.Logger.LogMessage($"[SEARCH-TIMING] TOTAL request time: {(DateTime.Now - startTime.Value).TotalMilliseconds:F0}ms");
+            }
+            
+            // Verbose logging of items - after response sent
+            for (int i = startIndex; i < endIndex && (i - startIndex) < pageResultsList.Count; i++)
+            {
+                var ff = session.CachedSearchResults[i];
+                ushort fullId = (ushort)(ff.IdLo | (ff.IdHi << 8));
+                this.Logger.LogMessage($"[DISPLAY] Page={pageNumber}, Index={i}, FullId={fullId}, Name={new string(ff.ImageName).TrimEnd('\0')}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+            }
         }
     }
 }

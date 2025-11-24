@@ -39,10 +39,10 @@ namespace VDRIVE
 
                 Console.WriteLine($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
                 
-                ISessionProvider sessionManager = new SessionProvider(this.Configuration);                                
+                ISessionProvider sessionManager = new SessionProvider(this.Configuration, this.Logger);
                 IProtocolHandler httpProtocolHandler = new HttpClientProtocolHandler(this.Configuration, this.Logger, httpListenerContext);
                 httpProtocolHandler.HandleClient(sessionManager);
             }
-        }
+        }      
     }
 }

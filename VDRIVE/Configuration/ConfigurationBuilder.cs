@@ -24,10 +24,21 @@ namespace VDRIVE.Configuration
                 configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             }
 
-            configuration.ChunkSize = configuration.ChunkSize == 0 ? (ushort)1024 : configuration.ChunkSize;
-            configuration.MaxSearchResults = configuration.MaxSearchResults == 0 ? (ushort)18 : configuration.MaxSearchResults;
+            this.EnsureDefaultValues(configuration);
 
             return configuration;
+        }
+
+        private void EnsureDefaultValues(VDRIVE_Contracts.Interfaces.IConfiguration configuration)
+        {
+            if (string.IsNullOrEmpty(configuration.TempPath))
+            {
+                // use system   default
+                configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            }            
+            configuration.ChunkSize = configuration.ChunkSize == 0 ? (ushort)1024 : configuration.ChunkSize;
+            configuration.MaxSearchResults = configuration.MaxSearchResults == 0 ? (ushort)18 : configuration.MaxSearchResults;
+            configuration.SearchPageSize = configuration.SearchPageSize == 0 ? 15 : configuration.SearchPageSize;            
         }
 
         public bool IsValidConfiguration(VDRIVE_Contracts.Interfaces.IConfiguration configuration)
@@ -217,6 +228,8 @@ namespace VDRIVE.Configuration
             this.Logger.LogMessage($"  ReceiveTimeoutSeconds: {configuration.ReceiveTimeoutSeconds}");
             this.Logger.LogMessage($"  ChunkSize: {configuration.ChunkSize}");
             this.Logger.LogMessage($"  MaxSearchResults: {configuration.MaxSearchResults}");
+            this.Logger.LogMessage($"  SearchPageSize: {configuration.SearchPageSize}");
+            this.Logger.LogMessage($"  SearchIntroMessage: {configuration.SearchIntroMessage}");
 
             // Storage adapter settings
             if (configuration.StorageAdapterSettings != null)

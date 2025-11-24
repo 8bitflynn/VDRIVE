@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace VDRIVE_Contracts.Structures.Http
 {
-    [DebuggerDisplay("SearchTermLength={SearchTermLength}, SearchTerm={new string(SearchTerm)}, MediaTypeLength={MediaTypeLength}, MediaType={MediaType}")]
+    [DebuggerDisplay("SearchTermLength={SearchTermLength}, SearchTerm={new string(SearchTerm)}")]
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public class HttpSearchFloppyRequest
     {
@@ -11,7 +11,7 @@ namespace VDRIVE_Contracts.Structures.Http
         public byte SearchTermLength;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-        public byte[] SearchTerm; // search term padded with 0x00
+        public char[] SearchTerm; // search term padded with 0x00
 
         public static HttpSearchFloppyRequest ParseFromBytes(byte[] data)
         {
@@ -23,7 +23,7 @@ namespace VDRIVE_Contracts.Structures.Http
             var request = new HttpSearchFloppyRequest();
             request.SessionId = sessionId;
             request.SearchTermLength = searchTermLength;
-            request.SearchTerm = new byte[32]; // Initialize full array
+            request.SearchTerm = new char[32]; // Initialize full array
 
             // Copy actual search term data
             if (searchTermLength > 0 && data.Length >= 3 + searchTermLength)

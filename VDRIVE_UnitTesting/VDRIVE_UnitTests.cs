@@ -14,7 +14,7 @@ namespace VDRIVE_UnitTesting
         [TestMethod]
         public void TestSearch_Load()
         {
-            ILogger logger = new VDRIVE.Util.ConsoleLogger();
+            ILogger logger = new VDRIVE.Util.ConsoleLogger(0);
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
@@ -51,7 +51,7 @@ namespace VDRIVE_UnitTesting
         [TestMethod]
         public void TestSearchLoadSaveConcurrent()
         {
-            ILogger logger = new VDRIVE.Util.ConsoleLogger();
+            ILogger logger = new VDRIVE.Util.ConsoleLogger(0);
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();

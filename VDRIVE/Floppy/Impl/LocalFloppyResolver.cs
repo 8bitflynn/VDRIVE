@@ -80,7 +80,8 @@ namespace VDRIVE.Floppy.Impl
                 }
             }
             // out param to return floppy info array
-            foundFloppyInfos = floppyInfos.Take(Configuration.MaxSearchResults).ToArray();
+            //foundFloppyInfos = floppyInfos.Take(Configuration.MaxSearchResults).ToArray();
+            foundFloppyInfos = floppyInfos.ToArray(); // FIXME: cleanup code
 
             SearchFloppyResponse searchFloppyResponse = BuildSearchFloppyResponse(4096, floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04, (byte)foundFloppyInfos.Count());
             Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{searchTerm}' and media type '{mediaTypeCSV}'");

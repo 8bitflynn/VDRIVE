@@ -55,7 +55,7 @@ namespace VDRIVE
                     IFloppyResolver floppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, processRunner);
                     IStorageAdapter storageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, processRunner, this.Configuration, this.Logger);
 
-                    ISessionProvider sessionManager = new SessionProvider(this.Configuration);
+                    ISessionProvider sessionManager = new SessionProvider(this.Configuration, this.Logger);
 
                     string ip = tcpClient.Client.RemoteEndPoint.ToString();
                     this.Logger.LogMessage($"Client connected: {ip}");

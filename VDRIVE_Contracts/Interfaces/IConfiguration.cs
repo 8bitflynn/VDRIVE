@@ -10,6 +10,8 @@ namespace VDRIVE_Contracts.Interfaces
         public int? SessionTimeoutMinutes { get; set; }
         public string ServerType { get; set; }
         public ushort MaxSearchResults { get; set; }
+        public int SearchPageSize { get; set; }
+        public string SearchIntroMessage { get; set; }
         public string TempPath { get; set; }
         public string TempFolder { get; set; }
         public ushort ChunkSize { get; set; }

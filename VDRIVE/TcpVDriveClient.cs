@@ -35,7 +35,7 @@ namespace VDRIVE
 
                 //// instance dependencies
                 ///
-                ISessionProvider sessionManager = new SessionProvider(this.Configuration);
+                ISessionProvider sessionManager = new SessionProvider(this.Configuration, this.Logger);
 
                 IProtocolHandler protocolHandler = new TcpClientProtocolHandler(this.Configuration, this.Logger, tcpClient, networkStream);
                 //IProcessRunner processRunner = new LockingProcessRunner(this.Configuration, this.Logger);

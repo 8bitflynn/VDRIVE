@@ -16,7 +16,7 @@ namespace VDRIVE_Host
         /// <param name="args"></param>
         static void Main(string[] args)
         {
-            ILogger logger = new VDRIVE.Util.ConsoleLogger(VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+            ILogger logger = new VDRIVE.Util.ConsoleLogger();
 
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
