@@ -199,66 +199,6 @@ namespace VDRIVE.Protocol
                         return;
                     }
 
-                    // Check if this is a mount command (any non-empty term that doesn't start with +/-)
-                    if (!string.IsNullOrEmpty(searchTerm) && session.CachedSearchResults != null && session.CachedSearchResults.Length > 0)
-                    {
-                        // Treat as mount request - forward to mount logic
-                        this.Logger.LogMessage($"[SEARCH] Treating '{searchTerm}' as mount request");
-                        
-                        FloppyIdentifier floppyIdentifier;
-                        ushort fullId;
-                        
-                        if (searchTerm.Length <= 5 && int.TryParse(searchTerm, out int imageIdInt))
-                        {
-                            // Mount by ID
-                            if (imageIdInt < 0 || imageIdInt > 65535)
-                            {
-                                WriteResponse(httpListenerResponse, "\r\nERROR: INVALID FLOPPY ID\0", session);
-                                return;
-                            }
-
-                            fullId = (ushort)imageIdInt;
-                            floppyIdentifier = new FloppyIdentifier
-                            {
-                                IdLo = (byte)(fullId & 0xFF),
-                                IdHi = (byte)(fullId >> 8)
-                            };
-                            
-                            this.Logger.LogMessage($"[SEARCH->MOUNT] Mounting by ID: {imageIdInt} (IdLo={floppyIdentifier.IdLo}, IdHi={floppyIdentifier.IdHi})");
-                        }
-                        else
-                        {
-                            // Find floppy by name
-                            floppyIdentifier = session.FloppyResolver.FindFloppyIdentifierByName(searchTerm);
-                            if (floppyIdentifier.Equals(default(FloppyIdentifier)))
-                            {
-                                WriteResponse(httpListenerResponse, "\r\nERROR: FLOPPY NOT FOUND\0", session);
-                                return;
-                            }
-                        }
-
-                        FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
-                        string fileName = new string(floppyInfo.ImageName).TrimEnd('\0');
-                        
-                        fullId = (ushort)(floppyInfo.IdLo | (floppyInfo.IdHi << 8));
-
-                        string message = $"\r\nFLOPPY INSERTED (ID={fullId} {fileName})";
-
-                        if (fileName.ToLower().EndsWith("prg") ||
-                            session.FloppyResolver.GetType() == typeof(HvscPsidFloppyResolver))
-                        {
-                            message += $"\r\n\r\nLOAD \"*\",8,1";
-                        }
-                        else
-                        {
-                            message += $"\r\n\r\nLOAD \"$\",8";
-                        }
-
-                        string payload = "\r\n" + string.Concat(message) + "\0";
-                        WriteResponse(httpListenerResponse, payload, session);
-                        return;
-                    }
-
                     // New search - perform the actual search
                     DateTime searchStart = DateTime.Now;
                     SearchFloppiesRequest searchFloppiesRequest = new SearchFloppiesRequest();
