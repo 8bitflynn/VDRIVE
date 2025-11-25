@@ -502,13 +502,13 @@ do_page_request:
 page_fail:
     ; Cleanup WiC64 on failure
     jsr cleanup_wic64
-    ; Print error and return to page loop
+    ; Print error and exit to BASIC
     lda #<page_error_msg
     sta temp_ptr_lo
     lda #>page_error_msg
     sta temp_ptr_hi
     jsr print_from_ptr
-    jmp page_loop
+    rts
 
 exit_page_loop:
     rts  
@@ -931,6 +931,10 @@ reboot_wic64:
     bne .inner_loop
     dex
     bne .outer_loop
+
+    jsr cleanup_wic64
+    jsr init_vars
+
     rts
 
 ; -----------------------------------
@@ -944,6 +948,15 @@ reboot_wic64:
 ;          Y = high byte of response_buffer
 ; -----------------------------------
 prepend_session_to_data:
+    ; Clear entire 512-byte response_buffer to prevent contamination
+    lda #0
+    tax
+.clear_buffer:
+    sta response_buffer,x
+    sta response_buffer+256,x
+    inx
+    bne .clear_buffer
+    
     ; Put session ID first (2 bytes)
     lda session_id
     sta response_buffer
@@ -1029,15 +1042,7 @@ send_http_post:
     jmp .post_fail
 .post_ack_done:
     
-    ; Clear http_request buffer to prevent URL garbage in POST_DATA header
-    ldx #0
-    lda #0
-.clear_http_request:
-    sta http_request,x
-    inx
-    bpl .clear_http_request
-    
-    ; Prepare POST_DATA request header
+    ; Prepare POST_DATA request header (buffer already cleared in copy_url_to_request)
     lda #"R"
     sta http_request
     lda #WIC64_HTTP_POST_DATA
@@ -1125,6 +1130,14 @@ prefix_done:
     rts
 
 copy_url_to_request:
+    ; Clear http_request buffer (128 bytes)
+    lda #0
+    ldx #0
+.clear_request:
+    sta http_request,x
+    inx
+    bpl .clear_request
+    
     ; prepare header bytes for POST_URL request
     lda #"R"
     sta http_request
@@ -1163,12 +1176,9 @@ copy_path_safe:
 copy_done:
     ; X now holds total payload length (base + path)
     ; store payload length (little endian) into header at offsets 2/3
-    stx payload_len_lo
+    ; Don't use payload_len_lo here - that's for POST_DATA size!
+    stx http_request+2    ; Store URL length directly in request
     lda #0
-    sta payload_len_hi
-    lda payload_len_lo
-    sta http_request+2
-    lda payload_len_hi
     sta http_request+3   
     rts
 
