@@ -408,65 +408,83 @@ namespace VDRIVE.Protocol
                 {
                     byte[] buffer = new byte[request.ContentLength64];
                     int totalRead = 0;
-                    int bytesRead;
-                    int maxAttempts = 10; // Maximum read attempts before giving up
+                    int maxAttempts = 5; // Reduced attempts for C64 (small payloads should arrive quickly)
                     int attemptCount = 0;
+                    int consecutiveZeroReads = 0;
                     
-                    // Read with timeout protection
+                    // Read with aggressive timeout for small C64 payloads
                     using (var stream = request.InputStream)
                     {
-                        // Set read timeout (1 second per attempt = max 10 seconds total)
-                        try
-                        {
-                            stream.ReadTimeout = 1000;
-                        }
-                        catch (InvalidOperationException)
-                        {
-                            // ReadTimeout not supported on this stream, continue without it
-                        }
-                        
                         while (totalRead < buffer.Length && attemptCount < maxAttempts)
                         {
                             attemptCount++;
                             
                             try
                             {
-                                bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                                // Use async read with cancellation token for proper timeout
+                                var cts = new System.Threading.CancellationTokenSource(500); // 500ms timeout per read (C64 is slow)
+                                var readTask = stream.ReadAsync(buffer, totalRead, buffer.Length - totalRead, cts.Token);
+                                
+                                int bytesRead = 0;
+                                try
+                                {
+                                    bytesRead = readTask.Result; // Will throw if cancelled
+                                }
+                                catch (AggregateException ex) when (ex.InnerException is TaskCanceledException || ex.InnerException is OperationCanceledException)
+                                {
+                                    this.Logger.LogMessage($"Read timeout on attempt {attemptCount}/{maxAttempts} after 500ms. Bytes so far: {totalRead}/{buffer.Length}", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                    
+                                    // If we got some data and hit timeout, might be complete (C64 disconnect pattern)
+                                    if (totalRead > 0 && attemptCount >= 2)
+                                    {
+                                        this.Logger.LogMessage($"Got {totalRead} bytes before timeout - treating as complete", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                        break;
+                                    }
+                                    
+                                    if (attemptCount >= maxAttempts)
+                                    {
+                                        this.Logger.LogMessage($"Max attempts reached. Giving up.", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                                        break;
+                                    }
+                                    continue;
+                                }
                                 
                                 if (bytesRead == 0)
                                 {
-                                    // No data available yet - wait briefly and retry
-                                    if (attemptCount < maxAttempts)
+                                    consecutiveZeroReads++;
+                                    this.Logger.LogMessage($"Zero bytes read (consecutive: {consecutiveZeroReads}). Total so far: {totalRead}/{buffer.Length}", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                    
+                                    // If we get 2 consecutive zero reads, stream is likely done (even if ContentLength says otherwise)
+                                    if (consecutiveZeroReads >= 2)
                                     {
-                                        System.Threading.Thread.Sleep(100); // Wait 100ms before retry
-                                        continue;
-                                    }
-                                    else
-                                    {
-                                        // Stream ended prematurely after max attempts
-                                        this.Logger.LogMessage($"Stream ended after {attemptCount} attempts. Expected {buffer.Length} bytes, got {totalRead} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                        this.Logger.LogMessage($"Stream appears closed after {consecutiveZeroReads} zero reads. Treating as complete.", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                                         break;
                                     }
+                                    
+                                    System.Threading.Thread.Sleep(50); // Brief wait for slow C64 connection
+                                    continue;
                                 }
                                 
+                                consecutiveZeroReads = 0; // Reset counter on successful read
                                 totalRead += bytesRead;
-                            }
-                            catch (System.IO.IOException ioEx) when (ioEx.Message.Contains("timeout"))
-                            {
-                                // Read timeout - retry
-                                this.Logger.LogMessage($"Read timeout on attempt {attemptCount}/{maxAttempts}. Bytes read so far: {totalRead}/{buffer.Length}", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                                 
-                                if (attemptCount >= maxAttempts)
-                                {
-                                    this.Logger.LogMessage($"Max attempts reached. Giving up.", VDRIVE_Contracts.Enums.LogSeverity.Error);
-                                    break;
-                                }
+                                this.Logger.LogMessage($"Read {bytesRead} bytes (total: {totalRead}/{buffer.Length})", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+                            }
+                            catch (Exception ex) when (!(ex is AggregateException))
+                            {
+                                this.Logger.LogMessage($"Unexpected error reading stream: {ex.GetType().Name} - {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                                break;
                             }
                         }
                     }
                     
                     // Return whatever we managed to read
                     byte[] result = totalRead == buffer.Length ? buffer : buffer.Take(totalRead).ToArray();
+                    
+                    if (totalRead > 0 && totalRead < buffer.Length)
+                    {
+                        this.Logger.LogMessage($"Incomplete read: Expected {buffer.Length} bytes, got {totalRead} bytes. Proceeding anyway.", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                    }
                     
                     // Log complete hex dump at verbose level
                     if (result.Length > 0)
@@ -490,32 +508,58 @@ namespace VDRIVE.Protocol
                 }
                 else
                 {
-                    // Fallback: read until stream ends (with buffer limit to prevent memory issues)
+                    // Fallback: read until stream ends
                     using (var memoryStream = new MemoryStream())
                     {
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
-                        int maxSize = 10 * 1024 * 1024; // 10MB limit
+                        byte[] buffer = new byte[1024]; // Smaller buffer for C64
+                        int maxSize = 100 * 1024; // 100KB limit (way more than C64 needs)
+                        int maxReadAttempts = 10;
+                        int readAttempts = 0;
+                        int consecutiveZeroReads = 0;
                         
                         using (var stream = request.InputStream)
                         {
-                            // Set read timeout for fallback path too
-                            try
+                            while (readAttempts < maxReadAttempts && consecutiveZeroReads < 2)
                             {
-                                stream.ReadTimeout = 1000;
-                            }
-                            catch (InvalidOperationException)
-                            {
-                                // ReadTimeout not supported on this stream, continue without it
-                            }
-                            
-                            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
-                            {
-                                memoryStream.Write(buffer, 0, bytesRead);
+                                readAttempts++;
                                 
-                                if (memoryStream.Length > maxSize)
+                                try
                                 {
-                                    this.Logger.LogMessage($"Request body exceeds maximum size of {maxSize} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                    var cts = new System.Threading.CancellationTokenSource(500);
+                                    var readTask = stream.ReadAsync(buffer, 0, buffer.Length, cts.Token);
+                                    
+                                    int bytesRead = 0;
+                                    try
+                                    {
+                                        bytesRead = readTask.Result;
+                                    }
+                                    catch (AggregateException ex) when (ex.InnerException is TaskCanceledException || ex.InnerException is OperationCanceledException)
+                                    {
+                                        this.Logger.LogMessage($"Fallback read timeout after {readAttempts} attempts. Stream likely complete.", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                        break;
+                                    }
+                                    
+                                    if (bytesRead == 0)
+                                    {
+                                        consecutiveZeroReads++;
+                                        if (consecutiveZeroReads >= 2)
+                                            break;
+                                        System.Threading.Thread.Sleep(50);
+                                        continue;
+                                    }
+                                    
+                                    consecutiveZeroReads = 0;
+                                    memoryStream.Write(buffer, 0, bytesRead);
+                                    
+                                    if (memoryStream.Length > maxSize)
+                                    {
+                                        this.Logger.LogMessage($"Request body exceeds maximum size of {maxSize} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                        break;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    this.Logger.LogMessage($"Error in fallback read: {ex.GetType().Name} - {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
                                     break;
                                 }
                             }
@@ -523,18 +567,9 @@ namespace VDRIVE.Protocol
                         
                         byte[] result = memoryStream.ToArray();
                         
-                        // Log complete hex dump at verbose level
                         if (result.Length > 0)
                         {
-                            this.Logger.LogMessage($"Complete request body hex dump (no Content-Length, {result.Length} bytes):", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                            
-                            for (int i = 0; i < result.Length; i += 16)
-                            {
-                                int rowLength = Math.Min(16, result.Length - i);
-                                string hexPart = string.Join(" ", result.Skip(i).Take(rowLength).Select(b => b.ToString("X2")));
-                                string asciiPart = string.Join("", result.Skip(i).Take(rowLength).Select(b => b >= 32 && b < 127 ? (char)b : '.'));
-                                this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                            }
+                            this.Logger.LogMessage($"Fallback read complete: {result.Length} bytes", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                         }
                         
                         return result;
