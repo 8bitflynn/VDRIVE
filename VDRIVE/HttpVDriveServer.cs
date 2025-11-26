@@ -30,18 +30,37 @@ namespace VDRIVE
               
             while (true)
             {
-                HttpListenerContext httpListenerContext = httpListener.GetContext(); // blocking
-                HttpListenerRequest httpListenerRequest = httpListenerContext.Request;
-                HttpListenerResponse httpListenerResponse = httpListenerContext.Response;
+                try
+                {
+                    HttpListenerContext httpListenerContext = httpListener.GetContext(); // blocking
+                    
+                    // Handle each request on a separate thread to avoid blocking
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        try
+                        {
+                            HttpListenerRequest httpListenerRequest = httpListenerContext.Request;
+                            HttpListenerResponse httpListenerResponse = httpListenerContext.Response;
 
-                httpListenerResponse.SendChunked = false;
-                httpListenerResponse.KeepAlive = true;
+                            httpListenerResponse.SendChunked = false;
+                            httpListenerResponse.KeepAlive = true;
 
-                Console.WriteLine($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
-                
-                ISessionProvider sessionManager = new SessionProvider(this.Configuration, this.Logger);
-                IProtocolHandler httpProtocolHandler = new HttpClientProtocolHandler(this.Configuration, this.Logger, httpListenerContext);
-                httpProtocolHandler.HandleClient(sessionManager);
+                            this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+                            
+                            ISessionProvider sessionProvider = new SessionProvider(this.Configuration, this.Logger);
+                            IProtocolHandler httpProtocolHandler = new HttpClientProtocolHandler(this.Configuration, this.Logger, httpListenerContext);
+                            httpProtocolHandler.HandleClient(sessionProvider);
+                        }
+                        catch (Exception ex)
+                        {
+                            this.Logger.LogMessage($"Error handling request: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    this.Logger.LogMessage($"Error accepting connection: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                }
             }
         }      
     }
