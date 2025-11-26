@@ -43,9 +43,7 @@ namespace VDRIVE
                             HttpListenerResponse httpListenerResponse = httpListenerContext.Response;
 
                             httpListenerResponse.SendChunked = false;
-                            httpListenerResponse.KeepAlive = true;
-
-                            this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+                            httpListenerResponse.KeepAlive = true;                           
                             
                             ISessionProvider sessionProvider = new SessionProvider(this.Configuration, this.Logger);
                             IProtocolHandler httpProtocolHandler = new HttpClientProtocolHandler(this.Configuration, this.Logger, httpListenerContext);
