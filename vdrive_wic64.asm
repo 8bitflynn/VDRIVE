@@ -2,7 +2,7 @@
 
 ; ZP pointers and variables
 ; set by KERNAL SETNAM before ILOAD/ISAVE
-; or by external code needing to LOAD/SAVE ram
+; OR by external code needing to ILOAD/ISAVE ram using direct jmps
 fnlen          = $b7
 lfn            = $b8
 filename       = $bb
@@ -12,26 +12,43 @@ load_mode      = $a7
 start_addr_lo  = $c1
 start_addr_hi  = $c2
 
-; read/write indirect pointers
+; read/write indirect pointers in ZP
 temp_ptr_lo    = $fd
 temp_ptr_hi    = $fe
 dest_ptr_lo    = $ae
 dest_ptr_hi    = $af
 
-; jmp table for enable/disable/search/mount
+; interacive mode jmps
 jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
 jmp vdrive_mount_floppy
+
+; direct mode jmps (programmatic)
 jmp vdrive_search_direct
 jmp vdrive_mount_direct
+jmp vdrive_iload_direct
+jmp vdrive_isave_direct
+
+; reboot WiC64 to original state
 jmp reboot_wic64
 
-* = $c015
+; programmatic interface pointers
 api_user_input_ptr:
     !word user_input          ; $C015: Pointer to 64-byte input buffer
 api_user_input_len_ptr:
     !word user_input_length   ; $C017: Pointer to length byte
+api_http_url_ptr:
+    !word http_url            ; $C019: Pointer to 80-byte URL buffer
+api_response_buffer_ptr:
+    !word response_buffer     ; $C01B: Pointer to 512-byte response buffer
+api_vdrive_devnum_ptr:
+    !word vdrive_devnum       ; $C01D: Pointer to device number byte
+api_vdrive_retcode_ptr:
+    !word vdrive_retcode      ; $C01F: Pointer to return code byte
+
+wic64_build_report = 1
+wic64_optimize_for_size = 1 ; optimize for size over speed
 
 !src "wic64.h"
 !src "wic64.asm"
@@ -39,6 +56,13 @@ api_user_input_len_ptr:
 
 enable_vdrive:   
 
+    +wic64_detect
+    bcc .wic64_found
+    
+    +print wic64_not_found_msg
+    rts
+
+.wic64_found:
     lda #$08
     sta vdrive_devnum    
     
@@ -51,9 +75,9 @@ enable_vdrive:
     lda $0331
     sta org_iload_hi
 
-    lda #<iload_handler
+    lda #<vdrive_iload_direct
     sta $0330
-    lda #>iload_handler
+    lda #>vdrive_iload_direct
     sta $0331
 
     lda $0332
@@ -61,9 +85,9 @@ enable_vdrive:
     lda $0333
     sta org_isave_hi
 
-    lda #<isave_handler
+    lda #<vdrive_isave_direct
     sta $0332
-    lda #>isave_handler
+    lda #>vdrive_isave_direct
     sta $0333
 
     cli
@@ -132,7 +156,7 @@ cleanup_basic_pointers:
 
     rts
 
-iload_handler:   
+vdrive_iload_direct:
 
     sta temp_workspace1
     stx temp_workspace2
@@ -652,7 +676,7 @@ mount_floppy_exit:
 mount_floppy_exit_no_cleanup:
     rts
 
-isave_handler:
+vdrive_isave_direct:
     sta temp_workspace1
     stx temp_workspace2
     sty temp_workspace3
@@ -1189,6 +1213,7 @@ payload_len_hi: !byte 0
 session_id: !byte 0, 0  ; 16-bit session ID from server
 
 timeout_error_message: !pet "?timeout error", $00
+wic64_not_found_msg: !pet "?wic64 not detected", $0d, $00
 page_error_msg: !pet $0d, "?page error", $0d, $00
 status_request: !byte "R", WIC64_GET_STATUS_MESSAGE, $01, $00, $01
 status_prefix: !pet "?request failed: ", $00
