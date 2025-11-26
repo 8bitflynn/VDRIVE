@@ -322,6 +322,7 @@ namespace VDRIVE.Protocol
 
         private byte[] ParseMultipartDataBytes(HttpListenerRequest request)
         {
+            // For non-multipart, just read the stream directly
             if (request.ContentType?.Contains("multipart/form-data") != true)
             {
                 return ReadRequestStream(request);
@@ -332,48 +333,48 @@ namespace VDRIVE.Protocol
             if (fullBody.Length == 0)
                 return new byte[0];
 
-            byte[] headerPattern = Encoding.ASCII.GetBytes("Content-Disposition: form-data; name=\"data\"");
-            int headerStart = FindBytes(fullBody, headerPattern);
-
-            if (headerStart < 0)
-                return new byte[0];
-
-            byte[] crlfcrlf = new byte[] { 13, 10, 13, 10 };
-            int dataStart = FindBytes(fullBody, crlfcrlf, headerStart);
-            if (dataStart < 0)
-                return new byte[0];
-
-            dataStart += 4;
-
-            int dataEnd = fullBody.Length;
+            // Convert to string for easier parsing (it's all ASCII/UTF-8 anyway)
+            string bodyText = Encoding.ASCII.GetString(fullBody);
             
-            for (int i = fullBody.Length - 1; i >= dataStart + 1; i--)
-            {
-                if (fullBody[i - 1] == 13 && fullBody[i] == 10)
-                {
-                    if (i + 1 < fullBody.Length && fullBody[i + 1] == 45 && i + 2 < fullBody.Length && fullBody[i + 2] == 45)
-                    {
-                        dataEnd = i - 1;
-                        break;
-                    }
-                }
-            }
-
-            int length = dataEnd - dataStart;
-            if (length <= 0)
+            // Find the data field - format is:
+            // Content-Disposition: form-data; name="data"
+            // \r\n\r\n
+            // <actual data bytes>
+            // \r\n--boundary--
+            
+            int dataHeaderIndex = bodyText.IndexOf("Content-Disposition: form-data; name=\"data\"", StringComparison.OrdinalIgnoreCase);
+            if (dataHeaderIndex < 0)
                 return new byte[0];
-
-            byte[] result = new byte[length];
-            Array.Copy(fullBody, dataStart, result, 0, length);
+            
+            // Find the \r\n\r\n after the Content-Disposition line
+            int dataStartIndex = bodyText.IndexOf("\r\n\r\n", dataHeaderIndex);
+            if (dataStartIndex < 0)
+                return new byte[0];
+            
+            dataStartIndex += 4; // Skip past the \r\n\r\n
+            
+            // Find the next boundary marker (starts with \r\n--)
+            int dataEndIndex = bodyText.IndexOf("\r\n--", dataStartIndex);
+            if (dataEndIndex < 0)
+                dataEndIndex = fullBody.Length; // No trailing boundary, use end of body
+            
+            // Extract the data bytes
+            int dataLength = dataEndIndex - dataStartIndex;
+            if (dataLength <= 0)
+                return new byte[0];
+            
+            byte[] result = new byte[dataLength];
+            Array.Copy(fullBody, dataStartIndex, result, 0, dataLength);
             
             return result;
         }
 
         private byte[] ReadRequestStream(HttpListenerRequest request)
         {
+            DateTime readStart = DateTime.Now;
+            
             try
             {
-                // Validate payload size for C64 - reject anything unreasonably large
                 if (request.ContentLength64 > MAX_EXPECTED_PAYLOAD_SIZE)
                 {
                     this.Logger.LogMessage($"Content-Length {request.ContentLength64} exceeds max {MAX_EXPECTED_PAYLOAD_SIZE}, rejecting", VDRIVE_Contracts.Enums.LogSeverity.Warning);
@@ -382,94 +383,74 @@ namespace VDRIVE.Protocol
 
                 if (request.ContentLength64 > 0)
                 {
+                    this.Logger.LogMessage($"[READ-START] ContentLength={request.ContentLength64}, HasEntityBody={request.HasEntityBody}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+                    
                     byte[] buffer = new byte[request.ContentLength64];
                     int totalRead = 0;
-                    
+                    int readAttempts = 0;
+
                     using (var stream = request.InputStream)
                     {
-                        // Use synchronous Read() - HttpListener already buffered the request
+                        // Simple synchronous read - HttpListener has already buffered this
                         while (totalRead < buffer.Length)
                         {
+                            readAttempts++;
+                            DateTime readIterationStart = DateTime.Now;
+                            
                             int bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                            
+                            double readMs = (DateTime.Now - readIterationStart).TotalMilliseconds;
                             
                             if (bytesRead == 0)
                             {
-                                // Stream ended prematurely
-                                this.Logger.LogMessage($"Stream ended after {totalRead}/{buffer.Length} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                this.Logger.LogMessage($"[READ-ZERO] Attempt #{readAttempts}: Stream returned 0 bytes at {totalRead}/{buffer.Length} after {readMs:F1}ms", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                                 break;
                             }
                             
                             totalRead += bytesRead;
-                            this.Logger.LogMessage($"Read {bytesRead} bytes (total: {totalRead}/{buffer.Length})", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+                            
+                            if (readMs > 100 || bytesRead < 1024)
+                            {
+                                this.Logger.LogMessage($"[READ] Attempt #{readAttempts}: {bytesRead} bytes in {readMs:F1}ms (total: {totalRead}/{buffer.Length})", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+                            }
                         }
                     }
+
+                    double totalMs = (DateTime.Now - readStart).TotalMilliseconds;
                     
-                    byte[] result = totalRead == buffer.Length ? buffer : buffer.Take(totalRead).ToArray();
-                    
-                    if (totalRead > 0 && totalRead < buffer.Length)
+                    if (totalRead < buffer.Length)
                     {
-                        this.Logger.LogMessage($"Incomplete read: Expected {buffer.Length} bytes, got {totalRead} bytes.", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        this.Logger.LogMessage($"[READ-INCOMPLETE] Expected {buffer.Length}, got {totalRead} in {totalMs:F1}ms after {readAttempts} attempts. C64 may not have sent full body.", VDRIVE_Contracts.Enums.LogSeverity.Error);
                     }
-                    else if (totalRead == 0)
+                    else
                     {
-                        this.Logger.LogMessage($"No data read. Content-Length was {buffer.Length}. Client may have disconnected.", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                        this.Logger.LogMessage($"[READ-COMPLETE] Read {totalRead} bytes in {totalMs:F1}ms ({readAttempts} attempts, {(totalRead / totalMs):F1} KB/s)", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                     }
-                    
-                    // Hex dump at verbose level
-                    if (result.Length > 0 && result.Length <= 256)
-                    {
-                        this.Logger.LogMessage($"Request body ({result.Length} bytes):", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                        
-                        for (int i = 0; i < result.Length; i += 16)
-                        {
-                            int rowLength = Math.Min(16, result.Length - i);
-                            string hexPart = string.Join(" ", result.Skip(i).Take(rowLength).Select(b => b.ToString("X2")));
-                            string asciiPart = string.Join("", result.Skip(i).Take(rowLength).Select(b => b >= 32 && b < 127 ? (char)b : '.'));
-                            this.Logger.LogMessage($"  {i:X4}: {hexPart,-47} | {asciiPart}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                        }
-                    }
-                    
-                    return result;
+
+                    return totalRead > 0 ? buffer.Take(totalRead).ToArray() : new byte[0];
                 }
                 else
                 {
-                    // No Content-Length - read until stream ends
-                    using (var memoryStream = new MemoryStream())
+                    // No Content-Length
+                    this.Logger.LogMessage($"[READ-NO-LENGTH] No Content-Length header, using CopyTo", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+                    
+                    using (var ms = new MemoryStream())
                     using (var stream = request.InputStream)
                     {
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
+                        stream.CopyTo(ms);
+                        byte[] result = ms.ToArray();
                         
-                        while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
-                        {
-                            memoryStream.Write(buffer, 0, bytesRead);
-                            
-                            if (memoryStream.Length > MAX_EXPECTED_PAYLOAD_SIZE)
-                            {
-                                this.Logger.LogMessage($"Stream exceeds max size {MAX_EXPECTED_PAYLOAD_SIZE}", VDRIVE_Contracts.Enums.LogSeverity.Warning);
-                                break;
-                            }
-                        }
-                        
-                        byte[] result = memoryStream.ToArray();
-                        
-                        if (result.Length > 0)
-                        {
-                            this.Logger.LogMessage($"Read {result.Length} bytes (no Content-Length)", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                        }
+                        double totalMs = (DateTime.Now - readStart).TotalMilliseconds;
+                        this.Logger.LogMessage($"[READ-COMPLETE] Read {result.Length} bytes in {totalMs:F1}ms (no Content-Length)", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                         
                         return result;
                     }
                 }
             }
-            catch (IOException ex)
-            {
-                this.Logger.LogMessage($"IO error reading: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
-                return new byte[0];
-            }
             catch (Exception ex)
             {
-                this.Logger.LogMessage($"Error reading: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                double totalMs = (DateTime.Now - readStart).TotalMilliseconds;
+                this.Logger.LogMessage($"[READ-ERROR] After {totalMs:F1}ms: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
                 return new byte[0];
             }
         }

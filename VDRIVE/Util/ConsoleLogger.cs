@@ -5,7 +5,7 @@ namespace VDRIVE.Util
 {
     public class ConsoleLogger : ILogger
     {
-        public ConsoleLogger() : this(LogSeverity.Info)
+        public ConsoleLogger() : this(LogSeverity.Verbose)
         {            
         }
 
