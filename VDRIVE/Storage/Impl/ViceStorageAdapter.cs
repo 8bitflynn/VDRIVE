@@ -177,7 +177,13 @@ namespace VDRIVE.Storage.Impl
                 Directory.CreateDirectory(fullPath);          
 
             string safeName = requestedFileName.ToLowerInvariant();
-            string outPrgPath = Path.Combine(fullPath, safeName.Replace(@"/", "_"));
+            
+            // Sanitize filename to ensure it's valid for filesystem
+            string sanitizedFileName = string.Join("_", safeName.Split(Path.GetInvalidFileNameChars()));
+            if (string.IsNullOrWhiteSpace(sanitizedFileName))
+                sanitizedFileName = "unnamed_file";
+            
+            string outPrgPath = Path.Combine(fullPath, sanitizedFileName);
             if (File.Exists(outPrgPath))
                 File.Delete(outPrgPath);
 

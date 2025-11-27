@@ -38,50 +38,57 @@ namespace VDRIVE.Floppy.Impl
             // clear last search results
             ClearSearchResults();
 
-            ushort searchResultIndexId = 1; // sequence used to select floppy on C64 side 
-            List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
-            foreach (string searchPath in Configuration.FloppyResolverSettings.Local.SearchPaths)
+
+            List<string> allResults = new List<string>();
+            foreach (string searchPath in Configuration.FloppyResolverSettings.Local.SearchPaths.Distinct()) // only search each folder once
             {
                 IEnumerable<string> searchResults = TraverseFolder(searchPath, searchTerm, Configuration.FloppyResolverSettings.Local.MediaExtensionsAllowed, Configuration.FloppyResolverSettings.Local.EnableRecursiveSearch);
                 if (searchResults != null)
                 {
-                    foreach (string searchResult in searchResults)
-                    {
-                        // info returned to C64
-                        FloppyInfo floppyInfo = new FloppyInfo();
-                        floppyInfo.IdLo = (byte)searchResultIndexId;
-                        floppyInfo.IdHi = (byte)(searchResultIndexId >> 8);
-
-                        string imageName = Path.GetFileName(searchResult);
-                        imageName = imageName.Length > 64 ? imageName.Substring(0, 64) : imageName; // truncate if needed
-
-                        // TODO: map to PETSCII
-                        // imageName shown to user but only sequential id used to select
-                        // so show the best case description
-                        imageName = imageName.Replace('_', '-'); // shows a back arrow on C64
-
-                        floppyInfo.ImageNameLength = (byte)imageName.Length;
-                        floppyInfo.ImageName = new char[64];
-                        imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
-
-                        // info stored in resolver with longs paths
-                        FloppyPointer floppyPointer = new FloppyPointer();
-                        floppyPointer.Id = searchResultIndexId;
-                        floppyPointer.ImagePath = searchResult;
-
-                        floppyInfos.Add(floppyInfo);
-
-                        // results stored in resolver for lookup if "inserted"
-                        FloppyInfos.Add(floppyInfo);
-                        FloppyPointers.Add(floppyPointer);
-
-                        searchResultIndexId++;
-                    }
+                    allResults.AddRange(searchResults);
                 }
             }
-            // out param to return floppy info array
-            //foundFloppyInfos = floppyInfos.Take(Configuration.MaxSearchResults).ToArray();
-            foundFloppyInfos = floppyInfos.ToArray(); // FIXME: cleanup code
+
+            // order by name to normalize results
+            allResults = allResults.OrderBy(ar => Path.GetFileName(ar)).ToList();
+
+            ushort searchResultIndexId = 1; // sequence used to select floppy on C64 side             
+            List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
+
+            foreach (string searchResult in allResults)
+            {
+                // info returned to C64
+                FloppyInfo floppyInfo = new FloppyInfo();
+                floppyInfo.IdLo = (byte)searchResultIndexId;
+                floppyInfo.IdHi = (byte)(searchResultIndexId >> 8);
+
+                string imageName = Path.GetFileName(searchResult);
+                imageName = imageName.Length > 64 ? imageName.Substring(0, 64) : imageName; // truncate if needed
+
+                // TODO: map to PETSCII
+                // imageName shown to user but only sequential id used to select
+                // so show the best case description
+                imageName = imageName.Replace('_', '-'); // shows a back arrow on C64
+
+                floppyInfo.ImageNameLength = (byte)imageName.Length;
+                floppyInfo.ImageName = new char[64];
+                imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
+
+                // info stored in resolver with longs paths
+                FloppyPointer floppyPointer = new FloppyPointer();
+                floppyPointer.Id = searchResultIndexId;
+                floppyPointer.ImagePath = searchResult;
+
+                floppyInfos.Add(floppyInfo);
+
+                // results stored in resolver for lookup if "inserted"
+                FloppyInfos.Add(floppyInfo);
+                FloppyPointers.Add(floppyPointer);
+
+                searchResultIndexId++;
+            }
+
+            foundFloppyInfos = floppyInfos.ToArray();
 
             SearchFloppyResponse searchFloppyResponse = BuildSearchFloppyResponse(4096, floppyInfos.Count() > 0 ? (byte)0xff : (byte)0x04, (byte)foundFloppyInfos.Count());
             Logger.LogMessage($"Found {foundFloppyInfos.Length} floppy images matching search term '{searchTerm}' and media type '{mediaTypeCSV}'");

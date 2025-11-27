@@ -8,11 +8,11 @@ namespace VDRIVE_Contracts.Structures.Http
     public struct HttpSearchResponse
     {
         public ushort SessionId;           // Session ID (lo/hi bytes)
-        public byte ResultCount;           // Number of results found (0 if none)
-                                          // Text payload follows this header
+        public ushort ResultCount;         // Total result count (lo/hi bytes)
+                                           // Text payload follows this header
 
         // Helper method to create response with session
-        public static HttpSearchResponse Create(ushort sessionId, byte resultCount)
+        public static HttpSearchResponse Create(ushort sessionId, ushort resultCount)
         {
             return new HttpSearchResponse
             {

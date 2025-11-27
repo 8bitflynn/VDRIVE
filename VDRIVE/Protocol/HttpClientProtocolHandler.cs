@@ -11,10 +11,7 @@ namespace VDRIVE.Protocol
 {
     public class HttpClientProtocolHandler : IProtocolHandler
     {
-        private const int MAX_EXPECTED_PAYLOAD_SIZE = 64 * 1024; 
-        private const int READ_TIMEOUT_MS = 3000; 
-        private const int MAX_READ_ATTEMPTS = 5;
-        private const int RESPONSE_WRITE_TIMEOUT_MS = 5000; // 5 seconds to write response
+        private const int MAX_EXPECTED_PAYLOAD_SIZE = 64 * 1024;       
         
         public HttpClientProtocolHandler(IConfiguration configuration, ILogger logger, HttpListenerContext httpListenerContext)
         {
@@ -35,11 +32,21 @@ namespace VDRIVE.Protocol
 
                 httpListenerResponse.SendChunked = false;
                 httpListenerResponse.KeepAlive = true;
+                
+                string apiKey, basePath;                
+                this.ExtractUrlParts(httpListenerRequest, out apiKey, out basePath);
 
-                this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url} APIKEY={apiKey}");
+                }
+                else
+                {
+                    this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+                }
 
                 // LOAD
-                if (httpListenerRequest.HttpMethod == "POST" && httpListenerRequest.Url.AbsolutePath.Equals("/load", StringComparison.OrdinalIgnoreCase))
+                if (httpListenerRequest.HttpMethod == "POST" && basePath.Equals("/load", StringComparison.OrdinalIgnoreCase))
                 {
                     byte[] loadBytes = ParseMultipartDataBytes(httpListenerRequest);
 
@@ -51,7 +58,7 @@ namespace VDRIVE.Protocol
                     catch (ArgumentException ex)
                     {
                         this.Logger.LogMessage($"[LOAD] Invalid request: {ex.Message}");
-                        
+
                         LoadResponse errorResponse = new LoadResponse { ResponseCode = 0x04 };
                         WriteLoadResponse(this.HttpListenerContext, new byte[0], errorResponse, sessionManager.GetOrCreateSession(0));
                         return;
@@ -72,7 +79,7 @@ namespace VDRIVE.Protocol
                         loadRequestInternal.Operation = 3;
                         loadRequestInternal.FileName = fileName.ToArray();
                         loadRequestInternal.FileNameLength = (byte)fileName.Length;
-                        
+
                         loadResponse = session.StorageAdapter.Load(loadRequestInternal, session.FloppyResolver, out byte[] fullFile);
 
                         if (fullFile != null && loadResponse.ResponseCode == 0xff)
@@ -82,11 +89,11 @@ namespace VDRIVE.Protocol
 
                             int endAddress = dest_ptr_start + fullFile.Length - 1;
                             this.Logger.LogMessage($"End Address: 0x{endAddress:X4}");
-                            
+
                             responsePayload = fullFile;
 
                             if (!IsValidLoadAddress(this.Logger, dest_ptr_start, endAddress))
-                            {                    
+                            {
                                 loadResponse.ResponseCode = 0x04;
                                 responsePayload = new byte[0];
                             }
@@ -100,13 +107,13 @@ namespace VDRIVE.Protocol
                     {
                         this.Logger.LogMessage("[Load] Invalid request - empty filename");
                     }
-                   
+
                     WriteLoadResponse(this.HttpListenerContext, responsePayload, loadResponse, session);
                     return;
                 }
 
                 // SAVE
-                if (httpListenerRequest.HttpMethod == "POST" && httpListenerRequest.Url.AbsolutePath.Equals("/save", StringComparison.OrdinalIgnoreCase))
+                if (httpListenerRequest.HttpMethod == "POST" && basePath.Equals("/save", StringComparison.OrdinalIgnoreCase))
                 {
                     byte[] saveBytes = ParseMultipartDataBytes(httpListenerRequest);
 
@@ -156,13 +163,13 @@ namespace VDRIVE.Protocol
                 }
 
                 // SEARCH
-                if (httpListenerRequest.HttpMethod == "POST" && httpListenerRequest.Url.AbsolutePath.Equals("/search", StringComparison.OrdinalIgnoreCase))
+                if (httpListenerRequest.HttpMethod == "POST" && basePath.Equals("/search", StringComparison.OrdinalIgnoreCase))
                 {
                     DateTime startTime = DateTime.Now;
                     this.Logger.LogMessage($"[SEARCH-TIMING] Request received, starting to parse body. ContentLength={httpListenerRequest.ContentLength64}");
-                    
+
                     byte[] searchFloppyBytes = ParseMultipartDataBytes(httpListenerRequest);
-                    
+
                     this.Logger.LogMessage($"[SEARCH-TIMING] Body parsed in {(DateTime.Now - startTime).TotalMilliseconds:F0}ms, received {searchFloppyBytes.Length} bytes");
 
                     HttpSearchFloppyRequest searchRequest;
@@ -173,14 +180,14 @@ namespace VDRIVE.Protocol
                     catch (ArgumentException ex)
                     {
                         this.Logger.LogMessage($"[SEARCH] Invalid request: {ex.Message}");
-                        WriteResponse(httpListenerResponse, "ERROR: Invalid search request", null);
+                        WriteSearchResponse(httpListenerResponse, "ERROR: Invalid search request", null);
                         return;
                     }
 
                     string searchTerm = new string(searchRequest.SearchTerm, 0, searchRequest.SearchTermLength).TrimEnd();
-                        
+
                     this.Logger.LogMessage($"[SEARCH] TERM={searchTerm} *** [SESSIONID] = {searchRequest.SessionId}");
-                        
+
                     Session session = sessionManager.GetOrCreateSession(searchRequest.SessionId);
 
                     if ((searchTerm.StartsWith("+") || searchTerm.StartsWith("-")) && session.CachedSearchResults != null && session.CachedSearchResults.Length > 0)
@@ -196,17 +203,17 @@ namespace VDRIVE.Protocol
                     searchFloppiesRequest.SearchTermLength = (byte)searchTerm.Length;
 
                     SearchFloppyResponse searchFloppyResponse = session.FloppyResolver.SearchFloppys(searchFloppiesRequest, out FloppyInfo[] foundFloppys);
-                    
+
                     this.Logger.LogMessage($"[SEARCH-TIMING] Search completed in {(DateTime.Now - searchStart).TotalMilliseconds:F0}ms, found {foundFloppys?.Length ?? 0} results");
-                    
+
                     if (searchFloppyResponse.ResultCount == 0)
                     {
                         session.CachedSearchResults = null;
                         session.LastSearchTerm = null;
                         session.CurrentSearchPage = 0;
-                        
+
                         string payload = "\r\n" + string.Concat("NO RESULTS FOUND\r\n") + "\0";
-                        WriteResponse(httpListenerResponse, payload, session);
+                        WriteSearchResponse(httpListenerResponse, payload, session);
                         this.Logger.LogMessage($"[SEARCH-TIMING] TOTAL request time: {(DateTime.Now - startTime).TotalMilliseconds:F0}ms");
                     }
                     else
@@ -214,7 +221,7 @@ namespace VDRIVE.Protocol
                         session.CachedSearchResults = foundFloppys;
                         session.LastSearchTerm = searchTerm;
                         session.CurrentSearchPage = 0;
-                        
+
                         DisplaySearchPage(httpListenerResponse, session, 0, startTime);
                     }
 
@@ -222,7 +229,7 @@ namespace VDRIVE.Protocol
                 }
 
                 // MOUNT
-                if (httpListenerRequest.HttpMethod == "POST" && httpListenerRequest.Url.AbsolutePath.Equals("/mount", StringComparison.OrdinalIgnoreCase))
+                if (httpListenerRequest.HttpMethod == "POST" && basePath.Equals("/mount", StringComparison.OrdinalIgnoreCase))
                 {
                     byte[] mountBytes = ParseMultipartDataBytes(httpListenerRequest);
 
@@ -239,7 +246,7 @@ namespace VDRIVE.Protocol
                     }
 
                     string imageIdOfFilename = mountRequest.GetImageIdOrFilenameString().TrimEnd();
-                    
+
                     this.Logger.LogMessage($"[Mount] image={imageIdOfFilename}");
 
                     Session session = sessionManager.GetOrCreateSession(mountRequest.SessionId);
@@ -266,7 +273,7 @@ namespace VDRIVE.Protocol
                             IdLo = (byte)(fullId & 0xFF),
                             IdHi = (byte)(fullId >> 8)
                         };
-                        
+
                         this.Logger.LogMessage($"[Mount] Mounting by ID: {imageIdInt} (IdLo={floppyIdentifier.IdLo}, IdHi={floppyIdentifier.IdHi})");
                     }
                     else
@@ -281,7 +288,7 @@ namespace VDRIVE.Protocol
 
                     FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
                     string fileName = new string(floppyInfo.ImageName).TrimEnd('\0');
-                    
+
                     fullId = (ushort)(floppyInfo.IdLo | (floppyInfo.IdHi << 8));
 
                     string message = $"\r\nFLOPPY INSERTED (ID={fullId} {fileName})";
@@ -310,13 +317,37 @@ namespace VDRIVE.Protocol
             catch (Exception ex)
             {
                 this.Logger.LogMessage($"[Error] {ex.Message}");
-                
+
                 // Always try to close the response to prevent hanging
                 try
                 {
                     this.HttpListenerContext.Response?.Close();
                 }
                 catch { }
+            }
+        }
+
+        private void ExtractUrlParts(HttpListenerRequest httpListenerRequest, out string apiKey, out string basePath)
+        {
+            // Allow optional API key segment in the URL: e.g. /search/SOMEKEY or /search
+            apiKey = null;
+            basePath = httpListenerRequest.Url.AbsolutePath ?? "/";
+            try
+            {
+                string trimmed = httpListenerRequest.Url.AbsolutePath?.Trim('/') ?? string.Empty;
+                if (!string.IsNullOrEmpty(trimmed))
+                {
+                    string[] parts = trimmed.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 1)
+                        basePath = "/" + parts[0].ToLowerInvariant();
+                    if (parts.Length >= 2)
+                        apiKey = parts[1];
+                }
+            }
+            catch
+            {
+                // fallback to raw path if anything goes wrong
+                basePath = httpListenerRequest.Url.AbsolutePath ?? "/";
             }
         }
 
@@ -335,44 +366,44 @@ namespace VDRIVE.Protocol
 
             // Convert to string for easier parsing (it's all ASCII/UTF-8 anyway)
             string bodyText = Encoding.ASCII.GetString(fullBody);
-            
+
             // Find the data field - format is:
             // Content-Disposition: form-data; name="data"
             // \r\n\r\n
             // <actual data bytes>
             // \r\n--boundary--
-            
+
             int dataHeaderIndex = bodyText.IndexOf("Content-Disposition: form-data; name=\"data\"", StringComparison.OrdinalIgnoreCase);
             if (dataHeaderIndex < 0)
                 return new byte[0];
-            
+
             // Find the \r\n\r\n after the Content-Disposition line
             int dataStartIndex = bodyText.IndexOf("\r\n\r\n", dataHeaderIndex);
             if (dataStartIndex < 0)
                 return new byte[0];
-            
+
             dataStartIndex += 4; // Skip past the \r\n\r\n
-            
+
             // Find the next boundary marker (starts with \r\n--)
             int dataEndIndex = bodyText.IndexOf("\r\n--", dataStartIndex);
             if (dataEndIndex < 0)
                 dataEndIndex = fullBody.Length; // No trailing boundary, use end of body
-            
+
             // Extract the data bytes
             int dataLength = dataEndIndex - dataStartIndex;
             if (dataLength <= 0)
                 return new byte[0];
-            
+
             byte[] result = new byte[dataLength];
             Array.Copy(fullBody, dataStartIndex, result, 0, dataLength);
-            
+
             return result;
         }
 
         private byte[] ReadRequestStream(HttpListenerRequest request)
         {
             DateTime readStart = DateTime.Now;
-            
+
             try
             {
                 if (request.ContentLength64 > MAX_EXPECTED_PAYLOAD_SIZE)
@@ -383,44 +414,71 @@ namespace VDRIVE.Protocol
 
                 if (request.ContentLength64 > 0)
                 {
-                    this.Logger.LogMessage($"[READ-START] ContentLength={request.ContentLength64}, HasEntityBody={request.HasEntityBody}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                    
+                    this.Logger.LogMessage($"[READ-START] ContentLength={request.ContentLength64}, HasEntityBody={request.HasEntityBody}, RemoteEndPoint={request.RemoteEndPoint}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+
                     byte[] buffer = new byte[request.ContentLength64];
                     int totalRead = 0;
                     int readAttempts = 0;
 
+                    int timeoutSeconds = this.Configuration.ReceiveTimeoutSeconds ?? 10;
+                    DateTime absoluteTimeout = readStart.AddSeconds(timeoutSeconds);
+
                     using (var stream = request.InputStream)
                     {
-                        // Simple synchronous read - HttpListener has already buffered this
                         while (totalRead < buffer.Length)
                         {
-                            readAttempts++;
-                            DateTime readIterationStart = DateTime.Now;
-                            
-                            int bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
-                            
-                            double readMs = (DateTime.Now - readIterationStart).TotalMilliseconds;
-                            
-                            if (bytesRead == 0)
+                            // Check absolute timeout
+                            double elapsedSeconds = (DateTime.Now - readStart).TotalSeconds;
+                            if (DateTime.Now > absoluteTimeout)
                             {
-                                this.Logger.LogMessage($"[READ-ZERO] Attempt #{readAttempts}: Stream returned 0 bytes at {totalRead}/{buffer.Length} after {readMs:F1}ms", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                this.Logger.LogMessage($"[READ-TIMEOUT] Absolute timeout of {timeoutSeconds}s exceeded at {totalRead}/{buffer.Length} bytes after {elapsedSeconds:F1}s", VDRIVE_Contracts.Enums.LogSeverity.Error);
                                 break;
                             }
-                            
+
+                            readAttempts++;
+                            DateTime readIterationStart = DateTime.Now;
+
+                            // Try async read with 5-second per-iteration timeout
+                            var readTask = stream.ReadAsync(buffer, totalRead, buffer.Length - totalRead);
+
+                            if (!readTask.Wait(5000))
+                            {
+                                double iterationSeconds = (DateTime.Now - readIterationStart).TotalSeconds;
+                                this.Logger.LogMessage($"[READ-ITERATION-TIMEOUT] Attempt #{readAttempts} timed out after {iterationSeconds:F1}s at {totalRead}/{buffer.Length} bytes", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+
+                                // If no data received after 3 attempts (15 seconds), give up
+                                if (readAttempts >= 3 && totalRead == 0)
+                                {
+                                    this.Logger.LogMessage($"[READ-ABANDONED] No data after {readAttempts} attempts and {elapsedSeconds:F1}s - C64 likely hung", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                                    break;
+                                }
+
+                                continue; // Try again
+                            }
+
+                            int bytesRead = readTask.Result;
+                            double readMs = (DateTime.Now - readIterationStart).TotalMilliseconds;
+
+                            if (bytesRead == 0)
+                            {
+                                this.Logger.LogMessage($"[READ-ZERO] Attempt #{readAttempts}: Stream closed at {totalRead}/{buffer.Length} after {readMs:F1}ms (elapsed: {elapsedSeconds:F1}s)", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                break;
+                            }
+
                             totalRead += bytesRead;
-                            
+
                             if (readMs > 100 || bytesRead < 1024)
                             {
-                                this.Logger.LogMessage($"[READ] Attempt #{readAttempts}: {bytesRead} bytes in {readMs:F1}ms (total: {totalRead}/{buffer.Length})", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+                                this.Logger.LogMessage($"[READ] Attempt #{readAttempts}: {bytesRead} bytes in {readMs:F1}ms (total: {totalRead}/{buffer.Length}, elapsed: {elapsedSeconds:F1}s)", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
                             }
                         }
                     }
 
                     double totalMs = (DateTime.Now - readStart).TotalMilliseconds;
-                    
+
                     if (totalRead < buffer.Length)
                     {
-                        this.Logger.LogMessage($"[READ-INCOMPLETE] Expected {buffer.Length}, got {totalRead} in {totalMs:F1}ms after {readAttempts} attempts. C64 may not have sent full body.", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                        this.Logger.LogMessage($"[READ-INCOMPLETE] Expected {buffer.Length}, got {totalRead} in {totalMs:F1}ms after {readAttempts} attempts - CLIENT DID NOT SEND BODY", VDRIVE_Contracts.Enums.LogSeverity.Error);
                     }
                     else
                     {
@@ -431,20 +489,8 @@ namespace VDRIVE.Protocol
                 }
                 else
                 {
-                    // No Content-Length
-                    this.Logger.LogMessage($"[READ-NO-LENGTH] No Content-Length header, using CopyTo", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                    
-                    using (var ms = new MemoryStream())
-                    using (var stream = request.InputStream)
-                    {
-                        stream.CopyTo(ms);
-                        byte[] result = ms.ToArray();
-                        
-                        double totalMs = (DateTime.Now - readStart).TotalMilliseconds;
-                        this.Logger.LogMessage($"[READ-COMPLETE] Read {result.Length} bytes in {totalMs:F1}ms (no Content-Length)", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                        
-                        return result;
-                    }
+                    this.Logger.LogMessage($"[READ-NO-LENGTH] No Content-Length header", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+                    return new byte[0];
                 }
             }
             catch (Exception ex)
@@ -468,7 +514,7 @@ namespace VDRIVE.Protocol
                 0xD000, // WiC64 registers
             };
 
-            if (rejectedLoadAddresses.Any(r => r == dest_ptr_start))                
+            if (rejectedLoadAddresses.Any(r => r == dest_ptr_start))
             {
                 logger.LogMessage($"Invalid load address 0x{dest_ptr_start:X4}-0x{end_dest_ptr:X4}, rejecting", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                 return false;
@@ -480,7 +526,7 @@ namespace VDRIVE.Protocol
             }
 
             return true;
-        }        
+        }
 
         private void WriteLoadResponse(HttpListenerContext httpListenerContext, byte[] filePayload, LoadResponse loadResponse, Session session)
         {
@@ -500,7 +546,7 @@ namespace VDRIVE.Protocol
                 // Serialize header + payload
                 List<byte> fullResponse = new List<byte>();
                 fullResponse.AddRange(BinaryStructConverter.ToByteArray(httpResponse));
-                
+
                 if (filePayload != null)
                 {
                     fullResponse.AddRange(filePayload);
@@ -508,29 +554,29 @@ namespace VDRIVE.Protocol
 
                 // Write response with timeout protection
                 resp.ContentLength64 = fullResponse.Count;
-                
+
                 this.Logger.LogMessage($"[LOAD-WRITE] Writing {fullResponse.Count} bytes", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
-                
+
                 var writeTask = resp.OutputStream.WriteAsync(fullResponse.ToArray(), 0, fullResponse.Count);
-                
+
                 // Timeout: 5 seconds base + 100ms per KB (for 50KB = 10 seconds total)
                 int timeoutMs = 5000 + (fullResponse.Count / 1024 * 100);
-                
+
                 if (!writeTask.Wait(timeoutMs))
                 {
                     this.Logger.LogMessage($"[LOAD-WRITE] Timeout after {timeoutMs}ms writing {fullResponse.Count} bytes", VDRIVE_Contracts.Enums.LogSeverity.Error);
                     throw new TimeoutException($"Write timeout after {timeoutMs}ms");
                 }
-                
+
                 resp.OutputStream.Flush();
                 resp.Close();
-                
+
                 this.Logger.LogMessage($"[LOAD-WRITE] Successfully wrote {fullResponse.Count} bytes", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
             }
             catch (Exception ex)
             {
                 this.Logger.LogMessage($"[LOAD-WRITE] Error: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
-                
+
                 // Always try to close response to prevent hanging
                 try { httpListenerContext.Response?.Close(); } catch { }
             }
@@ -549,7 +595,7 @@ namespace VDRIVE.Protocol
                 // Serialize header + text payload
                 List<byte> fullResponse = new List<byte>();
                 fullResponse.AddRange(BinaryStructConverter.ToByteArray(httpResponse));
-                
+
                 // Add text payload
                 if (!string.IsNullOrEmpty(text))
                 {
@@ -561,21 +607,68 @@ namespace VDRIVE.Protocol
                 response.ContentLength64 = fullResponse.Count;
 
                 var writeTask = response.OutputStream.WriteAsync(fullResponse.ToArray(), 0, fullResponse.Count);
-                
+
                 // 5 second timeout for small SAVE responses
                 if (!writeTask.Wait(5000))
                 {
                     this.Logger.LogMessage($"[SAVE-WRITE] Timeout after 5000ms", VDRIVE_Contracts.Enums.LogSeverity.Error);
                     throw new TimeoutException("Write timeout");
                 }
-                
+
                 response.OutputStream.Flush();
                 response.Close();
             }
             catch (Exception ex)
             {
                 this.Logger.LogMessage($"[SAVE-WRITE] Error: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
-                
+
+                try { response?.Close(); } catch { }
+            }
+        }
+
+        private void WriteSearchResponse(HttpListenerResponse response, string text, Session session = null)
+        {
+            try
+            {
+                // Create HTTP response header with result count
+                ushort resultCount = session?.CachedSearchResults != null ? (ushort)session.CachedSearchResults.Length : (ushort)0;
+                HttpSearchResponse httpResponse = HttpSearchResponse.Create(
+                    session?.SessionId ?? 0,
+                    resultCount
+                );
+
+                // Serialize header + text payload
+                List<byte> fullResponse = new List<byte>();
+                fullResponse.AddRange(BinaryStructConverter.ToByteArray(httpResponse));
+
+                // Add text payload
+                if (!string.IsNullOrEmpty(text))
+                {
+                    fullResponse.AddRange(Encoding.ASCII.GetBytes(text));
+                }
+
+                response.StatusCode = 200;
+                response.ContentType = "text/plain";
+                response.ContentLength64 = fullResponse.Count;
+
+                this.Logger.LogMessage($"[SEARCH-WRITE] Writing {fullResponse.Count} bytes (header: 4 bytes, SessionId={session?.SessionId ?? 0}, ResultCount={resultCount})", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
+
+                var writeTask = response.OutputStream.WriteAsync(fullResponse.ToArray(), 0, fullResponse.Count);
+
+                // 5 second timeout for search responses
+                if (!writeTask.Wait(5000))
+                {
+                    this.Logger.LogMessage($"[SEARCH-WRITE] Timeout after 5000ms", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                    throw new TimeoutException("Write timeout");
+                }
+
+                response.OutputStream.Flush();
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                this.Logger.LogMessage($"[SEARCH-WRITE] Error: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+
                 try { response?.Close(); } catch { }
             }
         }
@@ -591,7 +684,7 @@ namespace VDRIVE.Protocol
                 {
                     List<byte> msgWithSession = new List<byte>();
                     msgWithSession.Add((byte)(session.SessionId & 0xFF));
-                    msgWithSession.Add((byte)(session.SessionId >> 8));                
+                    msgWithSession.Add((byte)(session.SessionId >> 8));
                     msgWithSession.AddRange(fullResponse);
                     fullResponse = msgWithSession.ToArray();
                 }
@@ -601,49 +694,30 @@ namespace VDRIVE.Protocol
                 response.ContentLength64 = fullResponse.Length;
 
                 var writeTask = response.OutputStream.WriteAsync(fullResponse, 0, fullResponse.Length);
-                
+
                 // 5 second timeout for small text responses
                 if (!writeTask.Wait(5000))
                 {
                     this.Logger.LogMessage($"[WRITE] Timeout after 5000ms", VDRIVE_Contracts.Enums.LogSeverity.Error);
                     throw new TimeoutException("Write timeout");
                 }
-                
+
                 response.OutputStream.Flush();
                 response.Close();
             }
             catch (Exception ex)
             {
                 this.Logger.LogMessage($"[WRITE] Error: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
-                
+
                 try { response?.Close(); } catch { }
             }
-        }
-
-        private int FindBytes(byte[] haystack, byte[] needle, int start = 0)
-        {
-            for (int i = start; i < haystack.Length - needle.Length + 1; i++)
-            {
-                bool found = true;
-                for (int j = 0; j < needle.Length; j++)
-                {
-                    if (haystack[i + j] != needle[j])
-                    {
-                        found = false;
-                        break;
-                    }
-                }
-                if (found)
-                    return i;
-            }
-            return -1;
         }
 
         private void HandleSearchPagination(HttpListenerResponse response, Session session, string paginationCommand)
         {
             if (session.CachedSearchResults == null || session.CachedSearchResults.Length == 0)
             {
-                WriteResponse(response, "\r\nERROR: NO SEARCH RESULTS TO PAGINATE\r\nPERFORM A SEARCH FIRST\0", session);
+                WriteSearchResponse(response, "\r\nERROR: NO SEARCH RESULTS TO PAGINATE\r\nPERFORM A SEARCH FIRST\0", session);
                 return;
             }
 
@@ -652,15 +726,15 @@ namespace VDRIVE.Protocol
 
             int pageOffset = 1;
             bool isForward = paginationCommand.StartsWith("+");
-            
+
             string numericPart = paginationCommand.Substring(1).Trim();
             if (!string.IsNullOrEmpty(numericPart) && int.TryParse(numericPart, out int parsedOffset))
             {
                 pageOffset = Math.Abs(parsedOffset);
             }
 
-            int newPage = isForward 
-                ? session.CurrentSearchPage + pageOffset 
+            int newPage = isForward
+                ? session.CurrentSearchPage + pageOffset
                 : session.CurrentSearchPage - pageOffset;
 
             newPage = Math.Max(0, Math.Min(newPage, totalPages - 1));
@@ -673,7 +747,7 @@ namespace VDRIVE.Protocol
         private void DisplaySearchPage(HttpListenerResponse response, Session session, int pageNumber, DateTime? startTime)
         {
             DateTime buildStart = DateTime.Now;
-            
+
             int pageSize = this.Configuration.SearchPageSize;
             int totalResults = session.CachedSearchResults.Length;
             int totalPages = (int)Math.Ceiling((double)totalResults / pageSize);
@@ -691,15 +765,15 @@ namespace VDRIVE.Protocol
                 pageResultsList.Add($"{fullId} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
             }
 
-            string fromMessage = pageNumber == 0 
+            string fromMessage = pageNumber == 0
                 ? $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n"
                 : $"\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
-            
-            string pageInfo = $"\r\nPAGE {pageNumber + 1} OF {totalPages} ({totalResults} RESULTS)";
-            string navInfo = "\r\n(+/- TO PAGE, ID TO MOUNT)";
+
+            string pageInfo = $"\r\n{pageNumber + 1} OF {totalPages} ({totalResults} RESULTS)";
+            string navInfo = "\r\n(+/- TO PAGE, # TO MOUNT)";
             string payload = fromMessage + string.Concat(pageResultsList) + pageInfo + navInfo + "\0";
 
-            const int maxPayloadSize = 512 - 2;
+            const int maxPayloadSize = 512 - 10; // FIXME: needs to subtract just the header length
             int originalCount = pageResultsList.Count;
             while (Encoding.ASCII.GetByteCount(payload) > maxPayloadSize && pageResultsList.Count > 0)
             {
@@ -708,24 +782,24 @@ namespace VDRIVE.Protocol
             }
 
             DateTime sendStart = DateTime.Now;
-            WriteResponse(response, payload, session);
-            
+            WriteSearchResponse(response, payload, session);
+
             if (startTime.HasValue)
             {
                 this.Logger.LogMessage($"[SEARCH-TIMING] Response built in {(DateTime.Now - buildStart).TotalMilliseconds:F0}ms");
             }
-            
+
             if (pageResultsList.Count < originalCount)
             {
                 this.Logger.LogMessage($"[SEARCH] Payload truncated from {originalCount} to {pageResultsList.Count} results");
             }
-            
+
             if (startTime.HasValue)
             {
                 this.Logger.LogMessage($"[SEARCH-TIMING] Response sent in {(DateTime.Now - sendStart).TotalMilliseconds:F0}ms");
                 this.Logger.LogMessage($"[SEARCH-TIMING] TOTAL request time: {(DateTime.Now - startTime.Value).TotalMilliseconds:F0}ms");
             }
-            
+
             for (int i = startIndex; i < endIndex && (i - startIndex) < pageResultsList.Count; i++)
             {
                 var ff = session.CachedSearchResults[i];
