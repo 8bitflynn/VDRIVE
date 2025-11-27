@@ -18,7 +18,7 @@ temp_ptr_hi    = $fe
 dest_ptr_lo    = $ae
 dest_ptr_hi    = $af
 
-; interacive mode jmps
+; interactive mode jmps
 jmp enable_vdrive
 jmp disable_vdrive
 jmp vdrive_search_floppies
@@ -260,21 +260,25 @@ fn_copy_done:
     lda response_buffer+1
     sta dest_ptr_hi
 
-    ; Check secondary address to determine final load address
-    ; SA=0: Always use PRG file's address (BASIC LOAD without ,1)
-    ; SA=1: Use PRG file's address (BASIC LOAD with ,1 or machine code load)
-    ; For machine code: if caller wants custom address, they set SA=2
+    ; Check secondary address to determine load address:
+    ; SA=0 (LOAD "file",8): Use address from $C3/$C4 (MEMUSS - for serial bus SA=0)
+    ; SA=1 (LOAD "file",8,1): Use file's header address
     lda sec_addr
-    cmp #2
-    bcc .use_prg_address    ; SA=0 or SA=1: use PRG address
+    bne .use_file_address   ; SA != 0: use file's address
     
-    ; SA=2+: use custom address from $AE/$AF (for machine code multi-load)
-    lda start_addr_lo
+    ; SA=0: use address from $C3/$C4 (MEMUSS - specifically for serial bus SA=0 loads)
+    lda $c3
     sta dest_ptr_lo
-    lda start_addr_hi
+    lda $c4
     sta dest_ptr_hi
 
-.use_prg_address:
+.use_file_address:
+    ; Save start address for display (before it gets modified)
+    lda dest_ptr_lo
+    sta temp_workspace1
+    lda dest_ptr_hi
+    sta temp_workspace2
+    
     ; Set response pointer to the load address and receive remaining data directly
     lda dest_ptr_lo
     sta wic64_response
@@ -289,6 +293,14 @@ fn_copy_done:
 
 load_done:     
     jsr compute_endaddress
+    
+    ; Print hex range only if messages are enabled
+    lda $9d
+    beq .skip_msg
+    jsr print_load_range
+    lda #$0d
+    jsr $ffd2
+.skip_msg:
     
     ; Return success with error code already in vdrive_retcode
     clc
@@ -361,6 +373,76 @@ compute_endaddress
     sbc #0
     sta dest_ptr_hi
     rts
+
+print_load_range:
+    ; Print " $XXXX-$XXXX"
+    lda #' '
+    jsr $ffd2
+    lda #'$'
+    jsr $ffd2
+    
+    ; Print start address from temp_workspace2/1
+    lda temp_workspace2
+    jsr print_hex_byte
+    lda temp_workspace1
+    jsr print_hex_byte
+    
+    lda #'-'
+    jsr $ffd2
+    lda #'$'
+    jsr $ffd2
+    
+    ; Print end address from dest_ptr
+    lda dest_ptr_hi
+    jsr print_hex_byte
+    lda dest_ptr_lo
+    jsr print_hex_byte
+    rts
+
+print_save_range:
+    ; Print " $XXXX-$XXXX" + CR
+    lda #' '
+    jsr $ffd2
+    lda #'$'
+    jsr $ffd2
+    
+    ; Print start address from temp_workspace2/1
+    lda temp_workspace2
+    jsr print_hex_byte
+    lda temp_workspace1
+    jsr print_hex_byte
+    
+    lda #'-'
+    jsr $ffd2
+    lda #'$'
+    jsr $ffd2
+    
+    ; Print end address from temp_workspace4/3
+    lda temp_workspace4
+    jsr print_hex_byte
+    lda temp_workspace3
+    jsr print_hex_byte
+    
+    lda #$0d
+    jsr $ffd2
+    rts
+
+print_hex_byte:
+    pha
+    lsr
+    lsr
+    lsr
+    lsr
+    jsr print_hex_nybble
+    pla
+    and #$0f
+print_hex_nybble:
+    cmp #10
+    bcc .digit
+    adc #6
+.digit:
+    adc #'0'
+    jmp $ffd2
 
 vdrive_search_floppies:
     ; Clear session for new search
@@ -708,8 +790,6 @@ vdrive_save:
     ldy #$51            ; Offset to "SAVING " message
     jsr $f12f           ; Print "SAVING "
     jsr $f5c1           ; Print filename (OUTFN)
-    lda #$0d            ; CR
-    jsr $ffd2           ; CHROUT - print carriage return
     
     ; Save $c1/$c2 (start address) for calculations
     lda start_addr_lo
@@ -722,6 +802,9 @@ vdrive_save:
     sta temp_workspace3
     lda dest_ptr_hi
     sta temp_workspace4
+    
+    ; Print save range in hex
+    jsr print_save_range
     
     ; Now copy filename from KERNAL into user_input
     ldy #0
@@ -1060,8 +1143,9 @@ send_http_post:
     bcc .post_url_ack
     jmp .post_fail
 .post_url_ack:
-    ; Receive acknowledgment body (even if empty)
-    +wic64_receive
+    ; Receive acknowledgment body into http_request (NOT response_buffer!)
+    ; This prevents overwriting our POST data in response_buffer
+    +wic64_receive http_request
     bcc .post_ack_done
     jmp .post_fail
 .post_ack_done:
