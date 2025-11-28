@@ -1403,7 +1403,7 @@ http_url:
 ; and is intended for a simple auth mechanism
 ; Format: Null-terminated string, max 16 bytes
 token:    
-    !fill 16,0  ; Empty by default, user can patch if needed
+    !fill 8,0  ; Empty by default, user can patch if needed
 
 http_path:
     !fill 16,0 
