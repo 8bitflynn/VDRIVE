@@ -46,6 +46,8 @@ api_vdrive_devnum_ptr:
     !word vdrive_devnum       ; $C01D: Pointer to device number byte
 api_vdrive_retcode_ptr:
     !word vdrive_retcode      ; $C01F: Pointer to return code byte
+api_search_result_count_ptr:
+    !word search_result_count ; $C021: Pointer to 16-bit search result count
 
 wic64_build_report = 1
 wic64_optimize_for_size = 1 ; optimize for size over speed
@@ -243,10 +245,9 @@ fn_copy_done:
 
     ; Check error code - 0xff is success, anything else is error
     cmp #$ff
-    bne load_error
-    
-    ; show loading message only on success
-    jsr $f5d2
+    beq .load_success
+    jmp load_error
+.load_success:
     
     ; Success - receive 2 more bytes for load address
     +wic64_receive response_buffer, 2
@@ -273,11 +274,25 @@ fn_copy_done:
     sta dest_ptr_hi
 
 .use_file_address:
-    ; Save start address for display (before it gets modified)
+    ; Save start address for display
     lda dest_ptr_lo
     sta temp_workspace1
     lda dest_ptr_hi
     sta temp_workspace2
+    
+    ; Calculate end address for display
+    jsr calc_end_address
+    
+    ; Print LOADING message with hex range before starting transfer
+    lda $9d
+    beq .skip_load_msg
+    jsr $f5d2           ; Print "LOADING" + filename
+    lda #' '
+    jsr $ffd2
+    jsr print_load_range_precalc  ; Print hex using temp_workspace1-4
+    lda #$0d
+    jsr $ffd2
+.skip_load_msg:
     
     ; Set response pointer to the load address and receive remaining data directly
     lda dest_ptr_lo
@@ -293,14 +308,6 @@ fn_copy_done:
 
 load_done:     
     jsr compute_endaddress
-    
-    ; Print hex range only if messages are enabled
-    lda $9d
-    beq .skip_msg
-    jsr print_load_range
-    lda #$0d
-    jsr $ffd2
-.skip_msg:
     
     ; Return success with error code already in vdrive_retcode
     clc
@@ -374,30 +381,31 @@ compute_endaddress
     sta dest_ptr_hi
     rts
 
-print_load_range:
-    ; Print " $XXXX-$XXXX"
-    lda #' '
-    jsr $ffd2
-    lda #'$'
-    jsr $ffd2
-    
-    ; Print start address from temp_workspace2/1
-    lda temp_workspace2
-    jsr print_hex_byte
+; Calculate end address into temp_workspace3/4
+; Input: temp_workspace1/2 = start address, wic64_response_size = data size
+; Output: temp_workspace3/4 = end address (start + size - 2)
+calc_end_address:
+    clc
     lda temp_workspace1
-    jsr print_hex_byte
-    
-    lda #'-'
-    jsr $ffd2
+    adc wic64_response_size
+    sta temp_workspace3
+    lda temp_workspace2
+    adc wic64_response_size+1
+    sta temp_workspace4
+    sec
+    lda temp_workspace3
+    sbc #2
+    sta temp_workspace3
+    lda temp_workspace4
+    sbc #0
+    sta temp_workspace4
+    rts
+
+print_load_range_precalc:
+    ; Print "$XXXX-$XXXX" using temp_workspace1-4 (precalculated)
     lda #'$'
     jsr $ffd2
-    
-    ; Print end address from dest_ptr
-    lda dest_ptr_hi
-    jsr print_hex_byte
-    lda dest_ptr_lo
-    jsr print_hex_byte
-    rts
+    jmp print_hex_addresses
 
 print_save_range:
     ; Print " $XXXX-$XXXX" + CR
@@ -405,27 +413,24 @@ print_save_range:
     jsr $ffd2
     lda #'$'
     jsr $ffd2
-    
-    ; Print start address from temp_workspace2/1
+    jsr print_hex_addresses
+    lda #$0d
+    jmp $ffd2
+
+print_hex_addresses:
+    ; Print XXXX-$XXXX from temp_workspace2/1 to temp_workspace4/3
     lda temp_workspace2
     jsr print_hex_byte
     lda temp_workspace1
     jsr print_hex_byte
-    
     lda #'-'
     jsr $ffd2
     lda #'$'
     jsr $ffd2
-    
-    ; Print end address from temp_workspace4/3
     lda temp_workspace4
     jsr print_hex_byte
     lda temp_workspace3
-    jsr print_hex_byte
-    
-    lda #$0d
-    jsr $ffd2
-    rts
+    jmp print_hex_byte
 
 print_hex_byte:
     pha
@@ -493,15 +498,21 @@ search_common:
     sta session_id
     lda response_buffer+1
     sta session_id+1
+    
+    ; Extract result count from bytes 2-3 of response
+    lda response_buffer+2
+    sta search_result_count        ; result count low
+    lda response_buffer+3
+    sta search_result_count+1      ; result count high
         
     ; Print response buffer only in interactive mode
     lda interactive_mode
     beq .skip_print         ; programmatic mode (0), skip printing
     
-    ; Print response buffer starting at byte 2 (skip session header only)
-    lda #<(response_buffer+2)
+    ; Print response buffer starting at byte 4 (skip session + count header)
+    lda #<(response_buffer+4)
     sta temp_ptr_lo
-    lda #>(response_buffer+2)
+    lda #>(response_buffer+4)
     sta temp_ptr_hi
     jsr print_from_ptr
 .skip_print:
@@ -509,14 +520,10 @@ search_common:
     jsr cleanup_wic64   
 
 search_done:
-    ; hack until search returns the result count in headers
-    ; Check if server returned empty results or "No results" message
-    lda response_buffer+4
-    beq exit_search         ; Empty response, skip mount
-    cmp #'N'                ; Starts with 'N' (likely "No results")?
-    beq exit_search         ; Skip mount
-    cmp #'0'                ; Starts with '0' (zero results)?
-    beq exit_search         ; Skip mount
+    ; Check if result count is zero
+    lda search_result_count
+    ora search_result_count+1
+    beq exit_search         ; Zero results, exit after printing message
     
     ; Check interactive mode: if programmatic, exit without mounting
     lda interactive_mode
@@ -541,21 +548,27 @@ page_loop:
     
     ; Check if empty - exit if so
     lda user_input_length
-    beq exit_page_loop      ; Empty input, exit
+     beq .local_exit_page_loop ; Local branch, then jmp
     
     ; Check if first char is + or -
     lda user_input
     cmp #'+'
-    beq do_page_request
+    bne .check_minus
+    jmp do_page_request
+.check_minus:
     cmp #'-'
-    beq do_page_request
-    
+    bne .not_paging
+    jmp do_page_request
+.not_paging:
     ; Not paging, treat as mount request
     ; Skip get_user_input in mount path since we already have input
     lda #1
     sta interactive_mode
     jmp mount_common
 
+; Local branch target for out-of-range exit
+.local_exit_page_loop:
+     jmp exit_page_loop
 ; -----------------------------------
 ; do_page_request
 ; Send paging request (+/-/+N/-N) to server
@@ -586,23 +599,28 @@ do_page_request:
     bcc .page_data_received
     jmp page_fail
 .page_data_received:
-    
     ; Update session from response
     lda response_buffer
     sta session_id
     lda response_buffer+1
     sta session_id+1
-    
-    ; Print results (skip 2-byte session header)
-    lda #<(response_buffer+2)
+    ; Extract result count from bytes 2-3
+    lda response_buffer+2
+    sta search_result_count
+    lda response_buffer+3
+    sta search_result_count+1
+    ; Print results (skip 2-byte session header and 2-byte result count)
+    lda #<(response_buffer+4)
     sta temp_ptr_lo
-    lda #>(response_buffer+2)
+    lda #>(response_buffer+4)
     sta temp_ptr_hi
     jsr print_from_ptr
-    
     ; Cleanup WiC64 after this request
     jsr cleanup_wic64
-    
+    ; Exit if result count is zero
+    lda search_result_count
+    ora search_result_count+1
+    beq exit_page_loop
     jmp page_loop
 
 page_fail:
@@ -785,12 +803,6 @@ vdrive_isave_direct:
     jmp (temp_ptr_lo)
 
 vdrive_save:
-    ; Print "SAVING <filename>" immediately before anything else
-    ; $bb/$bc and $b7 are already set up by KERNAL SETNAM
-    ldy #$51            ; Offset to "SAVING " message
-    jsr $f12f           ; Print "SAVING "
-    jsr $f5c1           ; Print filename (OUTFN)
-    
     ; Save $c1/$c2 (start address) for calculations
     lda start_addr_lo
     sta temp_workspace1
@@ -803,8 +815,15 @@ vdrive_save:
     lda dest_ptr_hi
     sta temp_workspace4
     
-    ; Print save range in hex
-    jsr print_save_range
+    ; Print "SAVING <filename> $XXXX-$XXXX" before starting save
+    ; $bb/$bc and $b7 are already set up by KERNAL SETNAM
+    lda $9d
+    beq .skip_msg
+    ldy #$51            ; Offset to "SAVING " message
+    jsr $f12f           ; Print "SAVING "
+    jsr $f5c1           ; Print filename (OUTFN)
+    jsr print_save_range  ; Print hex range immediately
+.skip_msg:
     
     ; Now copy filename from KERNAL into user_input
     ldy #0
@@ -1272,7 +1291,7 @@ base_copied:
     ldy #0                ; Y = index into http_path
 copy_path_safe:
     lda http_path,y
-    beq copy_done
+    beq path_copied
     ; store at http_request[4 + X]
     sta http_request+4,X
     inx
@@ -1281,6 +1300,28 @@ copy_path_safe:
     cpx #124
     bcs copy_done
     jmp copy_path_safe
+path_copied:
+    ; X now = base + path length
+    ; Append /<token> if token is not empty
+    lda token
+    beq copy_done       ; Empty token, skip
+
+    ; Append "/"
+    lda #'/'
+    sta http_request+4,X
+    inx
+
+    ; Copy token
+    ldy #0
+.copy_token:
+    lda token,y
+    beq copy_done
+    sta http_request+4,X
+    inx
+    iny
+    cpx #124
+    bcs copy_done
+    jmp .copy_token
 copy_done:
     ; X now holds total payload length (base + path)
     ; store payload length (little endian) into header at offsets 2/3
@@ -1321,6 +1362,8 @@ vdrive_retcode:
     !byte 0
 interactive_mode:
     !byte 0  ; 0 = programmatic (no prompts), 1 = interactive (prompts)
+search_result_count:
+    !byte 0, 0  ; 16-bit search result count
 temp_workspace1:
     !byte 0
 temp_workspace2:
@@ -1348,12 +1391,19 @@ save_prefix:   !text "save",0
 user_input:
     !fill 64,0
 
-; *** SERVER URL - Can be modified with BASIC config program ***
-; To change: Load this PRG to $C000, modify bytes at http_url, save back
+; *** SERVER URL - patch binary zero term***
+; should work on http or https endpoints
 ; Format: Null-terminated string, max 80 bytes
 http_url:
     !text "http://192.168.1.222/",0
     !fill 59,0  ; Pad to 80 bytes total (21 bytes used + 59 padding)
+
+; *** TOKEN - patch binary zero term***
+; if filled in is passed after the prefixes in the url
+; and is intended for a simple auth mechanism
+; Format: Null-terminated string, max 16 bytes
+token:    
+    !fill 16,0  ; Empty by default, user can patch if needed
 
 http_path:
     !fill 16,0 
