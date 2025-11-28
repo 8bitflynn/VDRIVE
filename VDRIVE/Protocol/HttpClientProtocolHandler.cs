@@ -36,14 +36,7 @@ namespace VDRIVE.Protocol
                 string apiKey, basePath;                
                 this.ExtractUrlParts(httpListenerRequest, out apiKey, out basePath);
 
-                if (!string.IsNullOrEmpty(apiKey))
-                {
-                    this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url} APIKEY={apiKey}");
-                }
-                else
-                {
-                    this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
-                }
+                this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
 
                 // LOAD
                 if (httpListenerRequest.HttpMethod == "POST" && basePath.Equals("/load", StringComparison.OrdinalIgnoreCase))
