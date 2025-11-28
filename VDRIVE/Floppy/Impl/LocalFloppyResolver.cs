@@ -38,7 +38,6 @@ namespace VDRIVE.Floppy.Impl
             // clear last search results
             ClearSearchResults();
 
-
             List<string> allResults = new List<string>();
             foreach (string searchPath in Configuration.FloppyResolverSettings.Local.SearchPaths.Distinct()) // only search each folder once
             {
@@ -47,10 +46,22 @@ namespace VDRIVE.Floppy.Impl
                 {
                     allResults.AddRange(searchResults);
                 }
+
+                // Stop searching across top-level search paths once we've reached the configured maximum
+                if (allResults.Count >= this.Configuration.MaxSearchResults)
+                {
+                    break;
+                }
             }
 
             // order by name to normalize results
             allResults = allResults.OrderBy(ar => Path.GetFileName(ar)).ToList();
+
+            // enforce global max results
+            if (allResults.Count > this.Configuration.MaxSearchResults)
+            {
+                allResults = allResults.Take(this.Configuration.MaxSearchResults).ToList();
+            }
 
             ushort searchResultIndexId = 1; // sequence used to select floppy on C64 side             
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
@@ -165,6 +176,10 @@ namespace VDRIVE.Floppy.Impl
                     {
                         results.AddRange(childMatches);
                     }
+
+                    // Stop traversing further subdirectories of this subtree once we've hit the configured maximum
+                    if (results.Count >= this.Configuration.MaxSearchResults)
+                        break;
                 }
                 catch
                 {

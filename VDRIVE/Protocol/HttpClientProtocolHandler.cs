@@ -33,10 +33,48 @@ namespace VDRIVE.Protocol
                 httpListenerResponse.SendChunked = false;
                 httpListenerResponse.KeepAlive = true;
                 
-                string apiKey, basePath;                
-                this.ExtractUrlParts(httpListenerRequest, out apiKey, out basePath);
+                string clientToken, basePath;                
+                this.ExtractUrlParts(httpListenerRequest, out clientToken, out basePath);
 
-                this.Logger.LogMessage($"{httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+                // Resolve client addresses (always include TCP remote endpoint; include X-Forwarded-For if present)
+                string xffHeader = httpListenerRequest.Headers["X-Forwarded-For"];
+                string tcpRemote = httpListenerRequest.RemoteEndPoint?.ToString() ?? httpListenerRequest.UserHostAddress ?? "unknown";
+
+                // If XFF contains a list, take the left-most non-empty entry as the original client IP
+                string xffFirst = null;
+                if (!string.IsNullOrEmpty(xffHeader))
+                {
+                    xffFirst = xffHeader.Split(',').Select(s => s.Trim()).FirstOrDefault(s => !string.IsNullOrEmpty(s));
+                }
+
+                // Build a compact logging representation: keep TCP peer (always) and show original client from XFF when available
+                string remoteAddr = tcpRemote;
+                if (!string.IsNullOrEmpty(xffFirst))
+                {
+                    // include both a short and the full header for diagnostics
+                    remoteAddr = $"{tcpRemote} via XFF={xffFirst}";
+                }
+                if (!string.IsNullOrEmpty(xffHeader) && xffHeader != xffFirst)
+                {
+                    // optionally append the full XFF for full chain visibility
+                    remoteAddr += $" (XFF-full={xffHeader})";
+                }
+
+                // Single entry log including remote addresses
+                this.Logger.LogMessage($"[{remoteAddr}] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+
+                // If any tokens are configured, require valid token
+                if (this.Configuration.AllowedAuthTokens.Any()) 
+                {
+                    bool tokenValid = this.Configuration.AllowedAuthTokens.Any(allowedToken => allowedToken == clientToken);
+                    if (!tokenValid)
+                    {
+                        this.Logger.LogMessage($"[401] Unauthorized access attempt with token '{clientToken}'", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        httpListenerResponse.StatusCode = 401;
+                        WriteResponse(httpListenerResponse, "Unauthorized");
+                        return;
+                    }
+                }                    
 
                 // LOAD
                 if (httpListenerRequest.HttpMethod == "POST" && basePath.Equals("/load", StringComparison.OrdinalIgnoreCase))
@@ -183,6 +221,7 @@ namespace VDRIVE.Protocol
 
                     Session session = sessionManager.GetOrCreateSession(searchRequest.SessionId);
 
+                    // Handle paging 
                     if ((searchTerm.StartsWith("+") || searchTerm.StartsWith("-")) && session.CachedSearchResults != null && session.CachedSearchResults.Length > 0)
                     {
                         HandleSearchPagination(httpListenerResponse, session, searchTerm);
@@ -320,10 +359,10 @@ namespace VDRIVE.Protocol
             }
         }
 
-        private void ExtractUrlParts(HttpListenerRequest httpListenerRequest, out string apiKey, out string basePath)
+        private void ExtractUrlParts(HttpListenerRequest httpListenerRequest, out string token, out string basePath)
         {
-            // Allow optional API key segment in the URL: e.g. /search/SOMEKEY or /search
-            apiKey = null;
+            // Allow optional token segment in the URL: e.g. /search/token or just /search if token are not used
+            token = "";
             basePath = httpListenerRequest.Url.AbsolutePath ?? "/";
             try
             {
@@ -334,7 +373,7 @@ namespace VDRIVE.Protocol
                     if (parts.Length >= 1)
                         basePath = "/" + parts[0].ToLowerInvariant();
                     if (parts.Length >= 2)
-                        apiKey = parts[1];
+                        token = parts[1];
                 }
             }
             catch
@@ -710,6 +749,7 @@ namespace VDRIVE.Protocol
         {
             if (session.CachedSearchResults == null || session.CachedSearchResults.Length == 0)
             {
+                // TODO: write out 
                 WriteSearchResponse(response, "\r\nERROR: NO SEARCH RESULTS TO PAGINATE\r\nPERFORM A SEARCH FIRST\0", session);
                 return;
             }

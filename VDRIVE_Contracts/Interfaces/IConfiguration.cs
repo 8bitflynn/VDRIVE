@@ -4,6 +4,7 @@ namespace VDRIVE_Contracts.Interfaces
 {
     public interface IConfiguration
     {
+        public IList<string> AllowedAuthTokens { get; set; }
         public string StorageAdapter { get; set; } 
         public string FloppyResolver { get; set; } 
         public string LoggingLevel { get; set; }

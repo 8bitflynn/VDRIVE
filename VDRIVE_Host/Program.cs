@@ -1,5 +1,6 @@
 ﻿using VDRIVE;
 using VDRIVE.Configuration;
+using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE_Host
@@ -17,9 +18,11 @@ namespace VDRIVE_Host
         static void Main(string[] args)
         {
             ILogger logger = new VDRIVE.Util.ConsoleLogger();
-
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
+
+            // recreate logger with correct logging level
+            logger = new VDRIVE.Util.ConsoleLogger(Enum.Parse<LogSeverity>(configuration.LoggingLevel));
 
             if (!configBuilder.IsValidConfiguration(configuration))
             {

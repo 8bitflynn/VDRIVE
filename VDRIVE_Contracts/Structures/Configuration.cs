@@ -4,6 +4,7 @@ namespace VDRIVE_Contracts.Structures
 {
     public class Configuration : IConfiguration
     {
+        public IList<string> AllowedAuthTokens { get; set; } = new List<string>();
         public string StorageAdapter { get; set; }
         public string FloppyResolver { get; set; }
         public string LoggingLevel { get; set; }
@@ -23,7 +24,6 @@ namespace VDRIVE_Contracts.Structures
         public int? SendTimeoutSeconds { get; set; }
         public int? ReceiveTimeoutSeconds { get; set; }
         public StorageAdapterSettings StorageAdapterSettings { get; set; }
-        public FloppyResolverSettings FloppyResolverSettings { get; set; }
-        
+        public FloppyResolverSettings FloppyResolverSettings { get; set; }       
     }
 }

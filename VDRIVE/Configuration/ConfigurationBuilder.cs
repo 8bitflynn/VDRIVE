@@ -18,11 +18,11 @@ namespace VDRIVE.Configuration
                 .Build();
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configRoot.GetSection("AppSettings").Get<VDRIVE_Contracts.Structures.Configuration>();
 
-            if (string.IsNullOrEmpty(configuration.TempPath))
+            if (configuration == null)
             {
-                // use system default
-                configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            }
+                this.Logger.LogMessage("Could not load the AppSettings", VDRIVE_Contracts.Enums.LogSeverity.Critical);
+                return null;
+            }          
 
             this.EnsureDefaultValues(configuration);
 
@@ -33,7 +33,8 @@ namespace VDRIVE.Configuration
         {
             if (string.IsNullOrEmpty(configuration.TempPath))
             {
-                // use system   default
+                // use system default 
+                // TODO: test on linux
                 configuration.TempPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             }            
             configuration.ChunkSize = configuration.ChunkSize == 0 ? (ushort)1024 : configuration.ChunkSize;
@@ -203,6 +204,7 @@ namespace VDRIVE.Configuration
             }
 
             this.Logger.LogMessage("VDRIVE Configuration:");
+            this.Logger.LogMessage($"  AllowedAuthTokens: { (configuration.AllowedAuthTokens.Count == 0 ? "All" : string.Join(", ", configuration.AllowedAuthTokens))}");
             this.Logger.LogMessage($"  StorageAdapter: {configuration.StorageAdapter}");
             this.Logger.LogMessage($"  FloppyResolver: {configuration.FloppyResolver}");   
             this.Logger.LogMessage($"  LoggingLevel: {configuration.LoggingLevel}");
