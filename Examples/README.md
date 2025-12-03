@@ -4,7 +4,7 @@ This directory contains two minimal examples showing how to use **VDRIVE** progr
 
 1. Search for a known floppy image by name (`DATA4.D64`)
 2. Mount it by name (number works too, but names are more reliable)
-3. LOAD a known file from that mounted disk into RAM, optionally using the secondary address to control the load location
+3. LOAD a known file (portal) from that mounted disk into RAM, optionally using the secondary address to control the load location
 
 ### `testapimin-bas.bas`
 A short, plain‑text BASIC program demonstrating the search → mount → load sequence with minimal code.
