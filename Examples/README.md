@@ -1,5 +1,5 @@
 ### Demo Video
-[BASIC using VDRIVE API to LOAD PORTAL](https://github.com/8bitflynn/VDRIVE/blob/master/Examples/README.md)
+[BASIC using API to SEARCH/MOUNT/LOAD](https://8bitflynn.io/Resources/Videos/VDRIVE_BASIC_ILOAD.m4v)
 
 Typical API usage would be for assets like graphics, sound or executable code.
 
