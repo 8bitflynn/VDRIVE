@@ -14,7 +14,7 @@ This directory contains two minimal examples showing how to use **VDRIVE** progr
 ### `testapimin-bas.bas`
 A short, plain‑text BASIC program demonstrating the search → mount → load sequence with minimal code.
 
-### `testapimin-ml.prg`
+### `testapimin-ml.asm`
 A Machine Language version of the same workflow, written for the **ACME assembler**, useful for integrating VDRIVE calls into assembly projects.
 
 ---
