@@ -29,7 +29,7 @@ Docs will land at <a href="https://8bitflynn.io/Projects" target="_blank">https:
      align="right"/>
 
 <div style="border: 2px solid #0077cc; padding: 10px; background-color: #f0f8ff; margin-bottom: 15px;">
-  The <a href="https://wic64.net/web/" target="_blank">WiC64</a> implementation of VDDRIVE is fully functional! WiC64 is memory-mapped directly to the C64, so it bypasses the problems with serial communicaions altogether and can load large (for a C64) binaries instantly.
+  The <a href="https://wic64.net/web/" target="_blank">WiC64</a> implementation of VDRIVE is fully functional! WiC64 is memory-mapped directly to the C64, so it bypasses the problems with serial communicaions altogether and can load large (for a C64) binaries instantly.
 </div>
 
 <h3>ESP8266 WiFi Modem (Serial-Based)</h3>
