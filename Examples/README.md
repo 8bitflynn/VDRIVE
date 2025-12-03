@@ -21,7 +21,7 @@ A Machine Language version of the same workflow, written for the **ACME assemble
 
 ### VDRIVE API Jump Table & Pointers Reference
 
-The following example shows the VDRIVE API entry points and programmatic interface pointers.  
+The following example shows the VDRIVE API entry points and programmatic interface pointers in both HEX and Decimal.
 These are the addresses you can `jmp` to or dereference when interacting with VDRIVE in either interactive or direct mode.
 
 ```asm
