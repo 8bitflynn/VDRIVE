@@ -1,3 +1,8 @@
+## Video Example
+<a href="https://8bitflynn.io/Resources/Videos/VDRIVE_Jukebox.m4v" target="_blank">BASIC using VDRIVE API to LOAD PORTAL</a>. 
+
+Typically API usage would be for assets like graphics and sound or executable code.
+
 ## Example Programs
 
 This directory contains two minimal examples showing how to use **VDRIVE** programmatically to:
