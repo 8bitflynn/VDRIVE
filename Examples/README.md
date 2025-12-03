@@ -1,7 +1,7 @@
 ## Video Example
 <a href="https://8bitflynn.io/Resources/Videos/VDRIVE_BASIC_ILOAD.m4v" target="_blank">BASIC using VDRIVE API to LOAD PORTAL</a>. 
 
-Typically API usage would be for assets like graphics and sound or executable code.
+Typical API usage would be for assets like graphics, sound or executable code.
 
 ## Example Programs
 
