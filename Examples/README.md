@@ -25,9 +25,11 @@ The following example shows the VDRIVE API entry points and programmatic interfa
 These are the addresses you can `jmp` to or dereference when interacting with VDRIVE in either interactive or direct mode.
 
 ```asm
-; interactive mode jmps
+; enable / disable vdrive
 jmp enable_vdrive              ; $C000 / 49152
 jmp disable_vdrive             ; $C003 / 49155
+
+; interactive mode jmps
 jmp vdrive_search_floppies     ; $C006 / 49158
 jmp vdrive_mount_floppy        ; $C009 / 49161
 
