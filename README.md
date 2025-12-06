@@ -1,3 +1,10 @@
+## VDRIVE Quickstart
+
+Looking to run **VDRIVE** without building from source?  
+Grab the ready‑to‑run binaries from the [v1.0.0‑beta release](https://github.com/8bitflynn/VDRIVE/releases/tag/v1.0.0-beta).
+
+---
+
 ## VDRIVE
 <img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
 
