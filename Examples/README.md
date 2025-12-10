@@ -3,6 +3,8 @@
 
 Typical API usage: graphics, sound, or executable code.
 
+Note: Calling ILOAD directly avoids restarting the BASIC PRG, and multiple resources can be loaded.
+
 ---
 
 ## Example Programs
