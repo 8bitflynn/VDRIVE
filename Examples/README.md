@@ -5,17 +5,24 @@ Typical API usage would be for assets like graphics, sound or executable code.
 
 ## Example Programs
 
-This directory contains two minimal examples showing how to use **VDRIVE** programmatically to:
-
-1. Search for a known floppy image by name (`DATA4.D64`)
-2. Mount it by name (number works too, but names are more reliable)
-3. LOAD a known file (portal) from that mounted disk into RAM, optionally using the secondary address to control the load location
-
-### `testapimin-bas.bas`
+### `testload.bas`
 A short, plain‑text BASIC program demonstrating the search → mount → load sequence with minimal code.
 
-### `testapimin-ml.asm`
-A Machine Language version of the same workflow, written for the **ACME assembler**, useful for integrating VDRIVE calls into assembly projects.
+### `testload-ml.asm`
+A Machine Language version of the same workflow, written for the **ACME assembler**, useful for integrating VDRIVE LOAD memory calls into assembly projects.
+
+### `testsave.bas`
+A short, plain‑text BASIC program demonstrating the search → mount → save sequence with minimal code. Useful for integrating VDRIVE SAVE memory calls into BASIC projects. This example saves the PRG itself however edit lines 200 (the start address) and 210 (the end address) to change where in memory is saved.
+
+For example saving screen memory $0400 - $0800 (1024 bytes)
+
+```BASIC
+    200 poke 193,0:poke 194,4
+    210 poke 174,0:poke 175,8
+```
+
+### `testsave-ml.asm`
+A Machine Language version of the same workflow, written for the **ACME assembler**, useful for integrating VDRIVE SAVE memory calls into assembly projects.
 
 ---
 
