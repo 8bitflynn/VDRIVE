@@ -2,7 +2,7 @@
 ; Demonstrates programmatic SAVE using vdrive direct API
 ;
 ; Usage:
-;   1. Load vdrivewic7.prg and enable: SYS 49152
+;   1. Load vdrivewic64.prg and enable: SYS 49152
 ;   2. Load this test: LOAD"TESTSAVE-ML.PRG",8,1
 ;   3. Run test: SYS 4096
 ;
@@ -89,3 +89,4 @@ file_name:
         !text "TESTSAVE"
         
 end_marker:
+
