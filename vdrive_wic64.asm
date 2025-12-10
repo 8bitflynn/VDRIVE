@@ -11,6 +11,8 @@ sec_addr       = $b9
 load_mode      = $a7
 start_addr_lo  = $c1
 start_addr_hi  = $c2
+alt_address_lo = $c3
+alt_address_hi = $c4
 
 ; read/write indirect pointers in ZP
 temp_ptr_lo    = $fd
@@ -268,9 +270,9 @@ fn_copy_done:
     bne .use_file_address   ; SA != 0: use file's address
     
     ; SA=0: use address from $C3/$C4 (MEMUSS - specifically for serial bus SA=0 loads)
-    lda $c3
+    lda alt_address_lo
     sta dest_ptr_lo
-    lda $c4
+    lda alt_address_hi
     sta dest_ptr_hi
 
 .use_file_address:
@@ -726,13 +728,12 @@ vdrive_mount_direct:
     sta interactive_mode
     ; Fall through to mount_common
     
-mount_common:
-    ; Always init WIC64 even if empty input (to ensure cleanup happens)
-    jsr init_wic64
-    
+mount_common:    
     ; check if user entered anything
     lda user_input_length
-    beq mount_floppy_exit
+    beq mount_floppy_exit_no_cleanup
+
+    jsr init_wic64
     
     ; Prepend session ID to mount ID
     jsr prepend_session_to_data
@@ -1000,11 +1001,14 @@ fn_copy_done_save:
     jsr cleanup_wic64
     
     ; Print server response (skip session header + error code = 3 bytes)
+    lda $9d
+    beq .skip_save_msg
     lda #<(response_buffer+3)
     sta temp_ptr_lo
     lda #>(response_buffer+3)
     sta temp_ptr_hi
     jsr print_from_ptr
+.skip_save_msg:
     
     clc
     rts
@@ -1396,12 +1400,12 @@ user_input:
 ; Format: Null-terminated string, max 80 bytes
 http_url:
     !text "http://192.168.1.222/",0
-    !fill 59,0  ; Pad to 80 bytes total (21 bytes used + 59 padding)
+    !fill 59,0  ; Pad to 80 bytes total
 
 ; *** TOKEN - patch binary zero term***
 ; if filled in is passed after the prefixes in the url
 ; and is intended for a simple auth mechanism
-; Format: Null-terminated string, max 16 bytes
+; Format: Null-terminated string, max 8 bytes
 token:    
     !fill 8,0  ; Empty by default, user can patch if needed
 
@@ -1412,4 +1416,4 @@ http_request:
     !fill 128,0
 
 response_buffer:
-    !fill 512,0  ; 512 bytes response buffer at end of code
+    !fill 512,0 
