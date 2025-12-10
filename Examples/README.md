@@ -43,8 +43,8 @@ jmp vdrive_mount_floppy        ; $C009 / 49161
 ; direct mode jmps (programmatic)
 jmp vdrive_search_direct       ; $C00C / 49164
 jmp vdrive_mount_direct        ; $C00F / 49167
-jmp vdrive_iload_direct        ; $C012 / 49170
-jmp vdrive_isave_direct        ; $C015 / 49173
+jmp vdrive_iload_direct        ; $C012 / 49170 (or call ILOAD vector ($0330-$0331))
+jmp vdrive_isave_direct        ; $C015 / 49173 (or call ISAVE vector ($0332-$0333))
 
 ; reboot WiC64 to original state
 jmp reboot_wic64               ; $C018 / 49176
