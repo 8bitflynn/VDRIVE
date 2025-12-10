@@ -15,8 +15,10 @@ Typical API usage: graphics, sound, or executable code.
 - **`testsave.bas`** — minimal BASIC program showing search → mount → save.  
   Edit lines 200/210 to change memory range. Example: saving screen memory $0400–$0800:
 
+```BASIC
       200 poke 193,0:poke 194,4
       210 poke 174,0:poke 175,8
+```
 
 - **`testsave-ml.asm`** — ACME assembler version, integrates VDRIVE SAVE calls.
 
@@ -26,6 +28,7 @@ Typical API usage: graphics, sound, or executable code.
 
 ### Jump Table (HEX / Decimal)
 
+```asm
     ; enable / disable vdrive
     jmp enable_vdrive              ; $C000 / 49152
     jmp disable_vdrive             ; $C003 / 49155
@@ -42,9 +45,11 @@ Typical API usage: graphics, sound, or executable code.
 
     ; reboot WiC64
     jmp reboot_wic64               ; $C018 / 49176
+```
 
 ### Programmatic Interface Pointers
 
+```asm
     api_user_input_ptr:        !word user_input          ; $C01B/$C01C (49179/49180)
     api_user_input_len_ptr:    !word user_input_length   ; $C01D/$C01E (49181/49182)
     api_http_url_ptr:          !word http_url            ; $C01F/$C020 (49183/49184)
@@ -52,3 +57,4 @@ Typical API usage: graphics, sound, or executable code.
     api_vdrive_devnum_ptr:     !word vdrive_devnum       ; $C023/$C024 (49187/49188)
     api_vdrive_retcode_ptr:    !word vdrive_retcode      ; $C025/$C026 (49189/49190)
     api_search_result_count_ptr: !word search_result_count ; $C027/$C028 (49191/49192)
+```
