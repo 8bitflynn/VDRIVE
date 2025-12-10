@@ -16,7 +16,7 @@ Note: Calling ILOAD directly avoids restarting the BASIC PRG, and multiple resou
 ### Save Workflow
 - **`testsave.bas`** — minimal BASIC program showing search → mount → save.  
 
-  Edit lines 200/210 of this PRG to change the SAVE memory range.
+  Edit lines 200/220 of this PRG to change the SAVE memory range.
 
   Example: saving screen memory $0400–$0800:
 
