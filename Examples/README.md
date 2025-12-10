@@ -23,6 +23,7 @@ Note: Calling ILOAD directly avoids restarting the BASIC PRG, and multiple resou
 ```BASIC
       200 poke 193,0:poke 194,4
       210 poke 174,0:poke 175,8
+DELETE LINE 220
 ```
 
 - **`testsave-ml.asm`** — ACME assembler version, integrates VDRIVE SAVE calls.
