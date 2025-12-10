@@ -13,12 +13,15 @@ Typical API usage: graphics, sound, or executable code.
 
 ### Save Workflow
 - **`testsave.bas`** — minimal BASIC program showing search → mount → save.  
-  Edit lines 200/210 to change memory range. Example: saving screen memory $0400–$0800:
+
+  Edit lines 200/210 of this PRG to change the SAVE memory range.
+
+  Example: saving screen memory $0400–$0800:
 
 ```BASIC
       200 poke 193,0:poke 194,4
       210 poke 174,0:poke 175,8
-      220 DELETE THEN LINE
+      220 DELETE THIS LINE
 ```
 
 - **`testsave-ml.asm`** — ACME assembler version, integrates VDRIVE SAVE calls.
