@@ -10,6 +10,12 @@ input_ptr = $fb
 len_ptr = $fd
 
 start:
+        lda #8
+        sta $ba    ; Set device number to 8
+
+        lda #1
+        sta $b9    ; Set secondary address to 1 (standard for LOAD   
+
         ; Get API pointers
         lda $c01b           ; Input buffer pointer low
         sta input_ptr
@@ -62,4 +68,5 @@ start:
         jmp $c012           ; Jump to load direct API (tail call)
 
 disk_name:  !text "DATA4.D64"
+
 file_name:  !text "PORTAL"
