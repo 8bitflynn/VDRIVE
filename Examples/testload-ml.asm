@@ -14,7 +14,7 @@ start:
         sta $ba    ; Set device number to 8
 
         lda #1
-        sta $b9    ; Set secondary address to 1 (standard for LOAD   
+        sta $b9    ; Set secondary address to 1 to use header address  
 
         ; Get API pointers
         lda $c01b           ; Input buffer pointer low
@@ -70,3 +70,4 @@ start:
 disk_name:  !text "DATA4.D64"
 
 file_name:  !text "PORTAL"
+
