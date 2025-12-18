@@ -9,7 +9,7 @@ Demonstrations of VDRIVE capabilities:
 
 - [PRG LOAD](https://8bitflynn.io/Resources/Videos/VDRIVE_COMMANDO.m4v) - Loading Commando PRG from search results.
 - [Paging](https://8bitflynn.io/Resources/Videos/VDRIVE_PAGING.m4v) - Search supports up to 65,535 results.
-- [Remote](https://8bitflynn.io/Resources/Videos/SearchMountVDRIVETest.m4v) - Searching Commodore.Software and mounting disks.
+- [Remote](https://8bitflynn.io/Resources/Videos/VDRIVE_WIC64_Test.m4v) - Searching Commodore.Software from internet and mounting disks.
 - [BASIC ILOAD](https://8bitflynn.io/Resources/Videos/VDRIVE_BASIC_ILOAD.m4v) - Using C64 BASIC to programmatically search / mount / load.
 - [Jukebox](https://8bitflynn.io/Resources/Videos/VDRIVE_HVSCPSID.m4v) - Using the HvscPsid floppy resolver to search the High Voltage SID Collection and then mount, calling PSID64 to automatically convert raw SID files to PRG so the C64 can play them instantly.
 
