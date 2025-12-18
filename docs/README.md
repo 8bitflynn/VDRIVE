@@ -17,8 +17,7 @@ This section explains each field in `appsettings.json` for VDRIVE.
   - **Vice** — Uses `c1541.exe`, mostly tested with version 2.4 but also works with 3.9.
 
 ### Floppy Resolver
-- **FloppyResolver** — Defines how disk images are located.  
-  Options: `Local`, `CommodoreSoftware`, `HvscPsid`.
+- **FloppyResolver** — Defines how disk images are located.    
   - **Local** — Scans directories (recursive if enabled). Supports `.d64`, `.prg`, etc.
   - **CommodoreSoftware** — Remote search via [Commodore.Software](https://commodore.software). 
   - **HvscPsid** — SID music resolver using `psid64.exe` with flags (`-v`, `-c`, `-r`, `-q`).
