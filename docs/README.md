@@ -18,10 +18,10 @@ This section explains each field in `appsettings.json` for VDRIVE.
 
 ### Floppy Resolver
 - **FloppyResolver** — Defines how disk images are located.  
-  Options: `Local`, `CommodoreSoftware`, `C64`, `HvscPsid`.
-- **Local** — Scans directories (recursive if enabled). Supports `.d64`, `.prg`, etc.
-- **CommodoreSoftware** — Remote search via [Commodore.Software](https://commodore.software). 
-- **HvscPsid** — SID music resolver using `psid64.exe` with flags (`-v`, `-c`, `-r`, `-q`).
+  Options: `Local`, `CommodoreSoftware`, `HvscPsid`.
+  - **Local** — Scans directories (recursive if enabled). Supports `.d64`, `.prg`, etc.
+  - **CommodoreSoftware** — Remote search via [Commodore.Software](https://commodore.software). 
+  - **HvscPsid** — SID music resolver using `psid64.exe` with flags (`-v`, `-c`, `-r`, `-q`).
 
 ### Logging
 - **LoggingLevel** — Controls verbosity.  
