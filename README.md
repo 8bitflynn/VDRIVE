@@ -64,6 +64,8 @@ VDRIVE also includes a [HvscPsidFloppyResolver](https://github.com/8bitflynn/VDR
 Edit `appsettings.json` to define the search paths VDRIVE should scan.  
 Optionally, configure a remote `IFloppyResolver` for distributed setups.
 
+See the [Configuration Reference](docs/README.md) for detailed options.
+
 ### 4. Run the VDRIVE Server/Client
 Launch the C# .NET Core server (or client, if the firmware is in server mode).  
 VDRIVE runs on [any OS with .NET Core runtime](https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md).
