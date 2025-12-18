@@ -14,7 +14,7 @@ Demonstrations of VDRIVE capabilities:
 - [Jukebox](https://8bitflynn.io/Resources/Videos/VDRIVE_HVSCPSID.m4v) - Using the HvscPsid floppy resolver to search the High Voltage SID Collection and then mount, calling PSID64 to automatically convert raw SID files to PRG so the C64 can play them instantly.
 
 Looking to build on top of VDRIVE?  
-Explore the [Examples](https://github.com/8bitflynn/VDRIVE/tree/master/Examples) directory for sample projects and integrations. MMO's on the C64 should be possible 
+Explore the [Examples](https://github.com/8bitflynn/VDRIVE/tree/master/Examples) directory for sample projects and integrations.
 
 ---
 
