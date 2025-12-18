@@ -23,7 +23,7 @@ Explore the [Examples](https://github.com/8bitflynn/VDRIVE/tree/master/Examples)
 
 **Wirelessly SEARCH/MOUNT disk images and LOAD/SAVE data to/from your Commodore 64!**
 
-- VDRIVE is a free, open‑source tool built for modern flexibility in retro workflows. It enables remote disk access, mount/unmount control, and HTTP support directly from your C64.
+- VDRIVE is a free, open‑source tool built for modern flexibility in retro workflows. It enables remote disk access, search/mount control, and HTTP support directly from your C64.
 - Designed with developers in mind, VDRIVE allows programmers, artists, and musicians to share disk images in real time. Save work on the C64, inspect or modify it with modern tools, then load it back instantly — no SD card swaps or manual copying.
 - VDRIVE supports safe concurrency: multiple C64s can LOAD and SAVE to the same disk image without corruption. File access is synchronized with read/write locks, following a Last‑Write‑Wins model for simplicity and performance.
 
