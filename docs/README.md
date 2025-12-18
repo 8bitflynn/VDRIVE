@@ -7,7 +7,7 @@ This section explains each field in `appsettings.json` for VDRIVE.
   - Tokens are 8 bytes and null‑terminated. They are embedded in the PRG binary and must currently be patched manually. Tokens are typically used over public networks **but are not necessary** when running VDRIVE locally.
   - Default is to allow all vdrive clients.
 
-### Storage
+### Storage Adapter
 - **StorageAdapter** — Backend tool for disk image operations.  
   Options: `DirMaster`, `Vice`. Default: Vice.
 - **StorageAdapterSettings**:
@@ -36,7 +36,7 @@ This section explains each field in `appsettings.json` for VDRIVE.
 ### Temporary Storage
 - **TempPath** — Custom temp directory (empty = system default).
 - **TempFolder** — Scratch folder name. Default: `VDRIVE_Scratch`.
-- **Chunksize** — Data chunk size in bytes. Default: 1024.
+- **Chunksize** — Data chunk size in bytes. Default: 1024. (Legacy only) 
   
 ### Networking
 - **ServerOrClientMode** — Always `Server` in WiC64. (Client mode was legacy only.)
