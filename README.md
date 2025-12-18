@@ -18,7 +18,7 @@ Explore the [Examples](https://github.com/8bitflynn/VDRIVE/tree/master/Examples)
 
 ---
 
-## VDRIVE - build from source
+## VDRIVE Highlights
 <img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
 
 **Wirelessly SEARCH/MOUNT disk images and LOAD/SAVE data to/from your Commodore 64!**
