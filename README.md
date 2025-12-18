@@ -3,9 +3,19 @@
 Looking to run **VDRIVE** without building from source?  
 Grab the ready‑to‑run binaries from the [v1.0.0‑beta release](https://github.com/8bitflynn/VDRIVE/releases/tag/v1.0.0-beta).
 
+## VDRIVE Videos
+
+Demonstrations of VDRIVE capabilities:
+
+- [PRG LOAD](https://8bitflynn.io/Resources/Videos/VDRIVE_COMMANDO.m4v) - Loading Commando PRG from search results.
+- [Paging](https://8bitflynn.io/Resources/Videos/VDRIVE_PAGING.m4v) - Search supports up to 65,535 results.
+- [Remote](https://8bitflynn.io/Resources/Videos/SearchMountVDRIVETest.m4v) - Searching Commodore.Software and mounting disks.
+- [BASIC ILOAD](https://8bitflynn.io/Resources/Videos/VDRIVE_BASIC_ILOAD.m4v) - Using C64 BASIC to programmatically search / mount / load.
+- [Jukebox](https://8bitflynn.io/Resources/Videos/VDRIVE_HVSCPSID.m4v) - Using the HvscPsid floppy resolver to search the High Voltage SID Collection and then mount, calling PSID64 to automatically convert raw SID files to PRG so the C64 can play them instantly.
+
 ---
 
-## VDRIVE
+## VDRIVE - build from source
 <img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
 
 **Wirelessly SEARCH/MOUNT disk images and LOAD/SAVE data to/from your Commodore 64!**
@@ -90,7 +100,7 @@ SYS 49161   : Mount a different floppy from previous search
 
 ### Known Limitations
 
-- VDRIVE runs at `$C000`, so any `LOAD` that hits that region will crash it. Eventually, full image transfers (e.g., D64) to SDIEC or other devices will be supported. A 
+- VDRIVE runs at `$C000`, so any `LOAD` that hits that region will crash it. VDRIVE will return a file not found by default if loading to a known area that will crash the C64.
 
 > VDRIVE is functional, but still evolving. Expect rough edges — and feel free to contribute or fork.
 
