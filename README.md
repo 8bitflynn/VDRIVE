@@ -1,3 +1,14 @@
+## VDRIVE Highlights
+<img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
+
+**Wirelessly SEARCH/MOUNT disk images and LOAD/SAVE data to/from your Commodore 64!**
+
+- VDRIVE is a free, open‑source tool built for modern flexibility in retro workflows. It enables remote disk access, search/mount control, and HTTP support directly from your C64.
+- Designed with developers in mind, VDRIVE allows programmers, artists, and musicians to share disk images in real time. Save work on the C64, inspect or modify it with modern tools, then load it back instantly — no SD card swaps or manual copying.
+- VDRIVE supports safe concurrency: multiple C64s can LOAD and SAVE to the same disk image without corruption. File access is synchronized with read/write locks, following a Last‑Write‑Wins model for simplicity and performance.
+
+---
+
 ## VDRIVE Quickstart
 
 Looking to run **VDRIVE** without building from source?  
@@ -70,17 +81,6 @@ This section explains each field in `appsettings.json` for VDRIVE.
 - **ServerListenAddress** — Bind address. Default: `http://*:`
 - **ServerPort** — Default: `80`.
 - **SendTimeoutSeconds** / **ReceiveTimeoutSeconds** — Default: 15 each.
-
----
-
-## VDRIVE Highlights
-<img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
-
-**Wirelessly SEARCH/MOUNT disk images and LOAD/SAVE data to/from your Commodore 64!**
-
-- VDRIVE is a free, open‑source tool built for modern flexibility in retro workflows. It enables remote disk access, search/mount control, and HTTP support directly from your C64.
-- Designed with developers in mind, VDRIVE allows programmers, artists, and musicians to share disk images in real time. Save work on the C64, inspect or modify it with modern tools, then load it back instantly — no SD card swaps or manual copying.
-- VDRIVE supports safe concurrency: multiple C64s can LOAD and SAVE to the same disk image without corruption. File access is synchronized with read/write locks, following a Last‑Write‑Wins model for simplicity and performance.
 
 ---
 
