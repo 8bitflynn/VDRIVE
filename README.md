@@ -22,6 +22,57 @@ Explore the [Examples](https://github.com/8bitflynn/VDRIVE/tree/master/Examples)
 
 ---
 
+## VDRIVE Server Configuration Reference
+
+This section explains each field in `appsettings.json` for VDRIVE.
+
+### Authentication
+
+- **AllowedAuthTokens** — Optional list of tokens permitted to access the service. Empty = all clients allowed.
+
+### Storage
+
+- **StorageAdapter** — Backend tool for disk image operations. Options: `DirMaster`, `Vice`. Default: Vice.
+- **StorageAdapterSettings**:
+  - **ReadOnly** — Prevent modifications if true.
+  - **NewFloppyPath** — Directory for new floppy images.
+  - **DirMaster** — Python + CBMdisk integration.
+  - **Vice** — Uses `c1541.exe`, tested with version 2.4.
+
+### Floppy Resolver
+
+- **FloppyResolver** — Defines how disk images are located. Options: `Local`, `CommodoreSoftware`, `HvscPsid`.
+- **Local** — Scans directories (recursive if enabled). Supports `.d64`, `.prg`, etc.
+- **CommodoreSoftware** — Remote search via [Commodore.Software](https://commodore.software/).
+- **HvscPsid** — SID music resolver using `psid64.exe`.
+
+### Logging
+
+- **LoggingLevel** — Controls verbosity. Options: Verbose, Info, Warning, Error, Critical. Default: Verbose.
+
+### Session & Search
+
+- **SessionTimeoutMinutes** — Default 90.
+- **MaxSearchResults** — Default 65535.
+- **SearchPageSize** — Default 12.
+- **SearchIntroMessage** — Optional banner text.
+
+### Temporary Storage
+
+- **TempPath** — Custom temp directory (empty = system default).
+- **TempFolder** — Scratch folder name. Default: VDRIVE_Scratch.
+- **Chunksize** — Data chunk size in bytes. Default: 1024.
+
+### Networking (WiC64)
+
+- **ServerOrClientMode** — Always `Server` in WiC64.
+- **ServerType** — Always `Http`.
+- **ServerListenAddress** — Bind address. Default: `http://*:`
+- **ServerPort** — Default: `80`.
+- **SendTimeoutSeconds** / **ReceiveTimeoutSeconds** — Default: 15 each.
+
+---
+
 ## VDRIVE Highlights
 <img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE Logo" width="120" align="right"/>
 
@@ -87,7 +138,7 @@ See the [Configuration Reference](docs/README.md) for detailed options.
 Launch the C# .NET Core server (or client, if the firmware is in server mode).  
 VDRIVE runs on [any OS with .NET Core runtime](https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md).
 
-### 5. Test on Real Hardware
+### 5. Test on Real Hardware (or Vice WiC64 Emulation)
 From your Commodore 64:
 
 ```text
