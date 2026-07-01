@@ -14,7 +14,7 @@
 Looking to run **VDRIVE** without building from source?  
 Grab the ready‑to‑run binaries from the [v1.0.0‑beta release](https://github.com/8bitflynn/VDRIVE/releases/tag/v1.0.0-beta).
 
-Don't have a real Commodore 64 or a WiC64? Use Vice 3.10 with WiC64 emulation turned on. It can be found in Settings-->Userport devices. No other settings need to be changed as the binary embeds the URL which can be patched as needed by your favorite HEX editor.
+Don't have a real Commodore 64 or a WiC64? Use Vice 3.10 with WiC64 emulation turned on. It can be found in Settings-->Userport devices. No other settings need to be changed as the binary embeds the URL which can be patched as needed by your favorite [HEX editor](https://mh-nexus.de/en/hxd/).
 
 <img width="469" height="318" alt="image" src="https://github.com/user-attachments/assets/b17e5ac9-3506-4b88-9b66-6ddf2bf629ab" />
 
@@ -24,7 +24,7 @@ Demonstrations of VDRIVE capabilities:
 
 - [PRG LOAD](https://8bitflynn.io/Resources/Videos/VDRIVE_COMMANDO.m4v) - Loading Commando PRG from search results.
 - [Paging](https://8bitflynn.io/Resources/Videos/VDRIVE_PAGING.m4v) - Search supports up to 65,535 results.
-- [Remote](https://8bitflynn.io/Resources/Videos/VDRIVE_WIC64_Test.m4v) - Searching Commodore.Software from internet and mounting disks.
+- [Remote](https://8bitflynn.io/Resources/Videos/VDRIVE_WIC64_Test.m4v) - Searching [Commodore.Software](https://commodore.software/) from internet and mounting disks.
 - [BASIC ILOAD](https://8bitflynn.io/Resources/Videos/VDRIVE_BASIC_ILOAD.m4v) - Using C64 BASIC to programmatically search / mount / load.
 - [Jukebox](https://8bitflynn.io/Resources/Videos/VDRIVE_HVSCPSID.m4v) - Using the HvscPsid floppy resolver to search the [High Voltage SID Collection](https://www.hvsc.c64.org/) and then mount, calling [PSID64](https://psid64.sourceforge.io/) to automatically convert raw SID files to PRG so the C64 can play them instantly.
 
