@@ -14,9 +14,15 @@
 Looking to run **VDRIVE** without building from source?  
 Grab the ready‑to‑run binaries from the [v1.0.0‑beta release](https://github.com/8bitflynn/VDRIVE/releases/tag/v1.0.0-beta).
 
-Don't have a real Commodore 64 or a [WiC64](https://wic64.net/web/)? Use [Vice 3.10](https://vice-emu.sourceforge.io/index.html#download) with WiC64 emulation turned on. It can be found in Settings-->Userport devices. No other settings need to be changed as the binary embeds the URL which can be patched as needed by your favorite [HEX editor](https://mh-nexus.de/en/hxd/).
+Don't have a real Commodore 64 or a [WiC64](https://wic64.net/web/)? Use [Vice 3.10](https://vice-emu.sourceforge.io/index.html#download) with WiC64 emulation turned on. It can be found in Settings-->Userport devices. 
 
 <img width="469" height="318" alt="image" src="https://github.com/user-attachments/assets/b17e5ac9-3506-4b88-9b66-6ddf2bf629ab" />
+
+No other settings need to be changed as the binary embeds the URL which can be patched as needed by your favorite [HEX editor](https://mh-nexus.de/en/hxd/). 
+
+Edit the URL to point to your VDRIVE Server instance (80 chars max starting at 0xD15) using an IP address like HTTP://192.168.1.xxx
+
+<img width="849" height="190" alt="image" src="https://github.com/user-attachments/assets/a8b5bd47-fd80-40fd-9284-f97acadd5531" />
 
 ## VDRIVE Videos
 
