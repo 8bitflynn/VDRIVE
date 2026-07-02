@@ -20,7 +20,7 @@ Don't have a real Commodore 64 or a [WiC64](https://wic64.net/web/)? Use [Vice 3
 
 No other settings need to be changed as the vdrivewic64.prg C64 binary embeds the URL, which can be patched as needed by your favorite [HEX editor](https://mh-nexus.de/en/hxd/). 
 
-Open "vdrivewic64.prg" with a HEX editor and point the URL at 0xD15 (see image) to your local VDRIVE Servers IP address. Max 80 characters - for example HTTP://192.168.1.222.
+Open "vdrivewic64.prg" with a HEX editor and point the URL to your local VDRIVE Servers IP address. Max 80 characters - for example HTTP://192.168.1.222.
 
 <img width="849" height="190" alt="image" src="https://github.com/user-attachments/assets/a8b5bd47-fd80-40fd-9284-f97acadd5531" />
 
