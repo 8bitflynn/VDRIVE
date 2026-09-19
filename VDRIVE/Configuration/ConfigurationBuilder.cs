@@ -1,10 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
+using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE.Configuration
 {
     public class ConfigurationBuilder : VDRIVE_Contracts.Interfaces.IConfigurationBuilder
     {
-        public ConfigurationBuilder(VDRIVE_Contracts.Interfaces.ILogger logger)
+        public ConfigurationBuilder(ILogger logger)
         {
             this.Logger = logger;
         }
@@ -236,20 +237,22 @@ namespace VDRIVE.Configuration
             // Storage adapter settings
             if (configuration.StorageAdapterSettings != null)
             {
-                this.Logger.LogMessage("  StorageAdapterSettings:");
-                this.Logger.LogMessage($"  LockTimeoutSeconds: {configuration.StorageAdapterSettings.LockTimeoutSeconds}");
+                this.Logger.LogMessage($"  StorageAdapterSettings:");
+                this.Logger.LogMessage($"   Readonly: {configuration.StorageAdapterSettings.Readonly}");
+                this.Logger.LogMessage($"   NewFloppyPath: {configuration.StorageAdapterSettings.NewFloppyPath}");
+                this.Logger.LogMessage($"   LockTimeoutSeconds: {configuration.StorageAdapterSettings.LockTimeoutSeconds}");
                 
                 if (configuration.StorageAdapterSettings.DirMaster != null && configuration.StorageAdapter == "DirMaster")
                 {
-                    this.Logger.LogMessage($"    DirMaster ExecutablePath: {configuration.StorageAdapterSettings.DirMaster.ExecutablePath}");
-                    this.Logger.LogMessage($"    DirMaster ScriptPath: {configuration.StorageAdapterSettings.DirMaster.ScriptPath}");
-                    this.Logger.LogMessage($"    DirMaster CBMDiskPath: {configuration.StorageAdapterSettings.DirMaster.CBMDiskPath}");
+                    this.Logger.LogMessage($"       DirMaster ExecutablePath: {configuration.StorageAdapterSettings.DirMaster.ExecutablePath}");
+                    this.Logger.LogMessage($"       DirMaster ScriptPath: {configuration.StorageAdapterSettings.DirMaster.ScriptPath}");
+                    this.Logger.LogMessage($"       DirMaster CBMDiskPath: {configuration.StorageAdapterSettings.DirMaster.CBMDiskPath}");
                 }
                 if (configuration.StorageAdapterSettings.Vice != null && configuration.StorageAdapter == "Vice")
                 {
-                    this.Logger.LogMessage($"    Vice ExecutablePath: {configuration.StorageAdapterSettings.Vice.ExecutablePath}");
-                    this.Logger.LogMessage($"    Vice Version: {configuration.StorageAdapterSettings.Vice.Version}");
-                    this.Logger.LogMessage($"    Vice ForceDeleteFirst: {configuration.StorageAdapterSettings.Vice.ForceDeleteFirst}"); 
+                    this.Logger.LogMessage($"       Vice ExecutablePath: {configuration.StorageAdapterSettings.Vice.ExecutablePath}");
+                    this.Logger.LogMessage($"       Vice Version: {configuration.StorageAdapterSettings.Vice.Version}");
+                    this.Logger.LogMessage($"       Vice ForceDeleteFirst: {configuration.StorageAdapterSettings.Vice.ForceDeleteFirst}"); 
                 }               
             }
 

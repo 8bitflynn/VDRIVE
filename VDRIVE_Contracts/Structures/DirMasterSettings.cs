@@ -6,5 +6,4 @@
         public string ScriptPath { get; set; }
         public string CBMDiskPath { get; set; }
     }
-
 }

@@ -8,9 +8,9 @@ namespace VDRIVE.Util
 {
     public class LockingProcessRunner : IProcessRunner
     {
-        public LockingProcessRunner(IConfiguration configurtion, ILogger logger)
+        public LockingProcessRunner(IConfiguration configuration, ILogger logger)
         {
-            this.Configuration = configurtion;
+            this.Configuration = configuration;
             this.Logger = logger;
         }
         private readonly IConfiguration Configuration;

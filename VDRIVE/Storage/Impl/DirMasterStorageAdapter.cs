@@ -2,6 +2,7 @@
 using VDRIVE_Contracts.Enums;
 using VDRIVE_Contracts.Interfaces;
 using VDRIVE_Contracts.Structures;
+using VDRIVE_Contracts.Structures.Http;
 
 namespace VDRIVE.Drive.Impl
 {
@@ -94,28 +95,26 @@ namespace VDRIVE.Drive.Impl
             if (File.Exists(outPrgPath))
                 File.Delete(outPrgPath);         
 
-            string arguments = $"\"{this.Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" load \"{floppyPointer.ImagePath}\" \"{safeName}\"";
+            string arguments = $"\"{this.Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" load \"{floppyPointer.ImagePath}\" \"{safeName}\" {Configuration.StorageAdapterSettings.DirMaster.CBMDiskPath}";
 
             RunProcessParameters runProcessParameters = new RunProcessParameters();
             runProcessParameters.ImagePath = floppyPointer.ImagePath;
             runProcessParameters.Arguments = arguments;
-            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.Vice.ExecutablePath;
+            runProcessParameters.ExecutablePath = this.Configuration.StorageAdapterSettings.DirMaster.ExecutablePath;
             runProcessParameters.LockType = LockType.Read;
             runProcessParameters.LockTimeoutSeconds = this.Configuration.StorageAdapterSettings.LockTimeoutSeconds;
 
             RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
-
-            // TODO: fix this to work with any extension
-            string fulloutputPath = outPrgPath + ".prg";
-            if (File.Exists(fulloutputPath))
+            
+            if (File.Exists(outPrgPath))
             {
                 Logger.LogMessage($"File extracted: {outPrgPath}");
                 responseCode = 0xff; // success
-                return File.ReadAllBytes(fulloutputPath);
+                return File.ReadAllBytes(outPrgPath);
             }
             else
             {
-                Logger.LogMessage($"{safeName}.prg not found in temp directory.", LogSeverity.Error);
+                Logger.LogMessage($"{safeName} not found in temp directory.", LogSeverity.Error);
                 responseCode = 0x04; // file not found
                 return null;
             }           
@@ -156,7 +155,9 @@ namespace VDRIVE.Drive.Impl
 
         private string[] LoadRawDirectoryLines(FloppyPointer floppyPointer)
         {
-            string arguments = $"\"{Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" dir \"{floppyPointer.ImagePath}\"";
+            DateTime dirStart = DateTime.Now;
+
+            string arguments = $"\"{Configuration.StorageAdapterSettings.DirMaster.ScriptPath}\" dir \"{floppyPointer.ImagePath}\" {Configuration.StorageAdapterSettings.DirMaster.CBMDiskPath}";
 
             RunProcessParameters runProcessParameters = new RunProcessParameters();
             runProcessParameters.ImagePath = floppyPointer.ImagePath;
@@ -167,12 +168,27 @@ namespace VDRIVE.Drive.Impl
 
             RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runProcessParameters);
 
+            Logger.LogMessage($"[LoadRawDirectoryLines] dir took {(DateTime.Now - dirStart).TotalMilliseconds}ms");
+
+            // Check for network errors
+            if (runProcessResult.HasError)
+            {
+                Logger.LogMessage($"[LoadRawDirectoryLines] error: {runProcessResult.Error}", LogSeverity.Error);
+                return new string[0];
+            }
+
             string[] rawLines = runProcessResult.Output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             return rawLines;          
         }
 
         public SaveResponse Save(SaveRequest saveRequest, IFloppyResolver floppyResolver, byte[] payload)
         {
+            if (this.Configuration.StorageAdapterSettings.Readonly)
+            {
+                payload = null;
+                return new SaveResponse { ResponseCode = 0x04 }; // for now return file not found
+            }
+
             SaveResponse saveResponse = new SaveResponse();
             saveResponse.ResponseCode = 0xff;
 
@@ -222,6 +238,147 @@ namespace VDRIVE.Drive.Impl
             }
 
             return saveResponse;
+        }
+
+        public CreateFloppyResponse CreateFloppyImage(CreateFloppyRequest createFloppyRequest)
+        {
+            try
+            {
+                // Parse inputs / defaults
+                string diskName = (createFloppyRequest?.Filename ?? "NEW_DISK").Trim();
+                if (string.IsNullOrWhiteSpace(diskName)) diskName = "NEW_DISK";
+
+                string mediaType = (createFloppyRequest?.MediaType ?? "D64").ToUpperInvariant();
+                string label = createFloppyRequest?.InternalName ?? diskName;
+
+                // Map media type -> extension
+                string ext = mediaType switch
+                {
+                    "D81" => ".d81",
+                    "G64" => ".g64",
+                    _ => ".d64"
+                };
+
+                // Target folder: prefer configured NewFloppyPath, fallback to temp created_images
+                string baseDir = this.Configuration.StorageAdapterSettings?.NewFloppyPath;
+                if (string.IsNullOrWhiteSpace(baseDir))
+                {
+                    baseDir = Path.Combine(this.Configuration.TempPath ?? Path.GetTempPath(), this.Configuration.TempFolder ?? "vdrive_tmp", "created_images");
+                }
+
+                if (!Directory.Exists(baseDir))
+                    Directory.CreateDirectory(baseDir);
+
+                // Build safe filename and ensure uniqueness
+                string safeName = string.Join("_", diskName.Split(Path.GetInvalidFileNameChars())).Trim();
+                if (string.IsNullOrWhiteSpace(safeName)) safeName = "NEW_DISK";
+
+                string candidateName = safeName + ext;
+                string fullPath = Path.Combine(baseDir, candidateName);
+                int suffix = 1;
+                while (File.Exists(fullPath))
+                {
+                    fullPath = Path.Combine(baseDir, $"{safeName}_{suffix}{ext}");
+                    suffix++;
+                }
+
+                // DirMaster script + executable
+                string scriptPath = this.Configuration.StorageAdapterSettings?.DirMaster?.ScriptPath;
+                string dirMasterExe = this.Configuration.StorageAdapterSettings?.DirMaster?.ExecutablePath;
+
+                if (string.IsNullOrWhiteSpace(scriptPath) || string.IsNullOrWhiteSpace(dirMasterExe) || !File.Exists(dirMasterExe))
+                {
+                    Logger.LogMessage("[CreateFloppyImage] DirMaster script or executable not configured/found", LogSeverity.Error);
+                    return new CreateFloppyResponse
+                    {
+                        Success = false,
+                        FloppyInfo = null,
+                        ErrorMessage = "DirMaster script or executable not configured/found"
+                    };
+                }
+
+                // Some DirMaster scripts expect media/type tokens differently; use mediaType lowercase token for script
+                string mediaArg = mediaType.ToLowerInvariant();
+
+                // Limit label length similar to c1541 constraints
+                string safeLabel = label.Length > 16 ? label.Substring(0, 16) : label;
+
+                // Build arguments: "<script> create "<fullPath>" <mediaArg> "<label>""
+                string arguments = $"\"{scriptPath}\" create \"{fullPath}\" {mediaArg} \"{safeLabel}\"";
+
+                var runParams = new RunProcessParameters
+                {
+                    ExecutablePath = dirMasterExe,
+                    ImagePath = fullPath,
+                    Arguments = arguments,
+                    LockType = LockType.Write,
+                    LockTimeoutSeconds = this.Configuration.StorageAdapterSettings?.LockTimeoutSeconds ?? 30
+                };
+
+                Logger.LogMessage($"[CreateFloppyImage] Running DirMaster create: {arguments}", LogSeverity.Verbose);
+                RunProcessResult runProcessResult = this.ProcessRunner.RunProcess(runParams);
+
+                if (runProcessResult == null)
+                {
+                    Logger.LogMessage("[CreateFloppyImage] DirMaster did not run (lock timeout or runner returned null)", LogSeverity.Error);
+                    return new CreateFloppyResponse
+                    {
+                        Success = false,
+                        FloppyInfo = null,
+                        ErrorMessage = "DirMaster did not run (lock timeout or runner error)"
+                    };
+                }
+
+                if (runProcessResult.HasError)
+                {
+                    Logger.LogMessage($"[CreateFloppyImage] DirMaster error: {runProcessResult.Error}", LogSeverity.Error);
+                    return new CreateFloppyResponse
+                    {
+                        Success = false,
+                        FloppyInfo = null,
+                        ErrorMessage = $"DirMaster create failed: {runProcessResult.Error ?? runProcessResult.Output}"
+                    };
+                }
+
+                // Verify the created image exists
+                if (!File.Exists(fullPath))
+                {
+                    Logger.LogMessage($"[CreateFloppyImage] Image file not found after DirMaster: {fullPath}", LogSeverity.Error);
+                    return new CreateFloppyResponse
+                    {
+                        Success = false,
+                        FloppyInfo = null,
+                        ErrorMessage = "DirMaster did not create the image file"
+                    };
+                }
+
+                // Build FloppyInfo for resolver (resolver will assign ID on insert)
+                FloppyInfo floppyInfo = new FloppyInfo();
+                floppyInfo.IdLo = 0;
+                floppyInfo.IdHi = 0;
+                string displayName = Path.GetFileName(fullPath);
+                if (displayName.Length > 64) displayName = displayName.Substring(0, 64);
+                floppyInfo.ImageNameLength = (byte)displayName.Length;
+                floppyInfo.ImageName = new char[64];
+                displayName.ToUpperInvariant().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
+
+                return new CreateFloppyResponse
+                {
+                    Success = true,
+                    FloppyInfo = floppyInfo,
+                    ErrorMessage = null
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.LogMessage($"[CreateFloppyImage] Failed: {ex.Message}", LogSeverity.Error);
+                return new CreateFloppyResponse
+                {
+                    Success = false,
+                    FloppyInfo = null,
+                    ErrorMessage = ex.Message
+                };
+            }
         }
     }
 }

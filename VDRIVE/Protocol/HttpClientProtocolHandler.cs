@@ -1,5 +1,4 @@
 ﻿using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using VDRIVE.Floppy.Impl;
 using VDRIVE.Util;
@@ -23,7 +22,7 @@ namespace VDRIVE.Protocol
         private ILogger Logger;
         private HttpListenerContext HttpListenerContext;
 
-        public void HandleClient(ISessionProvider sessionManager)
+        public void HandleClient(ISessionProvider sessionProvider)
         {
             try
             {
@@ -91,12 +90,12 @@ namespace VDRIVE.Protocol
                         this.Logger.LogMessage($"[LOAD] Invalid request: {ex.Message}");
 
                         LoadResponse errorResponse = new LoadResponse { ResponseCode = 0x04 };
-                        WriteLoadResponse(this.HttpListenerContext, new byte[0], errorResponse, sessionManager.GetOrCreateSession(0));
+                        WriteLoadResponse(this.HttpListenerContext, new byte[0], errorResponse, sessionProvider.GetOrCreateSession(0));
                         return;
                     }
 
                     string fileName = loadRequest.GetFilenameString().TrimEnd();
-                    Session session = sessionManager.GetOrCreateSession(loadRequest.SessionId);
+                    Session session = sessionProvider.GetOrCreateSession(loadRequest.SessionId);
 
                     LoadResponse loadResponse = new LoadResponse { ResponseCode = 0x04 };
                     byte[] responsePayload = new byte[0];
@@ -163,7 +162,7 @@ namespace VDRIVE.Protocol
                     string fileName = saveRequest.GetFilenameString().TrimEnd();
                     byte[] fileData = saveRequest.FileData;
 
-                    Session session = sessionManager.GetOrCreateSession(saveRequest.SessionId);
+                    Session session = sessionProvider.GetOrCreateSession(saveRequest.SessionId);
 
                     this.Logger.LogMessage($"[Save] Filename: {fileName}, File data: {fileData?.Length ?? 0} bytes");
 
@@ -219,12 +218,31 @@ namespace VDRIVE.Protocol
 
                     this.Logger.LogMessage($"[SEARCH] TERM={searchTerm} *** [SESSIONID] = {searchRequest.SessionId}");
 
-                    Session session = sessionManager.GetOrCreateSession(searchRequest.SessionId);
+                    Session session = sessionProvider.GetOrCreateSession(searchRequest.SessionId);
 
                     // Handle paging 
                     if ((searchTerm.StartsWith("+") || searchTerm.StartsWith("-")) && session.CachedSearchResults != null && session.CachedSearchResults.Length > 0)
                     {
                         HandleSearchPagination(httpListenerResponse, session, searchTerm);
+                        return;
+                    }
+
+                    // handle new disk support
+                    if (searchTerm.StartsWith("@NEW"))                        
+                    {
+                        string[] parts = searchTerm.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        string[] floppyNameParts = parts[1].Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+                        // create the new floppy but leave it unmounted in case
+                        // there are multiple files with same name?
+                        CreateFloppyRequest createFloppyRequest = new CreateFloppyRequest();
+                        createFloppyRequest.Filename = parts.Length >= 2 ? floppyNameParts[0] : "NEWDISK";
+                        createFloppyRequest.MediaType = parts.Length >= 3 ? floppyNameParts[2] : "D64";
+                        createFloppyRequest.InternalName = parts.Length >= 4 ? parts[3] : "";
+                        CreateFloppyResponse createFloppyResponse = session.StorageAdapter.CreateFloppyImage(createFloppyRequest);                      
+
+                        string payload = "\r\n\r\n" + string.Concat($"NEW FLOPPY CREATED - {createFloppyRequest.Filename} \r\n") + "\0";
+                        WriteSearchResponse(httpListenerResponse, payload, session);
                         return;
                     }
 
@@ -277,23 +295,17 @@ namespace VDRIVE.Protocol
                         return;
                     }
 
-                    string imageIdOfFilename = mountRequest.GetImageIdOrFilenameString().TrimEnd();
+                    string imageIdOrFilename = mountRequest.GetImageIdOrFilenameString().TrimEnd();
 
-                    this.Logger.LogMessage($"[Mount] image={imageIdOfFilename}");
+                    this.Logger.LogMessage($"[Mount] image={imageIdOrFilename}");
 
-                    Session session = sessionManager.GetOrCreateSession(mountRequest.SessionId);
-
-                    if (imageIdOfFilename.StartsWith("+") || imageIdOfFilename.StartsWith("-"))
-                    {
-                        HandleSearchPagination(httpListenerResponse, session, imageIdOfFilename);
-                        return;
-                    }
+                    Session session = sessionProvider.GetOrCreateSession(mountRequest.SessionId);                 
 
                     FloppyIdentifier floppyIdentifier;
                     ushort fullId;
-                    if (imageIdOfFilename.Length <= 5 && int.TryParse(imageIdOfFilename, out int imageIdInt))
+                    if (imageIdOrFilename.Length <= 5 && int.TryParse(imageIdOrFilename, out int imageIdInt))
                     {
-                        if (imageIdInt < 0 || imageIdInt > 65535)
+                        if (imageIdInt < 0 || imageIdInt > this.Configuration.MaxSearchResults)
                         {
                             WriteResponse(httpListenerResponse, "\r\nERROR: INVALID FLOPPY ID\0", session);
                             return;
@@ -310,7 +322,7 @@ namespace VDRIVE.Protocol
                     }
                     else
                     {
-                        floppyIdentifier = session.FloppyResolver.FindFloppyIdentifierByName(imageIdOfFilename);
+                        floppyIdentifier = session.FloppyResolver.FindFloppyIdentifierByName(imageIdOrFilename);
                         if (floppyIdentifier.Equals(default(FloppyIdentifier)))
                         {
                             WriteResponse(httpListenerResponse, "\r\nERROR: FLOPPY NOT FOUND\0", session);
@@ -533,7 +545,7 @@ namespace VDRIVE.Protocol
             }
         }
 
-        private static bool IsValidLoadAddress(ILogger logger, ushort dest_ptr_start, int end_dest_ptr)
+        private bool IsValidLoadAddress(ILogger logger, ushort dest_ptr_start, int end_dest_ptr)
         {
             List<ushort> rejectedLoadAddresses = new List<ushort>()
             {
@@ -552,9 +564,9 @@ namespace VDRIVE.Protocol
                 return false;
             }
 
-            if (end_dest_ptr >= 0xc032)
+            if (end_dest_ptr >= 0xc000) // VDRIVE memory area (make this check configurable?)
             {
-                logger.LogMessage($"Load end 0x{end_dest_ptr:X4} overlaps VDRIVE memory", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                logger.LogMessage($"Load end 0x{end_dest_ptr:X4} overlaps VDRIVE memory, rejecting", VDRIVE_Contracts.Enums.LogSeverity.Warning);
             }
 
             return true;
@@ -749,7 +761,6 @@ namespace VDRIVE.Protocol
         {
             if (session.CachedSearchResults == null || session.CachedSearchResults.Length == 0)
             {
-                // TODO: write out 
                 WriteSearchResponse(response, "\r\nERROR: NO SEARCH RESULTS TO PAGINATE\r\nPERFORM A SEARCH FIRST\0", session);
                 return;
             }
@@ -839,6 +850,6 @@ namespace VDRIVE.Protocol
                 ushort fullId = (ushort)(ff.IdLo | (ff.IdHi << 8));
                 this.Logger.LogMessage($"[DISPLAY] Page={pageNumber}, Index={i}, FullId={fullId}, Name={new string(ff.ImageName).TrimEnd('\0')}", VDRIVE_Contracts.Enums.LogSeverity.Verbose);
             }
-        }
+        }      
     }
 }

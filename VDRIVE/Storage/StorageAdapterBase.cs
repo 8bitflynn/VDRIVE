@@ -11,11 +11,14 @@ namespace VDRIVE.Drive
 
         protected byte[] BuildDirectoryPrg(string[] rawLines, string diskName = "")
         {
-            // HACK: c1541.exe outputs "Empty image" when image is empty
-            // need to remove altogether
+            // Workaround: c1541.exe outputs "Empty image" when image is empty
+            // so stripping it out here
             if (rawLines.Length == 3 && rawLines[1].StartsWith("Empty image"))
             {
-                rawLines[1] = $"0 \"Empty image\" ";
+                List<string> newRawLines = new List<string>();
+                newRawLines.Add(rawLines[0] );
+                newRawLines.Add(rawLines[2]);
+                rawLines = newRawLines.ToArray();
             }
 
             const ushort LOAD_ADDR = 0x0801;
