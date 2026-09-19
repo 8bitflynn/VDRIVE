@@ -11,6 +11,8 @@ sec_addr       = $b9
 load_mode      = $a7
 start_addr_lo  = $c1
 start_addr_hi  = $c2
+alt_address_lo = $c3
+alt_address_hi = $c4
 
 ; read/write indirect pointers in ZP
 temp_ptr_lo    = $fd
@@ -19,35 +21,35 @@ dest_ptr_lo    = $ae
 dest_ptr_hi    = $af
 
 ; interactive mode jmps
-jmp enable_vdrive
-jmp disable_vdrive
-jmp vdrive_search_floppies
-jmp vdrive_mount_floppy
+jmp enable_vdrive              ; $C000 / 49152
+jmp disable_vdrive             ; $C003 / 49155
+jmp vdrive_search_floppies     ; $C006 / 49158
+jmp vdrive_mount_floppy        ; $C009 / 49161
 
 ; direct mode jmps (programmatic)
-jmp vdrive_search_direct
-jmp vdrive_mount_direct
-jmp vdrive_iload_direct
-jmp vdrive_isave_direct
+jmp vdrive_search_direct       ; $C00C / 49164
+jmp vdrive_mount_direct        ; $C00F / 49167
+jmp vdrive_iload_direct        ; $C012 / 49170
+jmp vdrive_isave_direct        ; $C015 / 49173
 
 ; reboot WiC64 to original state
-jmp reboot_wic64
+jmp reboot_wic64               ; $C018 / 49176
 
 ; programmatic interface pointers
 api_user_input_ptr:
-    !word user_input          ; $C015: Pointer to 64-byte input buffer
+    !word user_input          ; $C01B/$C01C (49179/49180): Pointer to 64-byte input buffer
 api_user_input_len_ptr:
-    !word user_input_length   ; $C017: Pointer to length byte
+    !word user_input_length   ; $C01D/$C01E (49181/49182): Pointer to input buffer length byte
 api_http_url_ptr:
-    !word http_url            ; $C019: Pointer to 80-byte URL buffer
+    !word http_url            ; $C01F/$C020 (49183/49184): Pointer to 80-byte URL buffer
 api_response_buffer_ptr:
-    !word response_buffer     ; $C01B: Pointer to 512-byte response buffer
+    !word response_buffer     ; $C021/$C022 (49185/49186): Pointer to 512-byte response buffer
 api_vdrive_devnum_ptr:
-    !word vdrive_devnum       ; $C01D: Pointer to device number byte
+    !word vdrive_devnum       ; $C023/$C024 (49187/49188): Pointer to device number byte
 api_vdrive_retcode_ptr:
-    !word vdrive_retcode      ; $C01F: Pointer to return code byte
+    !word vdrive_retcode      ; $C025/$C026 (49189/49190): Pointer to return code byte
 api_search_result_count_ptr:
-    !word search_result_count ; $C021: Pointer to 16-bit search result count
+    !word search_result_count ; $C027/$C028 (49191/49192): Pointer to 16-bit search result count
 
 wic64_build_report = 1
 wic64_optimize_for_size = 1 ; optimize for size over speed
@@ -268,9 +270,9 @@ fn_copy_done:
     bne .use_file_address   ; SA != 0: use file's address
     
     ; SA=0: use address from $C3/$C4 (MEMUSS - specifically for serial bus SA=0 loads)
-    lda $c3
+    lda alt_address_lo
     sta dest_ptr_lo
-    lda $c4
+    lda alt_address_hi
     sta dest_ptr_hi
 
 .use_file_address:
@@ -726,13 +728,12 @@ vdrive_mount_direct:
     sta interactive_mode
     ; Fall through to mount_common
     
-mount_common:
-    ; Always init WIC64 even if empty input (to ensure cleanup happens)
-    jsr init_wic64
-    
+mount_common:    
     ; check if user entered anything
     lda user_input_length
-    beq mount_floppy_exit
+    beq mount_floppy_exit_no_cleanup
+
+    jsr init_wic64
     
     ; Prepend session ID to mount ID
     jsr prepend_session_to_data
@@ -1000,11 +1001,14 @@ fn_copy_done_save:
     jsr cleanup_wic64
     
     ; Print server response (skip session header + error code = 3 bytes)
+    lda $9d
+    beq .skip_save_msg
     lda #<(response_buffer+3)
     sta temp_ptr_lo
     lda #>(response_buffer+3)
     sta temp_ptr_hi
     jsr print_from_ptr
+.skip_save_msg:
     
     clc
     rts
@@ -1396,12 +1400,12 @@ user_input:
 ; Format: Null-terminated string, max 80 bytes
 http_url:
     !text "http://192.168.1.222/",0
-    !fill 59,0  ; Pad to 80 bytes total (21 bytes used + 59 padding)
+    !fill 59,0  ; Pad to 80 bytes total
 
 ; *** TOKEN - patch binary zero term***
 ; if filled in is passed after the prefixes in the url
 ; and is intended for a simple auth mechanism
-; Format: Null-terminated string, max 16 bytes
+; Format: Null-terminated string, max 8 bytes
 token:    
     !fill 8,0  ; Empty by default, user can patch if needed
 
@@ -1412,4 +1416,4 @@ http_request:
     !fill 128,0
 
 response_buffer:
-    !fill 512,0  ; 512 bytes response buffer at end of code
+    !fill 512,0 
