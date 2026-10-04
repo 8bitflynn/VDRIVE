@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Text;
+using VDRIVE.Floppy;
 using VDRIVE.Floppy.Impl;
 using VDRIVE.Util;
 using VDRIVE_Contracts.Interfaces;
@@ -225,6 +226,35 @@ namespace VDRIVE.Protocol
                     {
                         HandleSearchPagination(httpListenerResponse, session, searchTerm);
                         return;
+                    }
+
+                    // switch this session's floppy resolver ("source"): @LOCAL, @CS, @HVSC, @C64
+                    // "@HVSC COMMANDO" switches and searches in one go; other sessions are not affected
+                    if (searchTerm.StartsWith("@") && !searchTerm.StartsWith("@NEW", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string[] sourceParts = searchTerm.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                        string resolverType = GetResolverTypeForCommand(sourceParts[0]);
+
+                        if (resolverType == null)
+                        {
+                            WriteSearchResponse(httpListenerResponse, "\r\nUNKNOWN SOURCE\r\n\r\nSOURCES: @LOCAL @CS @HVSC @C64\r\n\0", session);
+                            return;
+                        }
+
+                        session.FloppyResolver = FloppyResolverFactory.CreateFloppyResolver(resolverType, this.Configuration, this.Logger, session.ProcessRunner);
+                        session.CachedSearchResults = null;
+                        session.LastSearchTerm = null;
+                        session.CurrentSearchPage = 0;
+
+                        this.Logger.LogMessage($"[SEARCH] Session {session.SessionId} switched source to {resolverType}");
+
+                        if (sourceParts.Length < 2 || string.IsNullOrWhiteSpace(sourceParts[1]))
+                        {
+                            WriteSearchResponse(httpListenerResponse, $"\r\nSOURCE: {GetSourceName(session)}\r\n\0", session);
+                            return;
+                        }
+
+                        searchTerm = sourceParts[1].Trim(); // carry on and search the new source
                     }
 
                     // handle new disk support
@@ -788,6 +818,33 @@ namespace VDRIVE.Protocol
             DisplaySearchPage(response, session, newPage, null);
         }
 
+        // "@HVSC" -> "HvscPsid" (the names FloppyResolverFactory understands); null if unknown
+        private static string GetResolverTypeForCommand(string command)
+        {
+            switch (command.TrimStart('@').ToUpperInvariant())
+            {
+                case "LOCAL": return "Local";
+                case "CS":
+                case "COMMODORESOFTWARE": return "CommodoreSoftware";
+                case "HVSC": return "HvscPsid";
+                case "C64": return "C64";
+                default: return null;
+            }
+        }
+
+        // name shown in the results header for the session's current source
+        private string GetSourceName(Session session)
+        {
+            switch (session?.FloppyResolver)
+            {
+                case LocalFloppyResolver _: return "LOCAL";
+                case CommodoreSoftwareFloppyResolver _: return "COMMODORE.SOFTWARE";
+                case HvscPsidFloppyResolver _: return "HVSC";
+                case C64FloppyResolver _: return "C64";
+                default: return (this.Configuration.FloppyResolver ?? "").ToUpper();
+            }
+        }
+
         private void DisplaySearchPage(HttpListenerResponse response, Session session, int pageNumber, DateTime? startTime)
         {
             DateTime buildStart = DateTime.Now;
@@ -810,8 +867,8 @@ namespace VDRIVE.Protocol
             }
 
             string fromMessage = pageNumber == 0
-                ? $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n"
-                : $"\r\n\r\n{this.Configuration.FloppyResolver.ToUpper()} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
+                ? $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{GetSourceName(session)} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n"
+                : $"\r\n\r\n{GetSourceName(session)} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
 
             string pageInfo = $"\r\n{pageNumber + 1} OF {totalPages} ({totalResults} RESULTS)";
             string navInfo = "\r\n(+/- TO PAGE, # TO MOUNT)";

@@ -96,11 +96,28 @@ namespace VDRIVE.Floppy.Impl
 
             Logger.LogMessage($"Searching Commodore.Software.com for description '{searchTerm}' and media type '{mediaTypeCSV}'");
 
-            using (HttpClient client = new HttpClient())
+            // Commodore.Software (Joomla) now wants the search as a POST form that includes the
+            // per-session security token (a hidden field: 32 hex chars as the name, "1" as the value).
+            // So: load the search page with a cookie jar, read the token, then post the form with the same cookies.
+            using (HttpClientHandler handler = new HttpClientHandler { CookieContainer = new CookieContainer(), UseCookies = true })
+            using (HttpClient client = new HttpClient(handler))
             {
-                string searchUrl = BuildCommodoreSoftwareSearchUrl(searchTerm, mediaTypeCSV);
+                string searchUrl = BuildFullCommodoreSoftwarePath("/search/search");
 
-                HttpResponseMessage httpResponseMessage = client.PostAsync(searchUrl, null).Result;
+                string searchPage = client.GetStringAsync(searchUrl).Result;
+                Match tokenMatch = Regex.Match(searchPage, @"name=""([0-9a-f]{32})""\s+value=""1""", RegexOptions.IgnoreCase);
+                if (!tokenMatch.Success)
+                {
+                    tokenMatch = Regex.Match(searchPage, @"value=""1""\s+name=""([0-9a-f]{32})""", RegexOptions.IgnoreCase); // attribute order varies
+                }
+                if (!tokenMatch.Success)
+                {
+                    Logger.LogMessage("Commodore.Software search token not found on the search page", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                }
+
+                FormUrlEncodedContent form = BuildCommodoreSoftwareSearchForm(searchTerm, tokenMatch.Success ? tokenMatch.Groups[1].Value : null);
+
+                HttpResponseMessage httpResponseMessage = client.PostAsync(searchUrl, form).Result;
                 string html = httpResponseMessage.Content.ReadAsStringAsync().Result;
 
                 if (httpResponseMessage.IsSuccessStatusCode)
@@ -128,13 +145,16 @@ namespace VDRIVE.Floppy.Impl
             List<FloppyInfo> floppyInfos = new List<FloppyInfo>();
 
             // Match each result block
-            string pattern = @"<dt class=""result-title"">.*?<a href=""(.*?)"".*?>(.*?)</a>.*?</dt>.*?<dd class=""result-text"">.*?>(.*?)</dd>";
+            // 2026 site layout: <h2 class="h5 mb-2 result-title"><a class="..." href="/downloads/download/...">Name</a></h2>
+            //                  ... <div class="result-text">description</div>
+            // (the old layout used <dt class="result-title"> / <dd class="result-text">)
+            string pattern = @"<h2[^>]*\bresult-title\b[^>]*>\s*<a[^>]*\bhref=""([^""]*)""[^>]*>(.*?)</a>.*?<div class=""result-text"">(.*?)</div>";
             var matches = Regex.Matches(html, pattern, RegexOptions.Singleline);
 
             ushort searchResultIndexId = 1;
             foreach (Match match in matches)
             {
-                string imageName = match.Groups[2].Value.Trim();
+                string imageName = WebUtility.HtmlDecode(Regex.Replace(match.Groups[2].Value, @"<.*?>", "")).Trim(); // e.g. "Lucid &amp; Mr. Lee" -> "Lucid & Mr. Lee"
                 if (Configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords.Any(ir => imageName.ToLower().Contains(ir.ToLower())))
                 {
                     // skip this result as it is ignored
@@ -174,22 +194,26 @@ namespace VDRIVE.Floppy.Impl
             return floppyInfos;
         }
 
-        private string BuildCommodoreSoftwareSearchUrl(string searchTerm, string mediaType) // media type not currently used
+        // form fields as the site's own search form sends them (Joomla com_search)
+        private FormUrlEncodedContent BuildCommodoreSoftwareSearchForm(string searchTerm, string token)
         {
-            string baseUrl = BuildFullCommodoreSoftwarePath("/search/search?");
-            var queryParams = new Dictionary<string, string>
+            var fields = new List<KeyValuePair<string, string>>
             {
-                { "searchword", searchTerm },
-                { "Search", "" },
-                { "task", "search" },
-                { "reset", "" },
-                { "searchphrase", "all" },
-                { "ordering", "popular" }, // newest
-                { "limit", "0" } // all
+                new KeyValuePair<string, string>("searchword", searchTerm),
+                new KeyValuePair<string, string>("ordering", "popular"), // newest, oldest, popular, alpha, category
+                new KeyValuePair<string, string>("Search", ""),
+                new KeyValuePair<string, string>("task", "search"),
+                new KeyValuePair<string, string>("reset", ""),
+                new KeyValuePair<string, string>("searchphrase", "all"),
+                new KeyValuePair<string, string>("limit", "0") // all
             };
 
-            var queryString = string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={Uri.EscapeDataString(kvp.Value)}"));
-            return baseUrl + queryString;
+            if (!string.IsNullOrEmpty(token))
+            {
+                fields.Add(new KeyValuePair<string, string>(token, "1"));
+            }
+
+            return new FormUrlEncodedContent(fields);
         }
 
         private string BuildFullCommodoreSoftwarePath(string relativePath)
