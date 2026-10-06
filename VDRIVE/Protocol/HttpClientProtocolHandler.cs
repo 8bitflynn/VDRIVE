@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.IO.Compression;
+using System.Net;
 using System.Text;
 using VDRIVE.Floppy;
 using VDRIVE.Floppy.Impl;
@@ -12,6 +13,15 @@ namespace VDRIVE.Protocol
     public class HttpClientProtocolHandler : IProtocolHandler
     {
         private const int MAX_EXPECTED_PAYLOAD_SIZE = 64 * 1024;       
+        private const int MAX_IMAGE_SIZE = 4 * 1024 * 1024; // /image: a D64 is ~170 KB, a multi-disk ZIP a few hundred KB
+        private const int MAX_DISKS_FOR_BROWSER = 12;       // the browser emulator has a fixed 16 MB; ~20 unpacked disks crash it (OOM)
+        private static readonly string[] WholeImageExtensions = { ".d64", ".g64", ".zip" };
+
+        // TEMPORARY: a real C64 can't use ZIP disk sets or G64 images (only the website's emulator can),
+        // so hide them from C64 search results. The website's proxy marks its requests with this header.
+        // Remove when the C64 can copy whole disks to an SD card / drive.
+        private const string WebClientHeader = "X-VDrive-Client";
+        private static readonly string[] WebOnlyExtensions = { ".zip", ".g64" };
         
         public HttpClientProtocolHandler(IConfiguration configuration, ILogger logger, HttpListenerContext httpListenerContext)
         {
@@ -257,21 +267,51 @@ namespace VDRIVE.Protocol
                         searchTerm = sourceParts[1].Trim(); // carry on and search the new source
                     }
 
-                    // handle new disk support
-                    if (searchTerm.StartsWith("@NEW"))                        
+                    // @NEW NAME[.D64|.D81|.G64] [DISK TITLE] - create an empty disk (DirMaster or VICE's c1541, whichever
+                    // storage adapter is configured), left unmounted. Writes a file on this PC, so:
+                    //  - not when StorageAdapterSettings.Readonly is on (same rule as SAVE)
+                    //  - not from the website (its browser emulator can't use a disk created here)
+                    if (searchTerm.StartsWith("@NEW", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (this.Configuration.StorageAdapterSettings?.Readonly == true)
+                        {
+                            this.Logger.LogMessage("[NEW] Refused: storage is read-only", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                            WriteSearchResponse(httpListenerResponse, "\r\n\r\nREAD ONLY - NEW DISKS ARE TURNED OFF\r\n\0", session);
+                            return;
+                        }
+
+                        if (string.Equals(httpListenerRequest.Headers[WebClientHeader], "web", StringComparison.OrdinalIgnoreCase))
+                        {
+                            WriteSearchResponse(httpListenerResponse, "\r\n\r\nNEW DISKS CAN ONLY BE MADE FROM A C64\r\n\0", session);
+                            return;
+                        }
+
                         string[] parts = searchTerm.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        string[] floppyNameParts = parts[1].Split('.', StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length < 2)
+                        {
+                            WriteSearchResponse(httpListenerResponse, "\r\n\r\nUSAGE: @NEW NAME.D64 (OR .D81 .G64)\r\n\0", session);
+                            return;
+                        }
 
-                        // create the new floppy but leave it unmounted in case
-                        // there are multiple files with same name?
+                        string nameAndType = parts[1];
+                        int dot = nameAndType.LastIndexOf('.');
+                        string floppyName = dot > 0 ? nameAndType.Substring(0, dot) : nameAndType;
+                        string mediaType = dot > 0 ? nameAndType.Substring(dot + 1).ToUpperInvariant() : "D64";
+                        if (mediaType != "D64" && mediaType != "D81" && mediaType != "G64")
+                        {
+                            WriteSearchResponse(httpListenerResponse, "\r\n\r\nUNKNOWN DISK TYPE - USE .D64 .D81 OR .G64\r\n\0", session);
+                            return;
+                        }
+
                         CreateFloppyRequest createFloppyRequest = new CreateFloppyRequest();
-                        createFloppyRequest.Filename = parts.Length >= 2 ? floppyNameParts[0] : "NEWDISK";
-                        createFloppyRequest.MediaType = parts.Length >= 3 ? floppyNameParts[2] : "D64";
-                        createFloppyRequest.InternalName = parts.Length >= 4 ? parts[3] : "";
-                        CreateFloppyResponse createFloppyResponse = session.StorageAdapter.CreateFloppyImage(createFloppyRequest);                      
+                        createFloppyRequest.Filename = floppyName;
+                        createFloppyRequest.MediaType = mediaType;
+                        createFloppyRequest.InternalName = parts.Length >= 3 ? string.Join(" ", parts.Skip(2)) : "";   // optional disk title
+                        CreateFloppyResponse createFloppyResponse = session.StorageAdapter.CreateFloppyImage(createFloppyRequest);
 
-                        string payload = "\r\n\r\n" + string.Concat($"NEW FLOPPY CREATED - {createFloppyRequest.Filename} \r\n") + "\0";
+                        string payload = createFloppyResponse != null && createFloppyResponse.Success
+                            ? $"\r\n\r\nNEW FLOPPY CREATED - {floppyName}.{mediaType}\r\n\0"
+                            : $"\r\n\r\nCOULD NOT CREATE DISK - {(createFloppyResponse?.ErrorMessage ?? "UNKNOWN ERROR").ToUpperInvariant()}\r\n\0";
                         WriteSearchResponse(httpListenerResponse, payload, session);
                         return;
                     }
@@ -286,7 +326,20 @@ namespace VDRIVE.Protocol
 
                     this.Logger.LogMessage($"[SEARCH-TIMING] Search completed in {(DateTime.Now - searchStart).TotalMilliseconds:F0}ms, found {foundFloppys?.Length ?? 0} results");
 
-                    if (searchFloppyResponse.ResultCount == 0)
+                    // TEMPORARY (see WebOnlyExtensions): the C64 only sees what it can load. IDs are kept,
+                    // so the remaining results still mount by the number shown.
+                    bool isWebClient = string.Equals(httpListenerRequest.Headers[WebClientHeader], "web", StringComparison.OrdinalIgnoreCase);
+                    if (!isWebClient && foundFloppys != null)
+                    {
+                        int before = foundFloppys.Length;
+                        foundFloppys = foundFloppys
+                            .Where(ff => !WebOnlyExtensions.Any(ext => new string(ff.ImageName ?? new char[0]).TrimEnd('\0').EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+                            .ToArray();
+                        if (foundFloppys.Length != before)
+                            this.Logger.LogMessage($"[SEARCH] Hid {before - foundFloppys.Length} ZIP/G64 result(s) from a C64 client");
+                    }
+
+                    if (searchFloppyResponse.ResultCount == 0 || foundFloppys == null || foundFloppys.Length == 0)
                     {
                         session.CachedSearchResults = null;
                         session.LastSearchTerm = null;
@@ -365,6 +418,14 @@ namespace VDRIVE.Protocol
 
                     fullId = (ushort)(floppyInfo.IdLo | (floppyInfo.IdHi << 8));
 
+                    // ZIP disk sets can only be played on the website (the browser emulator unpacks them);
+                    // a real C64 cannot mount a ZIP, so say so instead of failing later on LOAD
+                    if (fileName.ToLower().EndsWith(".zip"))
+                    {
+                        WriteResponse(httpListenerResponse, $"\r\nERROR: {fileName} IS A ZIP DISK SET.\r\nPLAY IT ON 8BITFLYNN.IO\0", session);
+                        return;
+                    }
+
                     string message = $"\r\nFLOPPY INSERTED (ID={fullId} {fileName})";
 
                     if (fileName.ToLower().EndsWith("prg") ||
@@ -383,6 +444,14 @@ namespace VDRIVE.Protocol
                     return;
                 }
 
+                // IMAGE (website): the whole disk image for a search result, so the browser emulator's own
+                // 1541 can run it (fast loaders and all). Same request body as /mount: [sessLo sessHi len id...]
+                if (httpListenerRequest.HttpMethod == "POST" && basePath.Equals("/image", StringComparison.OrdinalIgnoreCase))
+                {
+                    HandleImageRequest(httpListenerRequest, httpListenerResponse, sessionProvider);
+                    return;
+                }
+
                 // --- Default 404 ---
                 this.Logger.LogMessage($"[404] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
                 httpListenerResponse.StatusCode = 404;
@@ -398,6 +467,143 @@ namespace VDRIVE.Protocol
                     this.HttpListenerContext.Response?.Close();
                 }
                 catch { }
+            }
+        }
+
+        // POST /image  [sessLo sessHi len id...]  (id = number from the last search, never a name or path)
+        //   ok:    application/octet-stream  [sessLo sessHi nameLen name...] + raw .d64/.g64/.zip bytes
+        //          (a Commodore.Software download with several disks comes back as one .zip)
+        //   error: text/plain  [sessLo sessHi] + "ERROR: ...\0"  (same as /mount)
+        private void HandleImageRequest(HttpListenerRequest request, HttpListenerResponse response, ISessionProvider sessionProvider)
+        {
+            HttpMountRequest imageRequest;
+            try
+            {
+                imageRequest = HttpMountRequest.ParseFromBytes(ParseMultipartDataBytes(request));
+            }
+            catch (ArgumentException ex)
+            {
+                this.Logger.LogMessage($"[IMAGE] Invalid request: {ex.Message}");
+                WriteResponse(response, "ERROR: Invalid image request\0", null);
+                return;
+            }
+
+            Session session = sessionProvider.GetOrCreateSession(imageRequest.SessionId);
+            string idText = imageRequest.GetImageIdOrFilenameString().TrimEnd();
+
+            if (idText.Length > 5 || !int.TryParse(idText, out int id) || id < 1 || id > this.Configuration.MaxSearchResults)
+            {
+                WriteResponse(response, "\r\nERROR: INVALID FLOPPY ID\0", session);
+                return;
+            }
+
+            FloppyIdentifier floppyIdentifier = new FloppyIdentifier { IdLo = (byte)(id & 0xFF), IdHi = (byte)(id >> 8) };
+            FloppyInfo floppyInfo = session.FloppyResolver.InsertFloppy(floppyIdentifier);
+            string imagePath = session.FloppyResolver.GetInsertedFloppyPointer().ImagePath;
+
+            if (floppyInfo.Equals(default(FloppyInfo)) || string.IsNullOrEmpty(imagePath) || !File.Exists(imagePath))
+            {
+                WriteResponse(response, "\r\nERROR: FLOPPY NOT FOUND\0", session);
+                return;
+            }
+
+            string extension = Path.GetExtension(imagePath).ToLowerInvariant();
+            if (!WholeImageExtensions.Contains(extension))
+            {
+                WriteResponse(response, "\r\nERROR: NOT A DISK IMAGE\0", session);
+                return;
+            }
+
+            try
+            {
+                string imageName = Path.GetFileName(imagePath);
+                byte[] imageBytes;
+
+                IReadOnlyList<string> diskSet = (session.FloppyResolver as CommodoreSoftwareFloppyResolver)?.InsertedDiskSet;
+                if (extension != ".zip" && diskSet != null && diskSet.Count > 1)
+                {
+                    if (diskSet.Count > MAX_DISKS_FOR_BROWSER)
+                    {
+                        this.Logger.LogMessage($"[IMAGE] {diskSet.Count} disks in this download, sending the first {MAX_DISKS_FOR_BROWSER}");
+                    }
+                    imageBytes = ZipDiskSet(diskSet.Take(MAX_DISKS_FOR_BROWSER));
+                    imageName = Path.GetFileNameWithoutExtension(imagePath) + ".zip";
+                }
+                else
+                {
+                    if (new FileInfo(imagePath).Length > MAX_IMAGE_SIZE)
+                    {
+                        WriteResponse(response, "\r\nERROR: IMAGE TOO LARGE\0", session);
+                        return;
+                    }
+                    imageBytes = File.ReadAllBytes(imagePath);
+                }
+
+                if (imageBytes.Length > MAX_IMAGE_SIZE)
+                {
+                    WriteResponse(response, "\r\nERROR: IMAGE TOO LARGE\0", session);
+                    return;
+                }
+
+                this.Logger.LogMessage($"[IMAGE] Sending {imageName} ({imageBytes.Length} bytes)");
+                WriteImageResponse(response, session, imageName, imageBytes);
+            }
+            catch (Exception ex)
+            {
+                this.Logger.LogMessage($"[IMAGE] Error: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                WriteResponse(response, "\r\nERROR: COULD NOT READ IMAGE\0", session);
+            }
+        }
+
+        private static byte[] ZipDiskSet(IEnumerable<string> diskPaths)
+        {
+            using (var buffer = new MemoryStream())
+            {
+                using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+                {
+                    foreach (string diskPath in diskPaths)
+                    {
+                        archive.CreateEntryFromFile(diskPath, Path.GetFileName(diskPath), CompressionLevel.Fastest);
+                    }
+                }
+                return buffer.ToArray();
+            }
+        }
+
+        private void WriteImageResponse(HttpListenerResponse response, Session session, string imageName, byte[] imageBytes)
+        {
+            try
+            {
+                // name as plain ASCII, max 64 chars, so the website can show it and pick the right loader (.d64 / .zip)
+                byte[] nameBytes = Encoding.ASCII.GetBytes(new string(imageName.Select(c => c >= 32 && c < 127 ? c : '_').Take(64).ToArray()));
+
+                byte[] fullResponse = new byte[3 + nameBytes.Length + imageBytes.Length];
+                fullResponse[0] = (byte)(session.SessionId & 0xFF);
+                fullResponse[1] = (byte)(session.SessionId >> 8);
+                fullResponse[2] = (byte)nameBytes.Length;
+                Buffer.BlockCopy(nameBytes, 0, fullResponse, 3, nameBytes.Length);
+                Buffer.BlockCopy(imageBytes, 0, fullResponse, 3 + nameBytes.Length, imageBytes.Length);
+
+                response.SendChunked = false;
+                response.StatusCode = 200;
+                response.ContentType = "application/octet-stream";
+                response.ContentLength64 = fullResponse.Length;
+
+                var writeTask = response.OutputStream.WriteAsync(fullResponse, 0, fullResponse.Length);
+                int timeoutMs = 5000 + (fullResponse.Length / 1024 * 100);
+                if (!writeTask.Wait(timeoutMs))
+                {
+                    this.Logger.LogMessage($"[IMAGE-WRITE] Timeout after {timeoutMs}ms", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                    throw new TimeoutException("Write timeout");
+                }
+
+                response.OutputStream.Flush();
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                this.Logger.LogMessage($"[IMAGE-WRITE] Error: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                try { response?.Close(); } catch { }
             }
         }
 
