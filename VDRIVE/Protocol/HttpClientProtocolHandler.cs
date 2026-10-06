@@ -1,6 +1,7 @@
 ﻿using System.IO.Compression;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using VDRIVE.Floppy;
 using VDRIVE.Floppy.Impl;
 using VDRIVE.Util;
@@ -520,6 +521,17 @@ namespace VDRIVE.Protocol
                 byte[] imageBytes;
 
                 IReadOnlyList<string> diskSet = (session.FloppyResolver as CommodoreSoftwareFloppyResolver)?.InsertedDiskSet;
+                string setName = null;
+                if (diskSet == null && extension != ".zip" && session.FloppyResolver is LocalFloppyResolver
+                    && this.Configuration.FloppyResolverSettings?.Local?.GroupMultiDiskImages == true)
+                {
+                    diskSet = FindMultiDiskSet(imagePath, GetDiskMarker(), out setName);
+                    if (diskSet != null)
+                    {
+                        this.Logger.LogMessage($"[IMAGE] Multi-disk set: {string.Join(", ", diskSet.Select(Path.GetFileName))}");
+                    }
+                }
+
                 if (extension != ".zip" && diskSet != null && diskSet.Count > 1)
                 {
                     if (diskSet.Count > MAX_DISKS_FOR_BROWSER)
@@ -527,7 +539,7 @@ namespace VDRIVE.Protocol
                         this.Logger.LogMessage($"[IMAGE] {diskSet.Count} disks in this download, sending the first {MAX_DISKS_FOR_BROWSER}");
                     }
                     imageBytes = ZipDiskSet(diskSet.Take(MAX_DISKS_FOR_BROWSER));
-                    imageName = Path.GetFileNameWithoutExtension(imagePath) + ".zip";
+                    imageName = (setName ?? Path.GetFileNameWithoutExtension(imagePath)) + ".zip";
                 }
                 else
                 {
@@ -553,6 +565,75 @@ namespace VDRIVE.Protocol
                 this.Logger.LogMessage($"[IMAGE] Error: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
                 WriteResponse(response, "\r\nERROR: COULD NOT READ IMAGE\0", session);
             }
+        }
+
+        // Multi-disk games in a local folder: "California Games - Disk1.d64", "California Games - Disk2.d64",
+        // also "Disk 1", "(Disk 1 of 2)", "Side A", "Side 2". Only a set when another disk with the same name sits
+        // in the same folder, so single-disk "Name - Disk1.d64" files and names like "Bruce Lee II" are left alone.
+        // The marker words come from appsettings (Local.DiskMarkers), so no rebuild is needed to add one.
+        private static readonly string[] DefaultDiskMarkers = { "disk", "disc", "side" };
+        private Regex diskMarker;
+
+        private Regex GetDiskMarker()
+        {
+            if (this.diskMarker == null)
+            {
+                IEnumerable<string> words = this.Configuration.FloppyResolverSettings?.Local?.DiskMarkers?
+                    .Where(word => !string.IsNullOrWhiteSpace(word)).Select(word => word.Trim()).ToList();
+                if (words == null || !words.Any())
+                {
+                    words = DefaultDiskMarkers;
+                }
+                string alternatives = string.Join("|", words.OrderByDescending(word => word.Length).Select(Regex.Escape));
+                this.diskMarker = new Regex(
+                    @"^(?<base>.*?)[\s_\-]*[\(\[]?\s*(?:" + alternatives + @")\s*(?:(?<n>\d{1,2})(?<side>[a-h])?|(?<side>[a-h]))(?:\s*of\s*\d{1,2})?\s*[\)\]]?(?:[\s_\-]+label\s*(?:up|down))?$",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            }
+            return this.diskMarker;
+        }
+
+        private static IReadOnlyList<string> FindMultiDiskSet(string imagePath, Regex diskMarker, out string setName)
+        {
+            setName = null;
+            string folder = Path.GetDirectoryName(imagePath);
+            Match marker = diskMarker.Match(Path.GetFileNameWithoutExtension(imagePath));
+            if (string.IsNullOrEmpty(folder) || !marker.Success)
+            {
+                return null;
+            }
+
+            string baseName = marker.Groups["base"].Value.Trim();
+            if (baseName.Length == 0)
+            {
+                return null;
+            }
+
+            List<string> disks = Directory.EnumerateFiles(folder)
+                .Where(file => { string ext = Path.GetExtension(file).ToLowerInvariant(); return ext == ".d64" || ext == ".g64"; })
+                .Select(file => new { File = file, Match = diskMarker.Match(Path.GetFileNameWithoutExtension(file)) })
+                .Where(x => x.Match.Success && string.Equals(x.Match.Groups["base"].Value.Trim(), baseName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => DiskOrder(x.Match))
+                .ThenBy(x => x.File, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.File)
+                .ToList();
+
+            if (disks.Count < 2)
+            {
+                return null;
+            }
+            setName = baseName;
+            return disks;
+        }
+
+        // Disk1 < Disk1A < Disk1B < Disk2; a side on its own ("Side A") counts like a disk number (A = 1)
+        private static int DiskOrder(Match match)
+        {
+            int side = match.Groups["side"].Success ? char.ToUpperInvariant(match.Groups["side"].Value[0]) - 'A' + 1 : 0;
+            if (!match.Groups["n"].Success)
+            {
+                return side * 100;
+            }
+            return int.Parse(match.Groups["n"].Value) * 100 + side;
         }
 
         private static byte[] ZipDiskSet(IEnumerable<string> diskPaths)

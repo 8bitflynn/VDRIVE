@@ -265,6 +265,11 @@ namespace VDRIVE.Configuration
                     this.Logger.LogMessage($"    Local SearchPaths: {string.Join(", ", configuration.FloppyResolverSettings.Local.SearchPaths)}");
                     this.Logger.LogMessage($"    Local MediaExtensionsAllowed: {string.Join(',', configuration.FloppyResolverSettings.Local.MediaExtensionsAllowed)}");
                     this.Logger.LogMessage($"    Local EnableRecursiveSearch: {configuration.FloppyResolverSettings.Local.EnableRecursiveSearch}");
+                    this.Logger.LogMessage($"    Local GroupMultiDiskImages: {configuration.FloppyResolverSettings.Local.GroupMultiDiskImages}");
+                    if (configuration.FloppyResolverSettings.Local.DiskMarkers != null)
+                    {
+                        this.Logger.LogMessage($"    Local DiskMarkers: {string.Join(", ", configuration.FloppyResolverSettings.Local.DiskMarkers)}");
+                    }
                 }
                 if (configuration.FloppyResolver == "CommodoreSoftware" && configuration.FloppyResolverSettings.CommodoreSoftware != null)
                 {
