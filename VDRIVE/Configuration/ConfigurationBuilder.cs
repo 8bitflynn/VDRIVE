@@ -41,6 +41,7 @@ namespace VDRIVE.Configuration
             configuration.ChunkSize = configuration.ChunkSize == 0 ? (ushort)1024 : configuration.ChunkSize;
             configuration.MaxSearchResults = configuration.MaxSearchResults == 0 ? (ushort)18 : configuration.MaxSearchResults;
             configuration.SearchPageSize = configuration.SearchPageSize == 0 ? 15 : configuration.SearchPageSize;            
+            configuration.WebSearchPageSize = configuration.WebSearchPageSize == 0 ? 20 : configuration.WebSearchPageSize;
         }
 
         public bool IsValidConfiguration(VDRIVE_Contracts.Interfaces.IConfiguration configuration)
@@ -232,6 +233,7 @@ namespace VDRIVE.Configuration
             this.Logger.LogMessage($"  ChunkSize: {configuration.ChunkSize}");
             this.Logger.LogMessage($"  MaxSearchResults: {configuration.MaxSearchResults}");
             this.Logger.LogMessage($"  SearchPageSize: {configuration.SearchPageSize}");
+            this.Logger.LogMessage($"  WebSearchPageSize: {configuration.WebSearchPageSize}");
             this.Logger.LogMessage($"  SearchIntroMessage: {configuration.SearchIntroMessage}");
 
             // Storage adapter settings
@@ -269,6 +271,10 @@ namespace VDRIVE.Configuration
                     if (configuration.FloppyResolverSettings.Local.DiskMarkers != null)
                     {
                         this.Logger.LogMessage($"    Local DiskMarkers: {string.Join(", ", configuration.FloppyResolverSettings.Local.DiskMarkers)}");
+                    }
+                    if (configuration.FloppyResolverSettings.Local.CompanionDiskNames != null)
+                    {
+                        this.Logger.LogMessage($"    Local CompanionDiskNames: {string.Join(", ", configuration.FloppyResolverSettings.Local.CompanionDiskNames)}");
                     }
                 }
                 if (configuration.FloppyResolver == "CommodoreSoftware" && configuration.FloppyResolverSettings.CommodoreSoftware != null)

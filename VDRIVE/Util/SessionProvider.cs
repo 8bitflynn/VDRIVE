@@ -31,21 +31,24 @@ namespace VDRIVE.Util
                 // and store in local session
                 session = new Session();
                 session.ClientInfo.ConnectedAt = DateTime.Now;
-                session.ClientInfo.LastAccess = DateTime.Now;                
-                if (!VDriveClients.Any())
-                {
-                    session.SessionId = 1;
-                }
-                else
-                {
-                    session.SessionId = (ushort)(VDriveClients.Max(m => m.Key) + 1);
-                }
+                session.ClientInfo.LastAccess = DateTime.Now;
 
                 session.ProcessRunner = new LockingProcessRunner(this.Configuration, this.Logger);
                 session.FloppyResolver = FloppyResolverFactory.CreateFloppyResolver(this.Configuration.FloppyResolver, this.Configuration, this.Logger, session.ProcessRunner);
                 session.StorageAdapter = StorageAdapterFactory.CreateStorageAdapter(this.Configuration.StorageAdapter, session.ProcessRunner, this.Configuration, this.Logger);
 
-                VDriveClients.GetOrAdd(session.SessionId, session);
+                // a random unused ID (1..65535, 0 means "new session"). TryAdd only succeeds when nobody has that ID,
+                // so two sessions can never share one, even when they arrive at the same moment.
+                int attempts = 0;
+                do
+                {
+                    if (++attempts > 1000)
+                    {
+                        throw new InvalidOperationException("No free session IDs");   // only if ~65,000 sessions are active
+                    }
+                    session.SessionId = (ushort)Random.Shared.Next(1, 65536);
+                }
+                while (!VDriveClients.TryAdd(session.SessionId, session));
                 this.Logger.LogMessage($"Created new session with SessionId: {session.SessionId}", VDRIVE_Contracts.Enums.LogSeverity.Info);
             }
             else

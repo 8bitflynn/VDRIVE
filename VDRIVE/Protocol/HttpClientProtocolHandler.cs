@@ -109,6 +109,12 @@ namespace VDRIVE.Protocol
                     string fileName = loadRequest.GetFilenameString().TrimEnd();
                     Session session = sessionProvider.GetOrCreateSession(loadRequest.SessionId);
 
+                    if (!IsSafeC64FileName(fileName))
+                    {
+                        this.Logger.LogMessage($"[LOAD] Refused unsafe file name (length {fileName.Length})", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        fileName = "";   // answered as "file not found" below
+                    }
+
                     LoadResponse loadResponse = new LoadResponse { ResponseCode = 0x04 };
                     byte[] responsePayload = new byte[0];
 
@@ -176,6 +182,13 @@ namespace VDRIVE.Protocol
 
                     Session session = sessionProvider.GetOrCreateSession(saveRequest.SessionId);
 
+                    if (!IsSafeC64FileName(fileName))
+                    {
+                        this.Logger.LogMessage($"[Save] Refused unsafe file name (length {fileName.Length})", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        WriteSaveResponse(httpListenerResponse, "ERROR: BAD FILE NAME", new SaveResponse { ResponseCode = 0x04 }, session);
+                        return;
+                    }
+
                     this.Logger.LogMessage($"[Save] Filename: {fileName}, File data: {fileData?.Length ?? 0} bytes");
 
                     if (fileData == null || fileData.Length < 2)
@@ -232,10 +245,13 @@ namespace VDRIVE.Protocol
 
                     Session session = sessionProvider.GetOrCreateSession(searchRequest.SessionId);
 
+                    // the website has no 512-byte buffer, so its pages are sized differently (WebSearchPageSize)
+                    bool isWebRequest = string.Equals(httpListenerRequest.Headers[WebClientHeader], "web", StringComparison.OrdinalIgnoreCase);
+
                     // Handle paging 
                     if ((searchTerm.StartsWith("+") || searchTerm.StartsWith("-")) && session.CachedSearchResults != null && session.CachedSearchResults.Length > 0)
                     {
-                        HandleSearchPagination(httpListenerResponse, session, searchTerm);
+                        HandleSearchPagination(httpListenerResponse, session, searchTerm, isWebRequest);
                         return;
                     }
 
@@ -356,7 +372,7 @@ namespace VDRIVE.Protocol
                         session.LastSearchTerm = searchTerm;
                         session.CurrentSearchPage = 0;
 
-                        DisplaySearchPage(httpListenerResponse, session, 0, startTime);
+                        DisplaySearchPage(httpListenerResponse, session, 0, startTime, isWebRequest);
                     }
 
                     return;
@@ -525,7 +541,7 @@ namespace VDRIVE.Protocol
                 if (diskSet == null && extension != ".zip" && session.FloppyResolver is LocalFloppyResolver
                     && this.Configuration.FloppyResolverSettings?.Local?.GroupMultiDiskImages == true)
                 {
-                    diskSet = FindMultiDiskSet(imagePath, GetDiskMarker(), out setName);
+                    diskSet = FindMultiDiskSet(imagePath, GetDiskMarker(), GetCompanionDisk(), out setName);
                     if (diskSet != null)
                     {
                         this.Logger.LogMessage($"[IMAGE] Multi-disk set: {string.Join(", ", diskSet.Select(Path.GetFileName))}");
@@ -586,37 +602,83 @@ namespace VDRIVE.Protocol
                 }
                 string alternatives = string.Join("|", words.OrderByDescending(word => word.Length).Select(Regex.Escape));
                 this.diskMarker = new Regex(
-                    @"^(?<base>.*?)[\s_\-]*[\(\[]?\s*(?:" + alternatives + @")\s*(?:(?<n>\d{1,2})(?<side>[a-h])?|(?<side>[a-h]))(?:\s*of\s*\d{1,2})?\s*[\)\]]?(?:[\s_\-]+label\s*(?:up|down))?$",
+                    @"^(?<base>.*?)[\s_\-]*[\(\[]?\s*(?:" + alternatives + @")[\s_\-]*(?:(?<n>\d{1,2})(?<side>[a-h])?|(?<side>[a-h]))(?:\s*of\s*\d{1,2})?\s*[\)\]]?(?:[\s_\-]+label\s*(?:up|down)|\s*[\-_]\s*[a-z][a-z0-9]{1,15})?$",   // "Disk1A-Dungeon": a one-word label after the marker
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             }
             return this.diskMarker;
         }
 
-        private static IReadOnlyList<string> FindMultiDiskSet(string imagePath, Regex diskMarker, out string setName)
+        // Disks of a set that carry no disk number: "ULTIMA VI - GAME.D64", "... - BOOT.D64".
+        // They go first in the set (usually the one you start from). Words from appsettings (Local.CompanionDiskNames).
+        private static readonly string[] DefaultCompanionDiskNames = { "game", "boot", "program", "main", "intro", "start", "loader" };
+        private Regex companionDisk;
+
+        private Regex GetCompanionDisk()
+        {
+            if (this.companionDisk == null)
+            {
+                IEnumerable<string> words = this.Configuration.FloppyResolverSettings?.Local?.CompanionDiskNames?
+                    .Where(word => !string.IsNullOrWhiteSpace(word)).Select(word => word.Trim()).ToList();
+                if (words == null || !words.Any())
+                {
+                    words = DefaultCompanionDiskNames;
+                }
+                string alternatives = string.Join("|", words.OrderByDescending(word => word.Length).Select(Regex.Escape));
+                this.companionDisk = new Regex(
+                    @"^(?<base>.*?)[\s_\-]+(?:" + alternatives + @")$",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            }
+            return this.companionDisk;
+        }
+
+        private static IReadOnlyList<string> FindMultiDiskSet(string imagePath, Regex diskMarker, Regex companionDisk, out string setName)
         {
             setName = null;
             string folder = Path.GetDirectoryName(imagePath);
-            Match marker = diskMarker.Match(Path.GetFileNameWithoutExtension(imagePath));
-            if (string.IsNullOrEmpty(folder) || !marker.Success)
+            string clicked = Path.GetFileNameWithoutExtension(imagePath);
+            Match marker = diskMarker.Match(clicked);
+            Match companion = marker.Success ? null : companionDisk.Match(clicked);
+            if (string.IsNullOrEmpty(folder) || !(marker.Success || companion.Success))
             {
                 return null;
             }
 
-            string baseName = marker.Groups["base"].Value.Trim();
+            string baseName = (marker.Success ? marker : companion).Groups["base"].Value.Trim();
             if (baseName.Length == 0)
             {
                 return null;
             }
 
-            List<string> disks = Directory.EnumerateFiles(folder)
+            var candidates = Directory.EnumerateFiles(folder)
                 .Where(file => { string ext = Path.GetExtension(file).ToLowerInvariant(); return ext == ".d64" || ext == ".g64"; })
-                .Select(file => new { File = file, Match = diskMarker.Match(Path.GetFileNameWithoutExtension(file)) })
+                .Select(file => new { File = file, Name = Path.GetFileNameWithoutExtension(file) })
+                .ToList();
+
+            List<string> numbered = candidates
+                .Select(x => new { x.File, Match = diskMarker.Match(x.Name) })
                 .Where(x => x.Match.Success && string.Equals(x.Match.Groups["base"].Value.Trim(), baseName, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(x => DiskOrder(x.Match))
                 .ThenBy(x => x.File, StringComparer.OrdinalIgnoreCase)
                 .Select(x => x.File)
                 .ToList();
 
+            if (numbered.Count == 0)
+            {
+                return null;    // a "- GAME" disk alone is not a set
+            }
+
+            List<string> companions = candidates
+                .Where(x => !numbered.Contains(x.File))
+                .Where(x =>
+                {
+                    Match c = companionDisk.Match(x.Name);
+                    return c.Success && string.Equals(c.Groups["base"].Value.Trim(), baseName, StringComparison.OrdinalIgnoreCase);
+                })
+                .OrderBy(x => x.File, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.File)
+                .ToList();
+
+            List<string> disks = companions.Concat(numbered).ToList();
             if (disks.Count < 2)
             {
                 return null;
@@ -634,6 +696,21 @@ namespace VDRIVE.Protocol
                 return side * 100;
             }
             return int.Parse(match.Groups["n"].Value) * 100 + side;
+        }
+
+        // The C64's file name ends up inside quotes on the c1541 / DirMaster command line ("@8:NAME").
+        // A '"' would close those quotes early and let the rest of the name add its own c1541 commands
+        // (write or read files anywhere on this PC), and a '\' right before the closing quote does the same
+        // on Windows. Control characters have no business in a file name either. A real C64 name is at most
+        // 16 characters (32 allowed here for "@0:" prefixes and the like) and never needs any of these.
+        private static bool IsSafeC64FileName(string name)
+        {
+            if (name == null || name.Length > 32) return false;
+            foreach (char c in name)
+            {
+                if (c < 0x20 || c == 0x7F || c == '"' || c == '\\') return false;
+            }
+            return true;
         }
 
         private static byte[] ZipDiskSet(IEnumerable<string> diskPaths)
@@ -1074,7 +1151,7 @@ namespace VDRIVE.Protocol
             }
         }
 
-        private void HandleSearchPagination(HttpListenerResponse response, Session session, string paginationCommand)
+        private void HandleSearchPagination(HttpListenerResponse response, Session session, string paginationCommand, bool isWeb)
         {
             if (session.CachedSearchResults == null || session.CachedSearchResults.Length == 0)
             {
@@ -1082,8 +1159,7 @@ namespace VDRIVE.Protocol
                 return;
             }
 
-            int pageSize = this.Configuration.SearchPageSize;
-            int totalPages = (int)Math.Ceiling((double)session.CachedSearchResults.Length / pageSize);
+            int totalPages = GetSearchPageStarts(session, isWeb).Count;
 
             int pageOffset = 1;
             bool isForward = paginationCommand.StartsWith("+");
@@ -1102,7 +1178,7 @@ namespace VDRIVE.Protocol
 
             this.Logger.LogMessage($"[PAGINATION] Command={paginationCommand}, CurrentPage={session.CurrentSearchPage}, NewPage={newPage}, TotalPages={totalPages}");
 
-            DisplaySearchPage(response, session, newPage, null);
+            DisplaySearchPage(response, session, newPage, null, isWeb);
         }
 
         // "@HVSC" -> "HvscPsid" (the names FloppyResolverFactory understands); null if unknown
@@ -1132,38 +1208,100 @@ namespace VDRIVE.Protocol
             }
         }
 
-        private void DisplaySearchPage(HttpListenerResponse response, Session session, int pageNumber, DateTime? startTime)
+        private const int MaxSearchPayloadSize = 512 - 10; // FIXME: needs to subtract just the header length
+        private const string SearchNavInfo = "\r\n(+/- TO PAGE, # TO MOUNT)";
+
+        private static string SearchResultLine(FloppyInfo ff)
+        {
+            ushort fullId = (ushort)(ff.IdLo | (ff.IdHi << 8));
+            return $"{fullId} {new string(ff.ImageName).TrimEnd('\0')}\r\n";
+        }
+
+        private string SearchPageHeader(Session session, int pageNumber)
+        {
+            return pageNumber == 0
+                ? $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{GetSourceName(session)} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n"
+                : $"\r\n\r\n{GetSourceName(session)} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
+        }
+
+        // Splits the cached results into pages. C64: up to SearchPageSize results per page, fewer when
+        // long names would push the response past MaxSearchPayloadSize (the C64's receive buffer).
+        // Website: a fixed WebSearchPageSize, no byte limit. Returns the first result index of each page.
+        // Cheap enough to recompute on every page request.
+        private List<int> GetSearchPageStarts(Session session, bool isWeb)
+        {
+            var starts = new List<int>();
+            FloppyInfo[] results = session.CachedSearchResults;
+            int total = results?.Length ?? 0;
+
+            if (isWeb)
+            {
+                int webPageSize = Math.Max(1, this.Configuration.WebSearchPageSize);
+                for (int start = 0; start < total; start += webPageSize)
+                    starts.Add(start);
+                if (starts.Count == 0)
+                    starts.Add(0);
+                return starts;
+            }
+
+            int maxPerPage = Math.Max(1, this.Configuration.SearchPageSize);
+
+            // worst-case page footer ("N OF N" with N = total) so the real footer always fits
+            int footerBytes = Encoding.ASCII.GetByteCount($"\r\n{total} OF {total} ({total} RESULTS)" + SearchNavInfo + "\0");
+
+            int i = 0;
+            while (i < total)
+            {
+                int page = starts.Count;
+                starts.Add(i);
+                int used = Encoding.ASCII.GetByteCount(SearchPageHeader(session, page)) + footerBytes;
+                int count = 0;
+                while (i < total && count < maxPerPage)
+                {
+                    int lineBytes = Encoding.ASCII.GetByteCount(SearchResultLine(results[i]));
+                    if (count > 0 && used + lineBytes > MaxSearchPayloadSize)
+                        break; // next page
+                    used += lineBytes;
+                    count++;
+                    i++;
+                }
+            }
+
+            if (starts.Count == 0)
+                starts.Add(0);
+            return starts;
+        }
+
+        private void DisplaySearchPage(HttpListenerResponse response, Session session, int pageNumber, DateTime? startTime, bool isWeb)
         {
             DateTime buildStart = DateTime.Now;
 
-            int pageSize = this.Configuration.SearchPageSize;
             int totalResults = session.CachedSearchResults.Length;
-            int totalPages = (int)Math.Ceiling((double)totalResults / pageSize);
+            List<int> pageStarts = GetSearchPageStarts(session, isWeb);
+            int totalPages = pageStarts.Count;
 
+            pageNumber = Math.Max(0, Math.Min(pageNumber, totalPages - 1));
             session.CurrentSearchPage = pageNumber;
 
-            int startIndex = pageNumber * pageSize;
-            int endIndex = Math.Min(startIndex + pageSize, totalResults);
+            // pages are packed by byte size (see GetSearchPageStarts), so each page
+            // starts exactly where the previous one ended and no result is skipped
+            int startIndex = pageStarts[pageNumber];
+            int endIndex = pageNumber + 1 < totalPages ? pageStarts[pageNumber + 1] : totalResults;
 
             var pageResultsList = new List<string>();
             for (int i = startIndex; i < endIndex; i++)
             {
-                var ff = session.CachedSearchResults[i];
-                ushort fullId = (ushort)(ff.IdLo | (ff.IdHi << 8));
-                pageResultsList.Add($"{fullId} {new string(ff.ImageName).TrimEnd('\0')}\r\n");
+                pageResultsList.Add(SearchResultLine(session.CachedSearchResults[i]));
             }
 
-            string fromMessage = pageNumber == 0
-                ? $"\r\n\r\n{this.Configuration.SearchIntroMessage.ToUpper()}\r\n\r\n{GetSourceName(session)} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n"
-                : $"\r\n\r\n{GetSourceName(session)} RESULTS: \"{session.LastSearchTerm}\"\r\n\r\n";
-
+            string fromMessage = SearchPageHeader(session, pageNumber);
             string pageInfo = $"\r\n{pageNumber + 1} OF {totalPages} ({totalResults} RESULTS)";
-            string navInfo = "\r\n(+/- TO PAGE, # TO MOUNT)";
+            string navInfo = SearchNavInfo;
             string payload = fromMessage + string.Concat(pageResultsList) + pageInfo + navInfo + "\0";
 
-            const int maxPayloadSize = 512 - 10; // FIXME: needs to subtract just the header length
+            // safety net only: GetSearchPageStarts already keeps pages under this size
             int originalCount = pageResultsList.Count;
-            while (Encoding.ASCII.GetByteCount(payload) > maxPayloadSize && pageResultsList.Count > 0)
+            while (!isWeb && Encoding.ASCII.GetByteCount(payload) > MaxSearchPayloadSize && pageResultsList.Count > 0)
             {
                 pageResultsList.RemoveAt(pageResultsList.Count - 1);
                 payload = fromMessage + string.Concat(pageResultsList) + pageInfo + navInfo + "\0";
