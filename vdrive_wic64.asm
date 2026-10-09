@@ -1392,8 +1392,8 @@ search_prefix: !text "search",0
 load_prefix:   !text "load",0
 save_prefix:   !text "save",0
 
-user_input:
-    !fill 64,0
+; user_input lives in the tape buffer (not in the $C000 block): only needed while a request is built
+user_input = $03b4         ; 64 bytes, $03B4-$03F3 (tape buffer, after http_request)
 
 ; *** SERVER URL - patch binary zero term***
 ; should work on http or https endpoints
@@ -1412,8 +1412,9 @@ token:
 http_path:
     !fill 16,0 
 
-http_request:
-    !fill 128,0
+; http_request lives in the tape buffer (not in the $C000 block): only needed while a request is sent,
+; and the tape buffer is unused with a WiC64 (the library's load_and_run is off)
+http_request = $0334       ; 128 bytes, $0334-$03B3
 
 response_buffer:
     !fill 512,0 

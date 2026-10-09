@@ -82,7 +82,7 @@ namespace VDRIVE.Protocol
                     {
                         this.Logger.LogMessage($"[401] Unauthorized access attempt with token '{clientToken}'", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                         httpListenerResponse.StatusCode = 401;
-                        WriteResponse(httpListenerResponse, "Unauthorized");
+                        WriteResponse(httpListenerResponse, "\r\nERROR: BAD OR MISSING TOKEN\0");
                         return;
                     }
                 }                    
@@ -211,7 +211,13 @@ namespace VDRIVE.Protocol
 
                     SaveResponse saveResponse = session.StorageAdapter.Save(saveRequestInternal, session.FloppyResolver, payload);
 
-                    string payloadResponse = "\r\n" + string.Concat("SAVE OK") + "\r\n" + "\0";
+                    // the text follows the adapter's answer (0xff = saved); it used to say SAVE OK even when nothing was written
+                    string saveText = saveResponse.ResponseCode == 0xff ? "SAVE OK"
+                        : this.Configuration.StorageAdapterSettings?.Readonly == true ? "WRITE PROTECT ON"   // like a write-protected disk on a real 1541
+                        : "SAVE FAILED";
+                    if (saveResponse.ResponseCode != 0xff)
+                        this.Logger.LogMessage($"[Save] Not saved: {saveText}", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                    string payloadResponse = "\r\n" + saveText + "\r\n" + "\0";
 
                     WriteSaveResponse(httpListenerResponse, payloadResponse, saveResponse, session);
                     return;
@@ -293,7 +299,7 @@ namespace VDRIVE.Protocol
                         if (this.Configuration.StorageAdapterSettings?.Readonly == true)
                         {
                             this.Logger.LogMessage("[NEW] Refused: storage is read-only", VDRIVE_Contracts.Enums.LogSeverity.Warning);
-                            WriteSearchResponse(httpListenerResponse, "\r\n\r\nREAD ONLY - NEW DISKS ARE TURNED OFF\r\n\0", session);
+                            WriteSearchResponse(httpListenerResponse, "\r\n\r\nWRITE PROTECT ON\r\n\0", session);
                             return;
                         }
 
@@ -391,7 +397,7 @@ namespace VDRIVE.Protocol
                     catch (ArgumentException ex)
                     {
                         this.Logger.LogMessage($"[MOUNT] Invalid request: {ex.Message}");
-                        WriteResponse(httpListenerResponse, "ERROR: Invalid mount request", null);
+                        WriteResponse(httpListenerResponse, "\r\nERROR: INVALID MOUNT REQUEST\0", null);
                         return;
                     }
 
@@ -472,7 +478,7 @@ namespace VDRIVE.Protocol
                 // --- Default 404 ---
                 this.Logger.LogMessage($"[404] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
                 httpListenerResponse.StatusCode = 404;
-                WriteResponse(httpListenerResponse, "Not Found");
+                WriteResponse(httpListenerResponse, "\r\nERROR: UNKNOWN REQUEST\0");
             }
             catch (Exception ex)
             {
@@ -501,7 +507,7 @@ namespace VDRIVE.Protocol
             catch (ArgumentException ex)
             {
                 this.Logger.LogMessage($"[IMAGE] Invalid request: {ex.Message}");
-                WriteResponse(response, "ERROR: Invalid image request\0", null);
+                WriteResponse(response, "\r\nERROR: INVALID IMAGE REQUEST\0", null);
                 return;
             }
 
@@ -1037,7 +1043,7 @@ namespace VDRIVE.Protocol
                 // Add text payload
                 if (!string.IsNullOrEmpty(text))
                 {
-                    fullResponse.AddRange(Encoding.ASCII.GetBytes(text));
+                    fullResponse.AddRange(Encoding.ASCII.GetBytes(ForC64(text)));
                 }
 
                 response.StatusCode = 200;
@@ -1082,7 +1088,7 @@ namespace VDRIVE.Protocol
                 // Add text payload
                 if (!string.IsNullOrEmpty(text))
                 {
-                    fullResponse.AddRange(Encoding.ASCII.GetBytes(text));
+                    fullResponse.AddRange(Encoding.ASCII.GetBytes(ForC64(text)));
                 }
 
                 response.StatusCode = 200;
@@ -1111,21 +1117,49 @@ namespace VDRIVE.Protocol
             }
         }
 
+        // Text for the C64: uppercase (lowercase ASCII shows as graphics characters there), and accented letters
+        // as their plain letter (SEPPÄ -> SEPPA, BÅTSMAN -> BATSMAN) instead of "?". The C64 has no accents
+        // (HVSC and PSID64 spell names this way too), and the website shows the same text.
+        private static string ForC64(string text)
+        {
+            if (text == null) return null;
+            StringBuilder plain = new StringBuilder(text.Length);
+            foreach (char c in text.Normalize(NormalizationForm.FormD))      // "ä" -> "a" + combining diaeresis
+            {
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.NonSpacingMark)
+                    continue;                                                    // drop the accent mark
+                switch (c)
+                {
+                    case 'ß': plain.Append("SS"); break;                        // letters that don't split into letter + mark
+                    case 'æ': case 'Æ': plain.Append("AE"); break;
+                    case 'œ': case 'Œ': plain.Append("OE"); break;
+                    case 'ø': case 'Ø': plain.Append('O'); break;
+                    case 'ł': case 'Ł': plain.Append('L'); break;
+                    case 'đ': case 'Đ': plain.Append('D'); break;
+                    case 'þ': case 'Þ': plain.Append("TH"); break;
+                    case '\u2018': case '\u2019': plain.Append('\''); break;        // curly quotes and dashes
+                    case '\u201C': case '\u201D': plain.Append('"'); break;
+                    case '\u2013': case '\u2014': plain.Append('-'); break;
+                    default: plain.Append(c); break;
+                }
+            }
+            return plain.ToString().ToUpperInvariant();
+        }
+
         private void WriteResponse(HttpListenerResponse response, string text, Session session = null)
         {
             try
             {
-                byte[] fullResponse = Encoding.ASCII.GetBytes(text);
+                byte[] fullResponse = Encoding.ASCII.GetBytes(ForC64(text) ?? "");
 
-                // HACK: add session ID to start of payload        
-                if (session != null)
-                {
-                    List<byte> msgWithSession = new List<byte>();
-                    msgWithSession.Add((byte)(session.SessionId & 0xFF));
-                    msgWithSession.Add((byte)(session.SessionId >> 8));
-                    msgWithSession.AddRange(fullResponse);
-                    fullResponse = msgWithSession.ToArray();
-                }
+                // HACK: add session ID to start of payload. The client always reads the first two bytes as the session
+                // ID, so an answer without a session (bad token, bad request) gets 0 there too - otherwise the client
+                // ate the first two letters of the message.
+                List<byte> msgWithSession = new List<byte>();
+                msgWithSession.Add((byte)((session?.SessionId ?? 0) & 0xFF));
+                msgWithSession.Add((byte)((session?.SessionId ?? 0) >> 8));
+                msgWithSession.AddRange(fullResponse);
+                fullResponse = msgWithSession.ToArray();
 
                 response.StatusCode = 200;
                 response.ContentType = "text/plain";
