@@ -57,9 +57,17 @@ s_rename:   !fill 40, 0        ; $08A8 R:NAME.D64=NAME.TMP
 s_cdimg:    !fill 40, 0        ; $08D0 CD:NAME.D64
 s_append:   !fill 40, 0        ; $08F8 NAME.TMP,P,A
 p_run:      !byte 0            ; $0920 after mounting: 0 = stop, 1 = LOAD"*",8,1 + RUN, 2 = LOAD"*",8,1
+p_next:     !byte 0            ; $0921 multi-disk: 0 = last disk, else the stub for the next disk...
+s_chain:    !fill 40, 0        ; $0922 ...is LOADed with this name ("*,W8D2"); VDRIVE runs it in our place
+s_label:    !fill 40, 0        ; $094A "DISK 1/2 " on screen (empty for one disk)
+s_listopen: !fill 40, 0        ; $0972 last disk of a set: @:NAME.LST,P,W - the swap list
+p_listlen:  !byte 0            ; $099A its length (0 = one disk: CD into it instead)
+p_list:     !fill 256, 0       ; $099B one image per line ("//VDRIVE/:NAME-1A2B.D64")
+p_force:    !byte 0            ; $0A9B 1 = ",W@": write it again even when it is already there
+s_scratch:  !fill 40, 0        ; $0A9C S:NAME.D64 - the old copy goes before the rename (R: won't overwrite)
 ; -----------------------------------------------------------------------------------
 
-slice_name: !text "*,WA"       ; slice request to VDRIVE: A = first slice
+slice_name: !text "*,W1A"      ; $0AC4 slice request to VDRIVE: disk (patched), slice (A = first)
 
 start:
     lda devnum
@@ -76,6 +84,13 @@ start:
     jsr setlfs
     jsr open
 
+    ; no swap list left over from an earlier game (it stays on until XS clears it, and replacing
+    ; the list file while it is on kept the second disk from mounting)
+    ldx #<c_xs_off
+    ldy #>c_xs_off
+    jsr command
+    jsr status_ok
+
     ; its own folder (MD fails harmlessly when it's already there)
     ldx #<s_md
     ldy #>s_md
@@ -86,7 +101,9 @@ start:
     jsr status_ok
     bne fail_drive
 
-    ; already written once? then just mount it
+    ; already written once? then just mount it (unless ,W@)
+    lda p_force
+    bne write
     ldx #<s_check
     ldy #>s_check
     jsr open_file
@@ -101,7 +118,7 @@ start:
     jsr print_head             ; VDRIVE: ALREADY ON DRIVE n
     lda #13
     jsr chrout
-    jmp mount
+    jmp finish
 
 write:
     ldx #<t_writing
@@ -122,7 +139,7 @@ fail_drive:
 
 slice_loop:
     ; LOAD the next slice from VDRIVE to the buffer
-    lda #4
+    lda #5
     ldx #<slice_name
     ldy #>slice_name
     jsr setnam
@@ -143,7 +160,7 @@ slice_loop:
     sta count
     lda #$80
     sta count+1
-    lda slice_name+3
+    lda slice_name+4
     sec
     sbc #'A'-1
     cmp p_slices
@@ -157,7 +174,7 @@ slice_loop:
     ; loads: the drive lost an open file across those loads)
 +   ldx #<s_append
     ldy #>s_append
-    lda slice_name+3
+    lda slice_name+4
     cmp #'A'
     bne +
     ldx #<s_write
@@ -206,8 +223,8 @@ slice_loop:
 +   lda #'.'                   ; progress: one dot per slice
     jsr chrout
 
-    inc slice_name+3
-    lda slice_name+3
+    inc slice_name+4
+    lda slice_name+4
     sec
     sbc #'A'
     cmp p_slices
@@ -216,13 +233,67 @@ slice_loop:
 +
     lda #13
     jsr chrout
+    ldx #<s_scratch            ; an old copy (,W@) goes first: R: won't overwrite
+    ldy #>s_scratch
+    jsr command
+    jsr status_ok              ; (01 FILES SCRATCHED, or 01 with 0 files: fine either way)
     ldx #<s_rename             ; only now does the image get its real name
     ldy #>s_rename
     jsr command
     jsr status_ok
-    beq +
+    beq finish
     jmp fail_drive
-+
+
+; this disk is on the drive: next disk's stub, or (last disk) the swap list, mount and start
+finish:
+    lda p_next
+    beq last_disk
+    jsr clrchn
+    lda #15
+    jsr close
+    lda s_chain                ; LOAD the next stub: VDRIVE jumps to it, this one is gone
+    ldx #<(s_chain+1)
+    ldy #>(s_chain+1)
+    jsr setnam
+    lda #1
+    ldx vdev
+    ldy #1
+    jsr setlfs
+    lda #0
+    jsr load
+    ldx #<t_load               ; only back here when that failed
+    ldy #>t_load
+    jsr print
+    jmp done
+
+last_disk:
+    lda p_listlen
+    beq mount
+    ldx #<s_listopen           ; a set: write the swap list (XS below mounts its first disk)
+    ldy #>s_listopen
+    jsr open_file
+    jsr status_ok
+    beq +
+    lda #2
+    jsr close
+    jmp fail_drive
++   ldx #2
+    jsr chkout
+    lda #0
+    sta count
+-   ldy count
+    lda p_list,y
+    jsr chrout
+    inc count
+    lda count
+    cmp p_listlen
+    bne -
+    jsr clrchn
+    lda #2
+    jsr close
+    jsr status_ok
+    beq mount
+    jmp fail_drive
 
 mount:
     ldx #<s_cdimg
@@ -379,7 +450,21 @@ status_ok:
 
 ; the text at X/Y, then the drive number (8-30)
 print_head:
+    txa
+    pha
+    tya
+    pha
+    ldx #<t_vdrive
+    ldy #>t_vdrive
     jsr print
+    ldx #<(s_label+1)          ; "DISK 1/2 " (length-prefixed; zero after it)
+    ldy #>(s_label+1)
+    jsr print_raw
+    pla
+    tay
+    pla
+    tax
+    jsr print_raw
     lda p_dev
     ldx #'0'-1
 -   inx                        ; tens
@@ -412,8 +497,11 @@ print_ptr:
     bne -
 +   rts
 
-t_writing: !pet "vdrive: writing to drive ", 0
-t_cached: !pet "vdrive: already on drive ", 0
+c_xs_off: !byte 2
+          !text "XS"
+t_vdrive: !pet "vdrive: ", 0
+t_writing: !pet "writing to drive ", 0
+t_cached: !pet "already on drive ", 0
 t_mounted: !pet "mounted", 13, 0
 t_drive:  !pet 13, "?drive: ", 0
 t_load:   !pet 13, "?vdrive load error", 13, 0

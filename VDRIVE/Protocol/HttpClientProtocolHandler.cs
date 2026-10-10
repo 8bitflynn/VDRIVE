@@ -120,30 +120,30 @@ namespace VDRIVE.Protocol
 
                     // write switch (PatchStubs): "*,W" / "*,W9" -> the write stub for the mounted D64,
                     // "*,WA".."*,WZ" -> its slices
-                    if (PatchStubs.TryGetWrite(fileName, out byte writeDevice, out int writeSlice))
+                    if (PatchStubs.TryGetWrite(fileName, out byte writeDevice, out int writeDisk, out int writeSlice, out bool writeForce))
                     {
                         string imagePath = session.FloppyResolver.GetInsertedFloppyPointer().ImagePath;
-                        byte[] image = !string.IsNullOrEmpty(imagePath) && File.Exists(imagePath)
-                            && Path.GetExtension(imagePath).Equals(".d64", StringComparison.OrdinalIgnoreCase)
-                            ? File.ReadAllBytes(imagePath) : null;
-                        if (image == null)
+                        IReadOnlyList<string> writeSet = WriteDiskSet(session, imagePath);
+                        if (writeSet == null || writeDisk > writeSet.Count)
                         {
-                            this.Logger.LogMessage($"[WRITE] No D64 mounted ('{imagePath}')", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                            this.Logger.LogMessage($"[WRITE] No D64 mounted for disk {writeDisk} ('{imagePath}')", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                         }
                         else if (writeSlice < 0)
                         {
-                            responsePayload = PatchStubs.BuildWriteStub(image, imagePath, writeDevice);
+                            byte[] image = File.ReadAllBytes(writeSet[writeDisk - 1]);
+                            byte[] first = writeDisk == 1 ? image : File.ReadAllBytes(writeSet[0]);
+                            responsePayload = PatchStubs.BuildWriteStub(writeSet, writeDisk, writeDevice, image, first, writeForce);
                             loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
-                            this.Logger.LogMessage($"[WRITE] Stub for {Path.GetFileName(imagePath)} ({image.Length} bytes) to drive {writeDevice} as {WriteFolderName(imagePath)}");
+                            this.Logger.LogMessage($"[WRITE] Stub for disk {writeDisk}/{writeSet.Count}: {Path.GetFileName(writeSet[writeDisk - 1])} ({image.Length} bytes) to drive {writeDevice} as VDRIVE/{PatchStubs.DiskDriveName(writeSet, writeDisk - 1)}.D64{(writeForce ? " (write again: @)" : "")}");
                         }
                         else
                         {
-                            byte[] slice = PatchStubs.BuildWriteSlice(image, writeSlice);
+                            byte[] slice = PatchStubs.BuildWriteSlice(File.ReadAllBytes(writeSet[writeDisk - 1]), writeSlice);
                             if (slice != null)
                             {
                                 responsePayload = slice;
                                 loadResponse.ResponseCode = 0xff;
-                                this.Logger.LogMessage($"[WRITE] Slice {(char)('A' + writeSlice)}: {slice.Length - 2} bytes");
+                                this.Logger.LogMessage($"[WRITE] Disk {writeDisk} slice {(char)('A' + writeSlice)}: {slice.Length - 2} bytes");
                             }
                         }
                         WriteLoadResponse(this.HttpListenerContext, responsePayload, loadResponse, session);
@@ -806,6 +806,28 @@ namespace VDRIVE.Protocol
         // (write or read files anywhere on this PC), and a '\' right before the closing quote does the same
         // on Windows. Control characters have no business in a file name either. A real C64 name is at most
         // 16 characters (32 allowed here for "@0:" prefixes and the like) and never needs any of these.
+        // The disks the write stub puts on the drive for the mounted D64: its whole multi-disk set (the
+        // same grouping the website uses), or just itself. null when no D64 is mounted. D64 only.
+        private IReadOnlyList<string> WriteDiskSet(Session session, string imagePath)
+        {
+            if (string.IsNullOrEmpty(imagePath) || !File.Exists(imagePath)
+                || !Path.GetExtension(imagePath).Equals(".d64", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            if (session.FloppyResolver is LocalFloppyResolver
+                && this.Configuration.FloppyResolverSettings?.Local?.GroupMultiDiskImages == true)
+            {
+                IReadOnlyList<string> set = FindMultiDiskSet(imagePath, GetDiskMarker(), GetCompanionDisk(), out _);
+                if (set != null && set.Count > 1 && set.Count <= 9
+                    && set.All(p => Path.GetExtension(p).Equals(".d64", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return set;
+                }
+            }
+            return new[] { imagePath };
+        }
+
         private static string WriteFolderName(string imagePath)
         {
             return "VDRIVE/" + PatchStubs.DriveName(imagePath) + ".D64";
