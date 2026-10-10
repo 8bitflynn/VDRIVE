@@ -14,6 +14,7 @@
   <a href="#quickstart">Quickstart</a> ·
   <a href="#using-vdrive">Using VDRIVE</a> ·
   <a href="#programs-that-fill-all-of-memory-p">Full-memory loads</a> ·
+  <a href="#writing-disks-to-a-real-drive-w">Disk writer</a> ·
   <a href="#videos">Videos</a> ·
   <a href="#install-steps-wic64">Install</a> ·
   <a href="#server-configuration-reference">Configuration</a> ·
@@ -28,6 +29,7 @@
 - **Built for sharing work.** Programmers, artists and musicians can share disk images in real time: save on the C64, inspect or change the file with modern tools, then load it back. No SD card swaps or manual copying.
 - **Safe concurrency.** Several C64s can LOAD and SAVE to the same disk image without corruption. File access uses read/write locks with a Last‑Write‑Wins model.
 - **Programs that fill all of memory load too,** including over VDRIVE itself at `$C000`: the server sends a small patch stub that takes the program and runs it. See [`,P`](#programs-that-fill-all-of-memory-p).
+- **Disks to a real drive.** `,W` writes a disk image, or a whole multi-disk set, from VDRIVE to an SD2IEC, mounts it and starts the game, with the game's own loaders and disk swaps. See [`,W`](#writing-disks-to-a-real-drive-w).
 - **Local and remote collections.** Local folders, [Commodore.Software](https://commodore.software/), and the [High Voltage SID Collection](https://www.hvsc.c64.org/) as a SID jukebox.
 
 ---
@@ -96,10 +98,30 @@ LOAD "NAME,P",8
 
 A plain `LOAD` of a program that would land on `$C000-$CFFF` uses the stub automatically, so `LOAD "NAME",8` just works. Everything else is an ordinary load. The stub source is [`stubs/patch_run.asm`](stubs/patch_run.asm).
 
+### Writing Disks to a Real Drive: `,W`
+
+Mount a D64 from a search, then:
+
+| Command | Does |
+|---|---|
+| `LOAD "*,W",8` | Write the mounted disk to drive 8, mount it there and start the game |
+| `LOAD "*,W9",8` | The same on drive 9 (any drive from 8 to 30) |
+| `LOAD "*,W@",8` | Write it again even if it is already on the drive (`@` like `SAVE"@:..."`) |
+
+What happens, all from one stub the server sends:
+
+1. The disk goes into a `VDRIVE` folder on the card, with a short unique name (`MORDONS-F531.D64`). The stub pulls it from VDRIVE in 32K slices and writes it slice by slice; it gets its real name only when complete.
+2. A disk that is already there is not written again: the first time takes about 4 minutes per disk with an IDE64 (longer on a stock C64), every time after that a few seconds.
+3. **Multi-disk games:** every disk of the set is written (`CALIFO1-8920.D64`, `CALIFO2-9F83.D64`...) plus a swap list. The SD2IEC mounts disk 1, and its **NEXT** button changes disks when the game asks.
+4. The drive mounts the disk and the game is loaded from it and RUN. If the drive is on VDRIVE's own number, VDRIVE switches itself off, so the game's later loads go to the drive.
+
+Tested on a real SD2IEC. The SD2IEC runs the fast loaders it knows (JiffyDOS, Final Cartridge 3, DreamLoad and others); a game with a loader it doesn't know fails on the SD2IEC with or without VDRIVE. The stub source is [`stubs/patch_write.asm`](stubs/patch_write.asm).
+
 ### Known Limitations
 
-- After a program has loaded over `$C000` (with `,P` or automatically), VDRIVE is gone until it is loaded again, so a game that loads more files later can't get them.
+- After a program has loaded over `$C000` (with `,P` or automatically), VDRIVE is gone until it is loaded again, so a game that loads more files later can't get them that way: use `,W` to put the disk on a real drive.
 - With `,P`, bytes for `$D000-$DFFF` go into the RAM under I/O; a real drive's LOAD would write the I/O chips.
+- `,W` writes D64 images (up to 9 disks per set) and is tested with SD2IEC; writing to a real 1541 floppy is not supported yet.
 
 ### Building On VDRIVE
 
