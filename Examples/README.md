@@ -74,9 +74,6 @@ DELETE LINE 220
     api_session_id_ptr:        !word session_id          ; $C034/$C035 (49204/49205)
 ```
 
-The pointers moved down 9 bytes when `vdrive_load_handoff` and the reserved slots were
-added. The reserved slots are there so they stay put from now on.
-
 ### Load Status Codes
 
 - `$FF` — loaded.
