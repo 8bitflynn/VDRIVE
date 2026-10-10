@@ -118,6 +118,16 @@ namespace VDRIVE.Protocol
                     LoadResponse loadResponse = new LoadResponse { ResponseCode = 0x04 };
                     byte[] responsePayload = new byte[0];
 
+                    // patch switches (PatchStubs): "NAME,P" -> the run stub, "NAME,P2" -> the stub's data
+                    string runDataName = PatchStubs.GetRunDataName(fileName);
+                    string runName = runDataName == null ? PatchStubs.GetRunName(fileName) : null;
+                    string patchName = runDataName ?? runName;
+                    if (patchName != null)
+                    {
+                        this.Logger.LogMessage($"[PATCH] {(runName != null ? "Run stub" : "Run data")} for '{patchName}'");
+                        fileName = patchName.TrimEnd();
+                    }
+
                     if (!string.IsNullOrEmpty(fileName))
                     {
                         DateTime start = DateTime.Now;
@@ -130,7 +140,39 @@ namespace VDRIVE.Protocol
 
                         loadResponse = session.StorageAdapter.Load(loadRequestInternal, session.FloppyResolver, out byte[] fullFile);
 
-                        if (fullFile != null && loadResponse.ResponseCode == 0xff)
+                        // a plain LOAD that would overwrite VDRIVE (it would crash mid-load): the run stub instead.
+                        // Not for the website: it puts the PRG bytes into its emulator itself
+                        bool fromWebsite = string.Equals(httpListenerRequest.Headers[WebClientHeader], "web", StringComparison.OrdinalIgnoreCase);
+                        if (patchName == null && !fromWebsite && fullFile != null && loadResponse.ResponseCode == 0xff && PatchStubs.CoversVdrive(fullFile))
+                        {
+                            runName = patchName = fileName;
+                            this.Logger.LogMessage($"[PATCH] '{fileName}' covers VDRIVE ($C000-$CFFF): run stub instead of a plain load");
+                        }
+
+                        if (fullFile != null && loadResponse.ResponseCode == 0xff && patchName != null)
+                        {
+                            // the whole file is checked here, so the stub never starts on something it can't load
+                            byte[] runData = PatchStubs.BuildRunData(fullFile, out string patchError);
+                            if (runData == null)
+                            {
+                                this.Logger.LogMessage($"[PATCH] Refused '{fileName}': {patchError}", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                                loadResponse.ResponseCode = 0x04;
+                            }
+                            else if (runName != null)
+                            {
+                                // the name as the C64 sent it (PETSCII kept), without the switch
+                                byte[] nameBytes = loadRequest.Filename.Take(patchName.Length).ToArray();
+                                responsePayload = PatchStubs.BuildRunStub(nameBytes);
+                                loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
+                                this.Logger.LogMessage($"[PATCH] Stub {responsePayload.Length - 2} bytes at $0100, program ${fullFile[0] | (fullFile[1] << 8):X4}-${(fullFile[0] | (fullFile[1] << 8)) + fullFile.Length - 3:X4}");
+                            }
+                            else
+                            {
+                                responsePayload = runData;
+                                this.Logger.LogMessage($"[PATCH] Run data {runData.Length} bytes");
+                            }
+                        }
+                        else if (fullFile != null && loadResponse.ResponseCode == 0xff)
                         {
                             ushort dest_ptr_start = (ushort)(fullFile[0] | (fullFile[1] << 8));
                             this.Logger.LogMessage($"Start Address: 0x{dest_ptr_start:X4}");

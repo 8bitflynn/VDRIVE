@@ -74,8 +74,9 @@ namespace VDRIVE.Util
 
                     if (!string.IsNullOrWhiteSpace(runProcessResult.Output))
                         Logger.LogMessage(runProcessResult.Output.Trim());
+                    // tools like psid64 write their normal progress to stderr: only an error when the exit code says so
                     if (!string.IsNullOrWhiteSpace(runProcessResult.Error))
-                        Logger.LogMessage(runProcessResult.Error.Trim(), LogSeverity.Error);
+                        Logger.LogMessage(runProcessResult.Error.Trim(), process.ExitCode != 0 ? LogSeverity.Error : LogSeverity.Verbose);
 
                     this.Logger.LogMessage($"Process completed {runProcessParameters.ExecutablePath} {runProcessParameters.Arguments}");
 

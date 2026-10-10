@@ -15,6 +15,7 @@ namespace VDRIVE_Contracts.Structures
         public int WebSearchPageSize { get; set; }
         public string SearchIntroMessage { get; set; }
         public string TempPath { get; set; }
+        public string LogPath { get; set; }    // folder for vdrive-yyyyMMdd.log; empty = logs next to the exe
         public string TempFolder { get; set; }
         public ushort ChunkSize { get; set; }
         public string ServerOrClientMode { get; set; }

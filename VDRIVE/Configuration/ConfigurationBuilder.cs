@@ -212,6 +212,7 @@ namespace VDRIVE.Configuration
             this.Logger.LogMessage($"  LoggingLevel: {configuration.LoggingLevel}");
             this.Logger.LogMessage($"  SessionTimeoutMinutes: {configuration.SessionTimeoutMinutes}");
             this.Logger.LogMessage($"  TempPath: {configuration.TempPath}");
+            this.Logger.LogMessage($"  LogPath: {(string.IsNullOrWhiteSpace(configuration.LogPath) ? "(logs next to the exe)" : configuration.LogPath)}");
             this.Logger.LogMessage($"  TempFolder: {configuration.TempFolder}");
             this.Logger.LogMessage($"  ServerOrClientMode: {configuration.ServerOrClientMode}");
 

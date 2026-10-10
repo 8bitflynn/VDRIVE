@@ -35,21 +35,33 @@ jmp vdrive_isave_direct        ; $C015 / 49173
 ; reboot WiC64 to original state
 jmp reboot_wic64               ; $C018 / 49176
 
+; patch stubs: starts a LOAD and hands it over once the status and address are in (C=0):
+; the data waits on the WiC64 for the stub's own receive loop (it can overwrite VDRIVE)
+jmp vdrive_load_handoff        ; $C01B / 49179
+
+; reserved for later entries (e.g. vdrive_save_handoff), so the pointers below stay put
+jmp vdrive_reserved            ; $C01E / 49182
+jmp vdrive_reserved            ; $C021 / 49185
+
 ; programmatic interface pointers
 api_user_input_ptr:
-    !word user_input          ; $C01B/$C01C (49179/49180): Pointer to 64-byte input buffer
+    !word user_input          ; $C024/$C025 (49188/49189): Pointer to 64-byte input buffer
 api_user_input_len_ptr:
-    !word user_input_length   ; $C01D/$C01E (49181/49182): Pointer to input buffer length byte
+    !word user_input_length   ; $C026/$C027 (49190/49191): Pointer to input buffer length byte
 api_http_url_ptr:
-    !word http_url            ; $C01F/$C020 (49183/49184): Pointer to 80-byte URL buffer
+    !word http_url            ; $C028/$C029 (49192/49193): Pointer to 80-byte URL buffer
 api_response_buffer_ptr:
-    !word response_buffer     ; $C021/$C022 (49185/49186): Pointer to 512-byte response buffer
+    !word response_buffer     ; $C02A/$C02B (49194/49195): Pointer to 512-byte response buffer
 api_vdrive_devnum_ptr:
-    !word vdrive_devnum       ; $C023/$C024 (49187/49188): Pointer to device number byte
+    !word vdrive_devnum       ; $C02C/$C02D (49196/49197): Pointer to device number byte
 api_vdrive_retcode_ptr:
-    !word vdrive_retcode      ; $C025/$C026 (49189/49190): Pointer to return code byte
+    !word vdrive_retcode      ; $C02E/$C02F (49198/49199): Pointer to return code byte
 api_search_result_count_ptr:
-    !word search_result_count ; $C027/$C028 (49191/49192): Pointer to 16-bit search result count
+    !word search_result_count ; $C030/$C031 (49200/49201): Pointer to 16-bit search result count
+api_token_ptr:
+    !word token               ; $C032/$C033 (49202/49203): Pointer to 8-byte token (zero terminated)
+api_session_id_ptr:
+    !word session_id          ; $C034/$C035 (49204/49205): Pointer to 16-bit session ID from the server
 
 wic64_build_report = 1
 wic64_optimize_for_size = 1 ; optimize for size over speed
@@ -170,6 +182,9 @@ vdrive_iload_direct:
     pla
     sta temp_workspace4      
 
+    lda #0                 ; a plain LOAD takes the whole file
+    sta load_begin_only
+
     ; Intercept only vdrive
     lda vdrive_devnum
     cmp devnum
@@ -190,6 +205,18 @@ vdrive_iload_direct:
     lda temp_workspace1
     sta $93
     jmp (temp_ptr_lo)
+
+; reserved jump table entries: nothing there yet (C=1)
+vdrive_reserved:
+    sec
+    rts
+
+; patch stub entry ($C01B): SETNAM done; returns after the status and address (C=0),
+; with the data still waiting on the WiC64
+vdrive_load_handoff:
+    lda #1
+    sta load_begin_only
+    ; fall through
 
 vdrive_load:   
 
@@ -245,9 +272,9 @@ fn_copy_done:
     lda response_buffer+2
     sta vdrive_retcode
 
-    ; Check error code - 0xff is success, anything else is error
-    cmp #$ff
-    beq .load_success
+    ; Check error code - $ff is success, $fe is success + run it (patch stub), anything else is error
+    cmp #$fe
+    bcs .load_success
     jmp load_error
 .load_success:
     
@@ -268,6 +295,9 @@ fn_copy_done:
     ; SA=1 (LOAD "file",8,1): Use file's header address
     lda sec_addr
     bne .use_file_address   ; SA != 0: use file's address
+    lda vdrive_retcode      ; a patch stub ($fe) always goes where the server put it
+    cmp #$fe
+    beq .use_file_address
     
     ; SA=0: use address from $C3/$C4 (MEMUSS - specifically for serial bus SA=0 loads)
     lda alt_address_lo
@@ -295,6 +325,15 @@ fn_copy_done:
     lda #$0d
     jsr $ffd2
 .skip_load_msg:
+
+    ; patch stub: it takes the data itself
+    lda load_begin_only
+    beq .load_whole_file
+    lda #0
+    sta load_begin_only
+    clc
+    rts
+.load_whole_file:
     
     ; Set response pointer to the load address and receive remaining data directly
     lda dest_ptr_lo
@@ -310,6 +349,13 @@ fn_copy_done:
 
 load_done:     
     jsr compute_endaddress
+
+    ; status $fe: a patch stub - run it (it never comes back)
+    lda vdrive_retcode
+    cmp #$fe
+    bne .no_run
+    jmp (temp_workspace1)  ; start address, kept since the LOADING message
+.no_run:
     
     ; Return success with error code already in vdrive_retcode
     clc
@@ -1380,6 +1426,10 @@ temp_workspace5:
     !byte 0
 temp_workspace6:
     !byte 0
+load_begin_only:
+    !byte 0  ; 1 = vdrive_load_handoff: return before the data
+
+!if <temp_workspace1 = $ff { !error "jmp (temp_workspace1) would cross a page (6502 bug)" }
 
 ; table of prefix strings for GET-style requests with query parameters
 prefix_lo:

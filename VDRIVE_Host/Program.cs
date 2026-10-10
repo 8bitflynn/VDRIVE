@@ -21,8 +21,13 @@ namespace VDRIVE_Host
             VDRIVE_Contracts.Interfaces.IConfigurationBuilder configBuilder = new ConfigurationBuilder(logger);
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configBuilder.BuildConfiguration();
 
-            // recreate logger with correct logging level
-            logger = new VDRIVE.Util.ConsoleLogger(Enum.Parse<LogSeverity>(configuration.LoggingLevel));
+            // recreate logger with correct logging level: console, and the same lines in logs\vdrive-yyyyMMdd.log next to the exe
+            LogSeverity logSeverity = Enum.Parse<LogSeverity>(configuration.LoggingLevel);
+            logger = new VDRIVE.Util.CompositeLogger(
+                new VDRIVE.Util.ConsoleLogger(logSeverity),
+                string.IsNullOrWhiteSpace(configuration.LogPath)
+                    ? new VDRIVE.Util.FileLogger(logSeverity)                       // logs next to the exe
+                    : new VDRIVE.Util.FileLogger(logSeverity, configuration.LogPath));
 
             if (!configBuilder.IsValidConfiguration(configuration))
             {
