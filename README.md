@@ -34,7 +34,13 @@
 
 ## Try It Live
 
-Try VDRIVE in your browser at [8bitflynn.io](https://8bitflynn.io/Toolz#vdrive-c64): a browser C64 with an emulated WiC64 runs the real `vdrivewic64.prg`. On a real C64 with a WiC64, load [`vdrivewic64.prg`](https://8bitflynn.io/Resources/vdrivewic64.prg), which points at the public VDRIVE server.
+<p align="center">
+  <a href="https://8bitflynn.io/Projects#vdrive-c64"><b>▶ Try VDRIVE in your browser</b></a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="https://8bitflynn.io/Resources/vdrivewic64.prg"><b>⬇ Download vdrivewic64.prg</b></a>
+</p>
+
+In the browser, a C64 with an emulated WiC64 runs the real `vdrivewic64.prg`. On a real C64 with a WiC64, load the same file: it points at the public VDRIVE server.
 
 ---
 

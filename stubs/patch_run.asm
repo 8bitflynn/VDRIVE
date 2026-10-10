@@ -15,13 +15,14 @@
 ; address.
 ;
 ; Lives at the bottom of the stack page: the stack is reset to $01FF and stays above
-; the end of this code. The server never writes $0100-$01FF or ptr/count.
+; the end of this code (at most $01C0 with the longest name). The server never writes $0100-$01FF or ptr/count.
 ;
 ; Built with ACME; the bytes go into VDRIVE PatchStubs.cs - rebuild that array
 ; whenever this file changes:
 ;   acme -f cbm -o patch_run.prg -l patch_run.sym patch_run.asm
 ; ---------------------------------------------------------------------------
 
+vdrive_disable      = $c003    ; VDRIVE jump table: puts back the LOAD/SAVE vectors it saved
 vdrive_load_handoff = $c01b    ; VDRIVE jump table
 
 setnam  = $ffbd
@@ -29,6 +30,7 @@ msgflag = $9d                  ; KERNAL message mode ($80 = direct: SEARCHING/LO
 
 ptr   = $fb                    ; where the bytes go
 count = $fd                    ; 65536 - bytes left in this segment
+tmo   = $9e                    ; timeout counter (tape/RS-232 temporaries, unused here)
 
 * = $0100
 
@@ -42,7 +44,11 @@ start:
     ldy #>fname
     jsr setnam
     jsr vdrive_load_handoff
-    bcs fail
+    bcs fail                   ; (nothing changed yet: VDRIVE still on)
+restore:
+    jsr vdrive_disable         ; VDRIVE gets overwritten: LOAD/SAVE back to what they were before
+                               ; SYS 49152 (IDE64, KERNAL...). The server makes this a BIT ($2C, does
+                               ; nothing) when the program stays below $C000 and VDRIVE stays in use
     sei                        ; the IRQ vector at $0314 may be overwritten
 
 segment:
@@ -57,10 +63,7 @@ segment:
     ora count
     beq go                     ; length 0: the end, ptr = where to go
     ldy #0
--   lda #$10                   ; FLAG2: the WiC64 has the next byte
---  bit $dd0d
-    beq --
-    lda $dd01                  ; reading it hands the byte back (PC2)
+-   jsr getb
     ldx #$34                   ; all RAM while storing
     stx $01
     sta (ptr),y
@@ -95,15 +98,32 @@ fail:
     ldx #$04                   ; ?FILE NOT FOUND ERROR
     jmp ($0300)
 
+; the next byte from the WiC64; ~9 seconds without one: give up (a reset - by then memory is
+; half written, VDRIVE maybe too)
 getb:
-    lda #$10
--   bit $dd0d
-    beq -
-    lda $dd01
+    ldx #10                    ; ~0.9 s each
+    stx tmo+1
+    ldx #0
+    stx tmo
+-   lda #$10                   ; FLAG2: the WiC64 has the next byte
+    bit $dd0d
+    bne +
+    dex
+    bne -
+    dec tmo
+    bne -
+    dec tmo+1
+    bne -
+    lda #$00                   ; timed out: user port back to input, then reset
+    sta $dd03
+    lda #$37
+    sta $01
+    jmp ($fffc)
++   lda $dd01                  ; reading it hands the byte back (PC2)
     rts
 
 ; --- filled in by the server -------------------------------------------------------
 fname_len:  !byte 0
 fname:      ; the program's name + ",P2" (up to 35 bytes; the PRG ends after it)
 
-!if fname + 35 > $01b0 { !error "stub too long: the stack needs the top of the page" }
+!if fname + 35 > $01c0 { !error "stub too long: the stack needs the top of the page" }

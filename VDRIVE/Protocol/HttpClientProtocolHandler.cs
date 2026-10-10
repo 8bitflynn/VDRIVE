@@ -162,7 +162,7 @@ namespace VDRIVE.Protocol
                             {
                                 // the name as the C64 sent it (PETSCII kept), without the switch
                                 byte[] nameBytes = loadRequest.Filename.Take(patchName.Length).ToArray();
-                                responsePayload = PatchStubs.BuildRunStub(nameBytes);
+                                responsePayload = PatchStubs.BuildRunStub(nameBytes, PatchStubs.CoversVdrive(fullFile));
                                 loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
                                 this.Logger.LogMessage($"[PATCH] Stub {responsePayload.Length - 2} bytes at $0100, program ${fullFile[0] | (fullFile[1] << 8):X4}-${(fullFile[0] | (fullFile[1] << 8)) + fullFile.Length - 3:X4}");
                             }
