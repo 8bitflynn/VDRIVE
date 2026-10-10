@@ -35,11 +35,10 @@ This section explains each field in `appsettings.json` for VDRIVE.
 ### Temporary Storage
 - **TempPath** — Custom temp directory (empty = system default).
 - **TempFolder** — Scratch folder name. Default: `VDRIVE_Scratch`.
-- **Chunksize** — Data chunk size in bytes. Default: 1024. (Legacy only) 
   
 ### Networking
-- **ServerOrClientMode** — Always `Server` in WiC64. (Client mode was legacy only.)
-- **ServerType** — Always `Http` in WiC64. (Other protocols were legacy only.)
+- **ServerOrClientMode** — Always `Server` with the WiC64.
+- **ServerType** — Always `Http` with the WiC64.
 - **ServerListenAddress** — Bind address. Default: **http://*:**
 - **ServerPort** — Default: **80**
 - **SendTimeoutSeconds** — Default: **15 seconds**

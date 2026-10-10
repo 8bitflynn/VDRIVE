@@ -10,9 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="#try-it-live">Try it live</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#using-vdrive">Using VDRIVE</a> ·
-  <a href="#programs-that-fill-all-of-memory-p">,P</a> ·
+  <a href="#programs-that-fill-all-of-memory-p">Full-memory loads</a> ·
   <a href="#videos">Videos</a> ·
   <a href="#install-steps-wic64">Install</a> ·
   <a href="#server-configuration-reference">Configuration</a> ·
@@ -28,6 +29,12 @@
 - **Safe concurrency.** Several C64s can LOAD and SAVE to the same disk image without corruption. File access uses read/write locks with a Last‑Write‑Wins model.
 - **Programs that fill all of memory load too,** including over VDRIVE itself at `$C000`: the server sends a small patch stub that takes the program and runs it. See [`,P`](#programs-that-fill-all-of-memory-p).
 - **Local and remote collections.** Local folders, [Commodore.Software](https://commodore.software/), and the [High Voltage SID Collection](https://www.hvsc.c64.org/) as a SID jukebox.
+
+---
+
+## Try It Live
+
+Try VDRIVE in your browser at [8bitflynn.io](https://8bitflynn.io/Toolz#vdrive-c64): a browser C64 with an emulated WiC64 runs the real `vdrivewic64.prg`. On a real C64 with a WiC64, load [`vdrivewic64.prg`](https://8bitflynn.io/Resources/vdrivewic64.prg), which points at the public VDRIVE server.
 
 ---
 
@@ -120,7 +127,7 @@ It needs `wic64.h`, `wic64.asm` and `examples/macros.asm` from the [WiC64 librar
 
 **3. Configure the server.** Edit `appsettings.json` to set the search paths VDRIVE should scan. A remote `IFloppyResolver` can be configured for distributed setups. See the [configuration reference](#server-configuration-reference) below and the [configuration docs](docs/README.md).
 
-**4. Run the server.** Launch the C# .NET server (or client, if the firmware is in server mode). VDRIVE runs on [any OS with the .NET runtime](https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md).
+**4. Run the server.** Launch the C# .NET server. VDRIVE runs on [any OS with the .NET runtime](https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md).
 
 ---
 
@@ -177,7 +184,6 @@ It needs `wic64.h`, `wic64.asm` and `examples/macros.asm` from the [WiC64 librar
 |---|---|
 | `TempPath` | Custom temp folder (empty = system default). |
 | `TempFolder` | Scratch folder name. Default: `VDRIVE_Scratch`. |
-| `Chunksize` | Data chunk size in bytes. Default: 1024. |
 
 #### Networking (WiC64)
 
@@ -195,7 +201,7 @@ It needs `wic64.h`, `wic64.asm` and `examples/macros.asm` from the [WiC64 librar
 
 ## How It Works
 
-<img src="https://8bitflynn.io/Resources/Images/WiC64_ESP32_ESP8266.jpg" alt="WiC64 C64 hardware" width="250" align="right"/>
+<img src="docs/images/WiC64.jpg" alt="Two WiC64s: an open one with its ESP32 board, and one in its case" width="320" align="right"/>
 
 **WiC64 (ESP32‑based, memory‑mapped).** VDRIVE runs on the [WiC64](https://wic64.net/web/). The WiC64 is memory‑mapped directly to the C64 through the user port, bypassing the limits of serial (IEC) communication and loading large binaries in seconds.
 
