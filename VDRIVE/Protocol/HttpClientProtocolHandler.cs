@@ -118,6 +118,38 @@ namespace VDRIVE.Protocol
                     LoadResponse loadResponse = new LoadResponse { ResponseCode = 0x04 };
                     byte[] responsePayload = new byte[0];
 
+                    // write switch (PatchStubs): "*,W" / "*,W9" -> the write stub for the mounted D64,
+                    // "*,WA".."*,WZ" -> its slices
+                    if (PatchStubs.TryGetWrite(fileName, out byte writeDevice, out int writeSlice))
+                    {
+                        string imagePath = session.FloppyResolver.GetInsertedFloppyPointer().ImagePath;
+                        byte[] image = !string.IsNullOrEmpty(imagePath) && File.Exists(imagePath)
+                            && Path.GetExtension(imagePath).Equals(".d64", StringComparison.OrdinalIgnoreCase)
+                            ? File.ReadAllBytes(imagePath) : null;
+                        if (image == null)
+                        {
+                            this.Logger.LogMessage($"[WRITE] No D64 mounted ('{imagePath}')", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        }
+                        else if (writeSlice < 0)
+                        {
+                            responsePayload = PatchStubs.BuildWriteStub(image, imagePath, writeDevice);
+                            loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
+                            this.Logger.LogMessage($"[WRITE] Stub for {Path.GetFileName(imagePath)} ({image.Length} bytes) to drive {writeDevice} as {WriteFolderName(imagePath)}");
+                        }
+                        else
+                        {
+                            byte[] slice = PatchStubs.BuildWriteSlice(image, writeSlice);
+                            if (slice != null)
+                            {
+                                responsePayload = slice;
+                                loadResponse.ResponseCode = 0xff;
+                                this.Logger.LogMessage($"[WRITE] Slice {(char)('A' + writeSlice)}: {slice.Length - 2} bytes");
+                            }
+                        }
+                        WriteLoadResponse(this.HttpListenerContext, responsePayload, loadResponse, session);
+                        return;
+                    }
+
                     // patch switches (PatchStubs): "NAME,P" -> the run stub, "NAME,P2" -> the stub's data
                     string runDataName = PatchStubs.GetRunDataName(fileName);
                     string runName = runDataName == null ? PatchStubs.GetRunName(fileName) : null;
@@ -774,6 +806,11 @@ namespace VDRIVE.Protocol
         // (write or read files anywhere on this PC), and a '\' right before the closing quote does the same
         // on Windows. Control characters have no business in a file name either. A real C64 name is at most
         // 16 characters (32 allowed here for "@0:" prefixes and the like) and never needs any of these.
+        private static string WriteFolderName(string imagePath)
+        {
+            return "VDRIVE/" + PatchStubs.DriveName(imagePath) + ".D64";
+        }
+
         private static bool IsSafeC64FileName(string name)
         {
             if (name == null || name.Length > 32) return false;
