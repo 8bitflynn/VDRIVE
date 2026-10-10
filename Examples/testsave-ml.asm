@@ -25,13 +25,13 @@ dest_ptr_hi    = $af
 
 start:
         ; Get API pointers
-        lda $c01b
+        lda $c024
         sta input_ptr
-        lda $c01c
+        lda $c025
         sta input_ptr+1
-        lda $c01d
+        lda $c026
         sta len_ptr
-        lda $c01e
+        lda $c027
         sta len_ptr+1
         
         ; Search for disk image

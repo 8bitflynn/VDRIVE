@@ -1,7 +1,7 @@
-10 ip=peek(49179)+peek(49180)*256
-20 il=peek(49179):ih=peek(49180)
-30 lp=peek(49181)+peek(49182)*256
-32 rb=peek(49185)+peek(49186)*256
+10 ip=peek(49188)+peek(49189)*256
+20 il=peek(49188):ih=peek(49189)
+30 lp=peek(49190)+peek(49191)*256
+32 rb=peek(49194)+peek(49195)*256
 35 s$="data4.d64":gosub 200
 60 sys 49164
 70 sys 49167

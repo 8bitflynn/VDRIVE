@@ -50,16 +50,35 @@ DELETE LINE 220
 
     ; reboot WiC64
     jmp reboot_wic64               ; $C018 / 49176
+
+    ; patch stubs: starts a LOAD and hands it over once the status and address are in
+    ; (C=0); the data waits on the WiC64 for the stub's own receive loop
+    jmp vdrive_load_handoff        ; $C01B / 49179
+
+    ; reserved for later entries (they return with C=1 for now)
+    jmp vdrive_reserved            ; $C01E / 49182
+    jmp vdrive_reserved            ; $C021 / 49185
 ```
 
 ### Programmatic Interface Pointers
 
 ```asm
-    api_user_input_ptr:        !word user_input          ; $C01B/$C01C (49179/49180)
-    api_user_input_len_ptr:    !word user_input_length   ; $C01D/$C01E (49181/49182)
-    api_http_url_ptr:          !word http_url            ; $C01F/$C020 (49183/49184)
-    api_response_buffer_ptr:   !word response_buffer     ; $C021/$C022 (49185/49186)
-    api_vdrive_devnum_ptr:     !word vdrive_devnum       ; $C023/$C024 (49187/49188)
-    api_vdrive_retcode_ptr:    !word vdrive_retcode      ; $C025/$C026 (49189/49190)
-    api_search_result_count_ptr: !word search_result_count ; $C027/$C028 (49191/49192)
+    api_user_input_ptr:        !word user_input          ; $C024/$C025 (49188/49189)
+    api_user_input_len_ptr:    !word user_input_length   ; $C026/$C027 (49190/49191)
+    api_http_url_ptr:          !word http_url            ; $C028/$C029 (49192/49193)
+    api_response_buffer_ptr:   !word response_buffer     ; $C02A/$C02B (49194/49195)
+    api_vdrive_devnum_ptr:     !word vdrive_devnum       ; $C02C/$C02D (49196/49197)
+    api_vdrive_retcode_ptr:    !word vdrive_retcode      ; $C02E/$C02F (49198/49199)
+    api_search_result_count_ptr: !word search_result_count ; $C030/$C031 (49200/49201)
+    api_token_ptr:             !word token               ; $C032/$C033 (49202/49203)
+    api_session_id_ptr:        !word session_id          ; $C034/$C035 (49204/49205)
 ```
+
+The pointers moved down 9 bytes when `vdrive_load_handoff` and the reserved slots were
+added. The reserved slots are there so they stay put from now on.
+
+### Load Status Codes
+
+- `$FF` — loaded.
+- `$FE` — loaded, then run: VDRIVE jumps to the load address. The server uses it for patch stubs.
+- anything else — error (`$04` = file not found).

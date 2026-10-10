@@ -1,6 +1,6 @@
-10 ip=peek(49179)+256*peek(49180)
-20 il=peek(49179):ih=peek(49180)
-30 lp=peek(49181)+256*peek(49182)
+10 ip=peek(49188)+256*peek(49189)
+20 il=peek(49188):ih=peek(49189)
+30 lp=peek(49190)+256*peek(49191)
 40 d$="data4.d64"
 50 for i=1 to len(d$)
 60 poke ip+i-1,asc(mid$(d$,i,1))

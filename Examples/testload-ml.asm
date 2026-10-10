@@ -17,14 +17,14 @@ start:
         sta $b9    ; Set secondary address to 1 to use header address  
 
         ; Get API pointers
-        lda $c01b           ; Input buffer pointer low
+        lda $c024           ; Input buffer pointer low
         sta input_ptr
-        lda $c01c           ; Input buffer pointer high
+        lda $c025           ; Input buffer pointer high
         sta input_ptr+1
         
-        lda $c01d           ; Length pointer low
+        lda $c026           ; Length pointer low
         sta len_ptr
-        lda $c01e           ; Length pointer high
+        lda $c027           ; Length pointer high
         sta len_ptr+1
         
         ; Search for "data4.d64"
