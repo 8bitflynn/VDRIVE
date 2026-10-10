@@ -5,6 +5,17 @@ namespace VDRIVE.Floppy.Impl
 {
     public class LocalFloppyResolver : FloppyResolverBase, IFloppyResolver
     {
+        // the file name as it is on disk (same look as the C64 list: upper case, '_' as '-'), not cut at 64 characters
+        public override string GetLongImageName(ushort id)
+        {
+            FloppyPointer pointer = this.FloppyPointers.FirstOrDefault(fp => fp.Id == id);
+            if (pointer.Equals(default(FloppyPointer)) || string.IsNullOrEmpty(pointer.ImagePath))
+            {
+                return null;
+            }
+            return Path.GetFileName(pointer.ImagePath).Replace('_', '-').ToUpper();
+        }
+
         public LocalFloppyResolver(IConfiguration configuration, ILogger logger)
         {
             Configuration = configuration;

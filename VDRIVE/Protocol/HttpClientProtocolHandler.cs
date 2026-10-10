@@ -641,7 +641,7 @@ namespace VDRIVE.Protocol
         {
             setName = null;
             string folder = Path.GetDirectoryName(imagePath);
-            string clicked = Path.GetFileNameWithoutExtension(imagePath);
+            string clicked = DiskSetName(Path.GetFileNameWithoutExtension(imagePath), out string clickedFlags);
             Match marker = diskMarker.Match(clicked);
             Match companion = marker.Success ? null : companionDisk.Match(clicked);
             if (string.IsNullOrEmpty(folder) || !(marker.Success || companion.Success))
@@ -657,15 +657,18 @@ namespace VDRIVE.Protocol
 
             var candidates = Directory.EnumerateFiles(folder)
                 .Where(file => { string ext = Path.GetExtension(file).ToLowerInvariant(); return ext == ".d64" || ext == ".g64"; })
-                .Select(file => new { File = file, Name = Path.GetFileNameWithoutExtension(file) })
+                .Select(file => { string name = DiskSetName(Path.GetFileNameWithoutExtension(file), out string flags); return new { File = file, Name = name, Flags = flags }; })
                 .ToList();
 
             List<string> numbered = candidates
-                .Select(x => new { x.File, Match = diskMarker.Match(x.Name) })
+                .Select(x => new { x.File, x.Flags, Match = diskMarker.Match(x.Name) })
                 .Where(x => x.Match.Success && string.Equals(x.Match.Groups["base"].Value.Trim(), baseName, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(x => DiskOrder(x.Match))
-                .ThenBy(x => x.File, StringComparer.OrdinalIgnoreCase)
-                .Select(x => x.File)
+                // several dumps of the same disk ("[a1]", "[a3]", "[cr ...]"): one per disk - the one whose dump
+                // flags match the clicked disk, else the first
+                .GroupBy(x => DiskOrder(x.Match))
+                .OrderBy(g => g.Key)
+                .Select(g => g.OrderBy(x => string.Equals(x.Flags, clickedFlags, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                              .ThenBy(x => x.File, StringComparer.OrdinalIgnoreCase).First().File)
                 .ToList();
 
             if (numbered.Count == 0)
@@ -691,6 +694,26 @@ namespace VDRIVE.Protocol
             }
             setName = baseName;
             return disks;
+        }
+
+        // TOSEC-style names: "Adventure Construction Set (1984)(Electronic Arts)(Side B)[a3]".
+        //  - the dump flags at the end ("[a3]", "[cr XYZ]", "[!]") are not part of the name: taken off (returned in flags)
+        //  - "(Disk 1 of 2)(Side B)" becomes "(Disk 1B)", the form the disk marker understands
+        private static readonly Regex DumpFlags = new Regex(@"(\s*\[[^\]]*\])+$", RegexOptions.CultureInvariant);
+        private static readonly Regex DiskOfSide = new Regex(
+            @"\(\s*(?:disk|disc)\s*(?<n>\d{1,2})\s*of\s*\d{1,2}\s*\)\s*\(\s*side\s*(?<side>[a-h])\s*\)$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        private static string DiskSetName(string name, out string flags)
+        {
+            flags = "";
+            Match f = DumpFlags.Match(name);
+            if (f.Success && f.Index > 0)
+            {
+                flags = f.Value.Trim();
+                name = name.Substring(0, f.Index).TrimEnd();
+            }
+            return DiskOfSide.Replace(name, m => "(Disk " + m.Groups["n"].Value + m.Groups["side"].Value.ToUpperInvariant() + ")");
         }
 
         // Disk1 < Disk1A < Disk1B < Disk2; a side on its own ("Side A") counts like a disk number (A = 1)
@@ -1251,6 +1274,15 @@ namespace VDRIVE.Protocol
             return $"{fullId} {new string(ff.ImageName).TrimEnd('\0')}\r\n";
         }
 
+        // the website (X-VDrive-Client: web, any browser, phones too) gets the full file name where the resolver has
+        // one: it decides disk or program by the extension, which the 64-character cut can take off
+        private static string WebSearchResultLine(Session session, FloppyInfo ff)
+        {
+            ushort fullId = (ushort)(ff.IdLo | (ff.IdHi << 8));
+            string longName = (session.FloppyResolver as FloppyResolverBase)?.GetLongImageName(fullId);
+            return longName == null ? SearchResultLine(ff) : $"{fullId} {longName}\r\n";
+        }
+
         private string SearchPageHeader(Session session, int pageNumber)
         {
             return pageNumber == 0
@@ -1325,7 +1357,7 @@ namespace VDRIVE.Protocol
             var pageResultsList = new List<string>();
             for (int i = startIndex; i < endIndex; i++)
             {
-                pageResultsList.Add(SearchResultLine(session.CachedSearchResults[i]));
+                pageResultsList.Add(isWeb ? WebSearchResultLine(session, session.CachedSearchResults[i]) : SearchResultLine(session.CachedSearchResults[i]));
             }
 
             string fromMessage = SearchPageHeader(session, pageNumber);

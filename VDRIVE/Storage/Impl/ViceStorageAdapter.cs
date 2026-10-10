@@ -192,7 +192,15 @@ namespace VDRIVE.Storage.Impl
                     else
                     {
                         string[] rawLines = LoadRawDirectoryLines(floppyResolver.GetInsertedFloppyPointer());
-                        string lineWithFirstFile = rawLines.FirstOrDefault(rawLine => rawLine.ToLower().Contains("prg"));
+                        string lineWithFirstFile = rawLines?.FirstOrDefault(rawLine => rawLine != null && rawLine.ToLower().Contains("prg"));
+
+                        // no PRG on this disk (e.g. side B of a multi-disk game, or a data-only disk): "file not found"
+                        if (lineWithFirstFile == null)
+                        {
+                            Logger.LogMessage($"[Load] No PRG file on {floppyPointer.ImagePath} - nothing for LOAD \"*\"", LogSeverity.Info);
+                            payload = null;
+                            return BuildLoadResponse(loadRequest, null, 0x04); // file not found
+                        }
 
                         // Match anything inside double quotes, including spaces
                         Match match = Regex.Match(lineWithFirstFile, "\"([^\"]*)\"");
@@ -208,6 +216,7 @@ namespace VDRIVE.Storage.Impl
                         else
                         {
                             payload = null;
+                            responseCode = 0x04; // file not found (no quoted name on that line)
                         }
                     }
                 }

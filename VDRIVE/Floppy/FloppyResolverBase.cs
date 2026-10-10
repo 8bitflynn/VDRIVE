@@ -13,6 +13,13 @@ namespace VDRIVE.Floppy
         protected FloppyPointer InsertedFloppyPointer; // join to FloppyInfo.Id for long path
         protected List<FloppyPointer> FloppyPointers = new List<FloppyPointer>(); // modern side long path joined to FloppyInfo.Id   
 
+        // The full name of a search result, for clients with room for it (the website): FloppyInfo.ImageName is cut
+        // at 64 characters for the C64 screen, which can cut off the ".D64" too. null = no longer name here.
+        public virtual string GetLongImageName(ushort id)
+        {
+            return null;
+        }
+
         public virtual FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier) // called from a client 
         {
             this.InsertedFloppyInfo = this.FloppyInfos.FirstOrDefault(fi => fi.IdLo == floppyIdentifier.IdLo && fi.IdHi == floppyIdentifier.IdHi);
