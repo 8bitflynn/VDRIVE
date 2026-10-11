@@ -2,6 +2,8 @@
 
 This section explains each field in `appsettings.json` for VDRIVE.
 
+Your own values (tokens, folders, tool paths) can go in `appsettings.private.json` next to it instead: same layout, only the settings you change. It is in `.gitignore`, so it never goes to GitHub, and its values and lists replace the ones in `appsettings.json`.
+
 ### Authentication
 - **AllowedAuthTokens** — Optional list of tokens permitted to access the server.
   - Tokens are 8 bytes and null‑terminated. They are embedded in the PRG binary and must currently be patched manually. Tokens are typically used over public networks **but are not necessary** when running VDRIVE locally.
@@ -12,7 +14,7 @@ This section explains each field in `appsettings.json` for VDRIVE.
   Options: `DirMaster`, `Vice`. Default: Vice.
 - **StorageAdapterSettings**:
   - **ReadOnly** — Prevent modifications to disk images when true. 
-  - **NewFloppyPath** — Directory for new floppy images (e.g. `C:\Programming\Commodore\VirtualFloppies\NewFloppyImages`).
+  - **NewFloppyPath** — Directory for new floppy images (e.g. `C:\C64\NewFloppyImages`).
   - **DirMaster** — Python + CBMdisk integration.
   - **Vice** — Uses `c1541.exe`, mostly tested with version 2.4 but also works with 3.9.
 
@@ -35,6 +37,9 @@ This section explains each field in `appsettings.json` for VDRIVE.
 ### Temporary Storage
 - **TempPath** — Custom temp directory (empty = system default).
 - **TempFolder** — Scratch folder name. Default: `VDRIVE_Scratch`.
+
+### Disk Writer (`,W`)
+- **WriteFolder** — The folder on the C64's drive (SD2IEC, IDE64) that `,W` writes disks and programs into. It is created in the drive's root if it isn't there yet. Letters, digits, `_`, `-` and `.`, up to 16 characters. Default: `VDRIVE`.
   
 ### Networking
 - **ServerOrClientMode** — Always `Server` with the WiC64.

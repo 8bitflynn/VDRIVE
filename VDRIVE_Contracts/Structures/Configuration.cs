@@ -16,6 +16,7 @@ namespace VDRIVE_Contracts.Structures
         public string SearchIntroMessage { get; set; }
         public string TempPath { get; set; }
         public string LogPath { get; set; }    // folder for vdrive-yyyyMMdd.log; empty = logs next to the exe
+        public string WriteFolder { get; set; }    // ,W: the folder on the C64's drive that disks and programs go into; empty = VDRIVE
         public string TempFolder { get; set; }
         public ushort ChunkSize { get; set; }
         public string ServerOrClientMode { get; set; }

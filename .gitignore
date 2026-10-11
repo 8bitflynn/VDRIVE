@@ -363,3 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 /VDRIVE_Host/appsettings.json
 /VDRIVE_UnitTesting/appsettings.json
+
+# Private settings (tokens) - never committed
+appsettings.private.json

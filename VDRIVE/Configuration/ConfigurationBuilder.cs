@@ -1,4 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using VDRIVE_Contracts.Interfaces;
 
 namespace VDRIVE.Configuration
@@ -13,9 +16,22 @@ namespace VDRIVE.Configuration
 
         public VDRIVE_Contracts.Interfaces.IConfiguration BuildConfiguration()
         {
+            string basePath = Directory.GetCurrentDirectory();
+            JsonNode settings = ReadJson(Path.Combine(basePath, "appsettings.json"));
+
+            // appsettings.private.json (optional, in .gitignore) holds this machine's own values - tokens, folders,
+            // tool paths - so they never go to GitHub. Anything in it replaces the same setting in appsettings.json;
+            // a list in it (AllowedAuthTokens, SearchPaths...) replaces the whole list, so the examples in
+            // appsettings.json never mix in.
+            string privatePath = Path.Combine(basePath, "appsettings.private.json");
+            if (File.Exists(privatePath))
+            {
+                Merge(settings, ReadJson(privatePath));
+                this.Logger.LogMessage("Loaded appsettings.private.json");
+            }
+
             IConfigurationRoot? configRoot = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(settings.ToJsonString())))
                 .Build();
             VDRIVE_Contracts.Interfaces.IConfiguration configuration = configRoot.GetSection("AppSettings").Get<VDRIVE_Contracts.Structures.Configuration>();
 
@@ -28,6 +44,34 @@ namespace VDRIVE.Configuration
             this.EnsureDefaultValues(configuration);
 
             return configuration;
+        }
+
+        private static JsonNode ReadJson(string path)
+        {
+            // appsettings files have // comments and the odd trailing comma
+            var documentOptions = new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+            return JsonNode.Parse(File.ReadAllText(path), null, documentOptions) ?? new JsonObject();
+        }
+
+        // objects merge key by key; values and lists from 'overrides' replace what 'target' has
+        private static void Merge(JsonNode target, JsonNode overrides)
+        {
+            if (target is not JsonObject targetObject || overrides is not JsonObject overrideObject)
+                return;
+
+            foreach (KeyValuePair<string, JsonNode?> entry in overrideObject.ToList())
+            {
+                JsonNode? value = entry.Value;
+                if (value is JsonObject && targetObject[entry.Key] is JsonObject existing)
+                {
+                    Merge(existing, value);
+                }
+                else
+                {
+                    overrideObject.Remove(entry.Key);   // a node can only have one parent
+                    targetObject[entry.Key] = value;
+                }
+            }
         }
 
         private void EnsureDefaultValues(VDRIVE_Contracts.Interfaces.IConfiguration configuration)
@@ -213,6 +257,7 @@ namespace VDRIVE.Configuration
             this.Logger.LogMessage($"  SessionTimeoutMinutes: {configuration.SessionTimeoutMinutes}");
             this.Logger.LogMessage($"  TempPath: {configuration.TempPath}");
             this.Logger.LogMessage($"  LogPath: {(string.IsNullOrWhiteSpace(configuration.LogPath) ? "(logs next to the exe)" : configuration.LogPath)}");
+            this.Logger.LogMessage($"  WriteFolder: {VDRIVE.Protocol.PatchStubs.WriteFolderOrDefault(configuration.WriteFolder)}");
             this.Logger.LogMessage($"  TempFolder: {configuration.TempFolder}");
             this.Logger.LogMessage($"  ServerOrClientMode: {configuration.ServerOrClientMode}");
 

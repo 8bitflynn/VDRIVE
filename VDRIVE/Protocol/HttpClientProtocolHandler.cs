@@ -71,6 +71,15 @@ namespace VDRIVE.Protocol
                     remoteAddr += $" (XFF-full={xffHeader})";
                 }
 
+                // Status check: a bare GET / (the website's online badge asks every 30 seconds) gets a short
+                // answer with no token needed and no log lines, so it does not fill the log with 401s.
+                if (httpListenerRequest.HttpMethod == "GET" && (httpListenerRequest.Url.AbsolutePath ?? "/") == "/")
+                {
+                    httpListenerResponse.StatusCode = 200;
+                    WriteResponse(httpListenerResponse, "VDRIVE\0");
+                    return;
+                }
+
                 // Single entry log including remote addresses
                 this.Logger.LogMessage($"[{remoteAddr}] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
 
@@ -123,7 +132,10 @@ namespace VDRIVE.Protocol
                     if (PatchStubs.TryGetWrite(fileName, out byte writeDevice, out int writeDisk, out int writeSlice, out bool writeForce))
                     {
                         string imagePath = session.FloppyResolver.GetInsertedFloppyPointer().ImagePath;
-                        IReadOnlyList<string> writeSet = WriteDiskSet(session, imagePath);
+                        // a mounted PRG is copied as it is (one program); a D64 as a disk image, with the rest of its set
+                        bool writePrg = !string.IsNullOrEmpty(imagePath) && File.Exists(imagePath)
+                            && Path.GetExtension(imagePath).Equals(".prg", StringComparison.OrdinalIgnoreCase);
+                        IReadOnlyList<string> writeSet = writePrg ? new[] { imagePath } : WriteDiskSet(session, imagePath);
                         if (string.Equals(httpListenerRequest.Headers[WebClientHeader], "web", StringComparison.OrdinalIgnoreCase))
                         {
                             // the website's emulator has no drive to write to
@@ -131,15 +143,22 @@ namespace VDRIVE.Protocol
                         }
                         else if (writeSet == null || writeDisk > writeSet.Count)
                         {
-                            this.Logger.LogMessage($"[WRITE] No D64 mounted for disk {writeDisk} ('{imagePath}')", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                            this.Logger.LogMessage($"[WRITE] No D64 or PRG mounted for disk {writeDisk} ('{imagePath}')", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        }
+                        else if (writeSlice < 0 && writePrg)
+                        {
+                            byte[] prg = File.ReadAllBytes(imagePath);
+                            responsePayload = PatchStubs.BuildWritePrgStub(imagePath, writeDevice, prg, writeForce, this.Configuration.WriteFolder);
+                            loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
+                            this.Logger.LogMessage($"[WRITE] Stub for program {Path.GetFileName(imagePath)} ({prg.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.PrgDriveName(imagePath)}{(writeForce ? " (write again: @)" : "")}");
                         }
                         else if (writeSlice < 0)
                         {
                             byte[] image = File.ReadAllBytes(writeSet[writeDisk - 1]);
                             byte[] first = writeDisk == 1 ? image : File.ReadAllBytes(writeSet[0]);
-                            responsePayload = PatchStubs.BuildWriteStub(writeSet, writeDisk, writeDevice, image, first, writeForce);
+                            responsePayload = PatchStubs.BuildWriteStub(writeSet, writeDisk, writeDevice, image, first, writeForce, this.Configuration.WriteFolder);
                             loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
-                            this.Logger.LogMessage($"[WRITE] Stub for disk {writeDisk}/{writeSet.Count}: {Path.GetFileName(writeSet[writeDisk - 1])} ({image.Length} bytes) to drive {writeDevice} as VDRIVE/{PatchStubs.DiskDriveName(writeSet, writeDisk - 1)}.D64{(writeForce ? " (write again: @)" : "")}");
+                            this.Logger.LogMessage($"[WRITE] Stub for disk {writeDisk}/{writeSet.Count}: {Path.GetFileName(writeSet[writeDisk - 1])} ({image.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.DiskDriveName(writeSet, writeDisk - 1)}.D64{(writeForce ? " (write again: @)" : "")}");
                         }
                         else
                         {

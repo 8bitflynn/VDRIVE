@@ -70,6 +70,7 @@ s_scratch:  !fill 40, 0        ; $0A9C S:NAME.D64 - the old copy goes before the
 slice_name: !text "*,W1A"      ; $0AC4 slice request to VDRIVE: disk (patched), slice (A = first)
 s_run:      !fill 17, 0        ; $0AC9 the program to start: the first PRG in the directory ("*" when none;
                                ; LOAD"*" would take a USR/SEQ separator line that comes before it)
+p_prg:      !byte 0            ; $0ADA 1 = a single program, not a disk image: copied, nothing to mount or start
 
 start:
     lda devnum
@@ -123,18 +124,32 @@ start:
     bne write
     ldx #<t_cached
     ldy #>t_cached
-    jsr print_head             ; VDRIVE: ALREADY ON DRIVE n
+    jsr print_head             ; VDRIVE: DISK 1/2 ALREADY ON #8
     lda #13
     jsr chrout
-    jmp finish
+    lda p_prg                  ; a program: that's all
+    beq +
+    jmp done
++   jmp finish
 
 write:
     ldx #<t_writing
     ldy #>t_writing
-    jsr print_head             ; VDRIVE: WRITING TO DRIVE n, then a dot per slice
+    jsr print_head             ; VDRIVE: DISK 1/2 WRITING TO #8, then a dot per slice (fits 40 columns)
     lda #' '
     jsr chrout
     jmp slice_loop
+
+not_mounted:
+    lda #0                     ; no "DISK 3/3 " here: one line of 40 columns (VDRIVE: SAVED ON #12, NOT MOUNTED)
+    sta s_label+1
+    ldx #<t_written
+    ldy #>t_written
+    jsr print_head             ; VDRIVE: SAVED ON #12
+    ldx #<t_nomount
+    ldy #>t_nomount
+    jsr print                  ; ", NOT MOUNTED"
+    jmp done
 
 no_drive:
     lda #15
@@ -283,7 +298,17 @@ finish:
     jmp done
 
 last_disk:
-    lda p_listlen
+    lda p_prg
+    beq +
+    lda #0                     ; a program: VDRIVE: SAVED ON #12
+    sta s_label+1
+    ldx #<t_written
+    ldy #>t_written
+    jsr print_head
+    lda #13
+    jsr chrout
+    jmp done
++   lda p_listlen
     beq mount
     ldx #<s_listopen           ; a set: write the swap list (XS below mounts its first disk)
     ldy #>s_listopen
@@ -317,7 +342,7 @@ mount:
     jsr command
     jsr status_ok
     beq +
-    jmp fail_drive
+    jmp not_mounted            ; a drive that stores files but can't mount images (IDE64): written, that's all
 +
     lda p_dev
     cmp vdev
@@ -523,8 +548,10 @@ print_ptr:
 c_xs_off: !byte 2
           !text "XS"
 t_vdrive: !pet "vdrive: ", 0
-t_writing: !pet "writing to drive ", 0
-t_cached: !pet "already on drive ", 0
+t_writing: !pet "writing to #", 0
+t_cached: !pet "already on #", 0
+t_written: !pet "saved on #", 0
+t_nomount: !pet ", not mounted", 13, 0
 t_mounted: !pet "mounted", 13, 0
 t_drive:  !pet 13, "?drive: ", 0
 t_load:   !pet 13, "?vdrive load error", 13, 0

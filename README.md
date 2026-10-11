@@ -153,7 +153,7 @@ acme -f cbm -o vdrive_wic64.prg vdrive_wic64.asm
 
 It needs `wic64.h`, `wic64.asm` and `examples/macros.asm` from the [WiC64 library](https://github.com/WiC64-Team/wic64-library) next to it. The client talks to the server over HTTP through the WiC64.
 
-**3. Configure the server.** Edit `appsettings.json` to set the search paths VDRIVE should scan. A remote `IFloppyResolver` can be configured for distributed setups. See the [configuration reference](#server-configuration-reference) below and the [configuration docs](docs/README.md).
+**3. Configure the server.** Edit `appsettings.json` to set the search paths VDRIVE should scan. To keep your own folders and tokens off GitHub, put them in `appsettings.private.json` next to it instead (same layout, only the settings you change; it is in `.gitignore`). Values and lists in it replace the ones in `appsettings.json`. A remote `IFloppyResolver` can be configured for distributed setups. See the [configuration reference](#server-configuration-reference) below and the [configuration docs](docs/README.md).
 
 **4. Run the server.** Launch the C# .NET server. VDRIVE runs on [any OS with the .NET runtime](https://github.com/dotnet/core/blob/main/release-notes/8.0/supported-os.md).
 
@@ -161,8 +161,8 @@ It needs `wic64.h`, `wic64.asm` and `examples/macros.asm` from the [WiC64 librar
 
 ## Server Configuration Reference
 
-<details>
-<summary>Every field in <code>appsettings.json</code></summary>
+<details open>
+<summary><b>Every field in <code>appsettings.json</code></b> (click to fold)</summary>
 
 #### Authentication
 
@@ -179,6 +179,7 @@ It needs `wic64.h`, `wic64.asm` and `examples/macros.asm` from the [WiC64 librar
 | `StorageAdapterSettings.NewFloppyPath` | Folder for new floppy images. |
 | `StorageAdapterSettings.DirMaster` | Python + CBMdisk integration. |
 | `StorageAdapterSettings.Vice` | Uses `c1541.exe`, tested with version 2.4. |
+| `WriteFolder` | The folder on the C64's drive (SD2IEC, IDE64) that `,W` writes disks and programs into. Default: `VDRIVE`. |
 
 #### Floppy Resolver
 
