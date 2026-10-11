@@ -124,7 +124,12 @@ namespace VDRIVE.Protocol
                     {
                         string imagePath = session.FloppyResolver.GetInsertedFloppyPointer().ImagePath;
                         IReadOnlyList<string> writeSet = WriteDiskSet(session, imagePath);
-                        if (writeSet == null || writeDisk > writeSet.Count)
+                        if (string.Equals(httpListenerRequest.Headers[WebClientHeader], "web", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // the website's emulator has no drive to write to
+                            this.Logger.LogMessage("[WRITE] Refused for the website: no drive there", VDRIVE_Contracts.Enums.LogSeverity.Info);
+                        }
+                        else if (writeSet == null || writeDisk > writeSet.Count)
                         {
                             this.Logger.LogMessage($"[WRITE] No D64 mounted for disk {writeDisk} ('{imagePath}')", VDRIVE_Contracts.Enums.LogSeverity.Warning);
                         }

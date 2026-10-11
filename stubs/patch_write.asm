@@ -68,6 +68,8 @@ s_scratch:  !fill 40, 0        ; $0A9C S:NAME.D64 - the old copy goes before the
 ; -----------------------------------------------------------------------------------
 
 slice_name: !text "*,W1A"      ; $0AC4 slice request to VDRIVE: disk (patched), slice (A = first)
+s_run:      !fill 17, 0        ; $0AC9 the program to start: the first PRG in the directory ("*" when none;
+                               ; LOAD"*" would take a USR/SEQ separator line that comes before it)
 
 start:
     lda devnum
@@ -83,6 +85,12 @@ start:
     ldy #15
     jsr setlfs
     jsr open
+    ldx #15                    ; a drive there? (CHKOUT is the first time the bus is used: without
+    jsr chkout                 ; this check the commands went to the screen and the status read
+    php                        ; waited on the keyboard)
+    jsr clrchn
+    plp
+    bcs no_drive
 
     ; no swap list left over from an earlier game (it stays on until XS clears it, and replacing
     ; the list file while it is on kept the second disk from mounting)
@@ -127,6 +135,14 @@ write:
     lda #' '
     jsr chrout
     jmp slice_loop
+
+no_drive:
+    lda #15
+    jsr close
+    lda #$80
+    sta msgflag
+    ldx #5                     ; ?DEVICE NOT PRESENT ERROR
+    jmp ($0300)
 
 fail_drive:
     ldx #<t_drive
@@ -334,6 +350,12 @@ start_game:
     sta $0100,x
     dex
     bpl -
+    ldx s_run                  ; the name, into the copy
+    stx r_len+1
+-   lda s_run,x
+    sta r_name-1,x
+    dex
+    bne -
     lda p_dev                  ; patched into the copy
     sta r_dev+1
     lda p_run
@@ -346,9 +368,10 @@ start_game:
 
 runner_src:
 !pseudopc $0100 {
-    lda #1
-    ldx #<r_star
-    ldy #>r_star
+r_len:
+    lda #1                     ; patched: the name's length
+    ldx #<r_name
+    ldy #>r_name
     jsr setnam
     lda #1
 r_dev:
@@ -371,8 +394,8 @@ r_error:
     jmp ($0300)
 r_ready:
     jmp ($a002)
-r_star:
-    !text "*"
+r_name:
+    !fill 16, 0                ; patched: the name
 }
 runner_end:
 
