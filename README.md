@@ -60,7 +60,16 @@ No other settings need to be changed: `vdrivewic64.prg` has the server URL insid
 > [!NOTE]
 > The trailing slash is needed, or the request URLs will not be formed correctly.
 
-<img width="849" height="190" alt="The server URL inside vdrivewic64.prg in a HEX editor" src="https://github.com/user-attachments/assets/a8b5bd47-fd80-40fd-9284-f97acadd5531" />
+<img width="732" height="179" alt="The server URL and the token inside vdrivewic64.prg in a HEX editor" src="https://8bitflynn.io/Resources/Images/Originalz/vdrivewic64_url_token.png" />
+
+The URL and the token move when the client changes size, but two pointers near the start of the client always say where they are (low byte first):
+
+| Address | File offset | Points to |
+|---|---|---|
+| `$C028`/`$C029` | `$2A`/`$2B` | The server URL (80 bytes, zero terminated) |
+| `$C032`/`$C033` | `$34`/`$35` | The token (8 bytes, zero terminated) |
+
+The file offset is the address minus `$C000`, plus 2 for the PRG's load address. A patcher can follow these pointers instead of searching for the text.
 
 ---
 
