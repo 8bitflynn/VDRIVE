@@ -373,14 +373,14 @@ namespace VDRIVE.Protocol
         // its own name (PrgDriveName), load address and all - nothing to mount or start. It goes to a temporary file
         // first and is renamed at the end, like a disk image, so an interrupted copy never leaves half a program.
         public const string WritePrgTempName = "VDRIVE.TMP";
-        public static byte[] BuildWritePrgStub(string fileName, byte device, byte[] prg, bool force = false, string folder = null)
+        public static byte[] BuildWritePrgStub(string fileName, byte device, byte[] prg, bool force = false, string folder = null, string driveName = null)
         {
             string WriteFolder = WriteFolderOrDefault(folder);
             int slices = (prg.Length + WriteSliceSize - 1) / WriteSliceSize;
             if (slices < 1 || slices > 26) throw new ArgumentException("program size not supported");
             int lastLength = prg.Length - (slices - 1) * WriteSliceSize;
 
-            string name = PrgDriveName(fileName);
+            string name = driveName ?? PrgDriveName(fileName);
             var bytes = new List<byte> { (byte)(WriteStubAddress & 0xFF), (byte)(WriteStubAddress >> 8) };
             bytes.AddRange(WriteStub);
             byte[] stub = bytes.ToArray();
@@ -419,6 +419,32 @@ namespace VDRIVE.Protocol
             string result = System.Text.RegularExpressions.Regex.Replace(kept.ToString(), " {2,}", " ").Trim();
             if (result.Length > 16) result = result.Substring(0, 16).TrimEnd();
             return result.Length == 0 ? "PROGRAM" : result;
+        }
+
+        // A program made on the server (a SID converted by psid64: always "c64sid.prg") is named after what it is:
+        // up to 11 characters of its title, then 4 hex digits of the whole title, like the D64 names - every song
+        // gets its own file and the "already there?" check only skips one written before.
+        // "COMMANDO - ROB HUBBARD" -> "COMMANDO-1A2B"
+        public static string TitleDriveName(string title)
+        {
+            string upper = (title ?? "").ToUpperInvariant();
+            var kept = new System.Text.StringBuilder();
+            foreach (char c in upper)
+            {
+                if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '.' || c == '_' || c == '+' || c == '!')
+                    kept.Append(c);
+                else if (c == '-') kept.Append(' ');                  // the dash belongs to the code
+            }
+            string baseName = System.Text.RegularExpressions.Regex.Replace(kept.ToString(), " {2,}", " ").Trim();
+            if (baseName.Length > 11) baseName = baseName.Substring(0, 11).TrimEnd();
+            if (baseName.Length == 0) baseName = "PROGRAM";
+            uint hash = 2166136261;                                    // FNV-1a over the whole title
+            foreach (char c in upper)
+            {
+                hash ^= c;
+                hash *= 16777619;
+            }
+            return $"{baseName}-{(hash ^ (hash >> 16)) & 0xFFFF:X4}";
         }
 
         // After mounting: start the first file like LOAD"*",8,1 would - RUN it when it loads at $0801

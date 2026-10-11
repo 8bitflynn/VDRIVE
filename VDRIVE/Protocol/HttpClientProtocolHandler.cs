@@ -148,9 +148,17 @@ namespace VDRIVE.Protocol
                         else if (writeSlice < 0 && writePrg)
                         {
                             byte[] prg = File.ReadAllBytes(imagePath);
-                            responsePayload = PatchStubs.BuildWritePrgStub(imagePath, writeDevice, prg, writeForce, this.Configuration.WriteFolder);
+                            // a SID converted on the server is always "c64sid.prg": name it after the song instead
+                            string driveName = null;
+                            if (Path.GetFileName(imagePath).Equals("c64sid.prg", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var info = session.FloppyResolver.GetInsertedFloppyInfo();
+                                string title = info.ImageName == null ? "" : new string(info.ImageName, 0, Math.Min((int)info.ImageNameLength, info.ImageName.Length)).TrimEnd('\0');
+                                if (title.Length > 0) driveName = PatchStubs.TitleDriveName(title);
+                            }
+                            responsePayload = PatchStubs.BuildWritePrgStub(imagePath, writeDevice, prg, writeForce, this.Configuration.WriteFolder, driveName);
                             loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
-                            this.Logger.LogMessage($"[WRITE] Stub for program {Path.GetFileName(imagePath)} ({prg.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.PrgDriveName(imagePath)}{(writeForce ? " (write again: @)" : "")}");
+                            this.Logger.LogMessage($"[WRITE] Stub for program {Path.GetFileName(imagePath)} ({prg.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{driveName ?? PatchStubs.PrgDriveName(imagePath)}{(writeForce ? " (write again: @)" : "")}");
                         }
                         else if (writeSlice < 0)
                         {
