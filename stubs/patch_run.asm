@@ -10,7 +10,10 @@
 ;   [addr lo][addr hi][len lo][len hi][len bytes]  ...  [go lo][go hi][0][0]
 ;
 ; len is sent as 65536 - length (counts up to 0). Every byte is stored with all RAM
-; banked in ($01 = $34), so $A000-$FFFF, the RAM under I/O included, takes it too.
+; banked in ($01 = $34), so $A000-$FFFF takes it too (the RAM under the ROMs) - except
+; $D000-$DFFF, stored with I/O on ($01 = $37) like a real drive's LOAD: VIC-II, SID,
+; color RAM and CIA 1 get it. CIA 2 ($DD00-$DDFF) talks to the WiC64, so bytes for it
+; go to the RAM under I/O.
 ; The last record (length 0) gives where to go: run_basic, READY ($A474), or a start
 ; address.
 ;
@@ -62,14 +65,22 @@ segment:
     sta count+1
     ora count
     beq go                     ; length 0: the end, ptr = where to go
-    ldy #0
 -   jsr getb
-    ldx #$34                   ; all RAM while storing
-    stx $01
+    ldx #$34                   ; all RAM while storing...
+    ldy ptr+1
+    cpy #$d0
+    bcc +
+    cpy #$e0
+    bcs +
+    cpy #$dd                   ; ...except $D000-$DFFF: the I/O chips and color RAM take it, like a real
+    beq +                      ; drive's LOAD - but not CIA 2 ($DDxx), which talks to the WiC64 (RAM under it)
+    ldx #$37
++   stx $01
+    ldy #0
     sta (ptr),y
     ldx #$37
     stx $01
-    iny
+    inc ptr
     bne +
     inc ptr+1
 +   inc count
@@ -124,6 +135,6 @@ getb:
 
 ; --- filled in by the server -------------------------------------------------------
 fname_len:  !byte 0
-fname:      ; the program's name + ",P2" (up to 35 bytes; the PRG ends after it)
+fname:      ; the program's name + ",P2" (a 16-character name + ",P2" = 19 bytes; the PRG ends after it)
 
-!if fname + 35 > $01c0 { !error "stub too long: the stack needs the top of the page" }
+!if fname + 19 > $01c0 { !error "stub too long: the stack needs the top of the page" }

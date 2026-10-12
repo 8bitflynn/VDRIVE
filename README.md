@@ -129,7 +129,7 @@ Tested on a real SD2IEC. The SD2IEC runs the fast loaders it knows (JiffyDOS, Fi
 ### Known Limitations
 
 - After a program has loaded over `$C000` (with `,P` or automatically), VDRIVE is gone until it is loaded again, so a game that loads more files later can't get them that way: use `,W` to put the disk on a real drive.
-- With `,P`, bytes for `$D000-$DFFF` go into the RAM under I/O; a real drive's LOAD would write the I/O chips.
+- With `,P`, bytes for `$DD00-$DDFF` (CIA 2, which talks to the WiC64) go into the RAM under I/O instead of the chip. The rest of `$D000-$DFFF` (VIC-II, SID, color RAM, CIA 1) is written like a real drive's LOAD.
 - `,W` writes D64 images (up to 9 disks per set) and is tested with SD2IEC; writing to a real 1541 floppy is not supported yet.
 
 ### Building On VDRIVE
