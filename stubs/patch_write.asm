@@ -4,8 +4,10 @@
 ; LOAD"*,W",8  (or ,W9 for drive 9) -> the server answers with this stub, load status $FE
 ; (run after load): VDRIVE loads it to $0801 and jumps to it. VDRIVE stays on: the stub
 ; LOADs the D64 from it in slices of up to 32K into a buffer at $1000, and writes each
-; slice to the drive with the KERNAL's OPEN/CHKOUT/CHROUT (VDRIVE only takes over LOAD
-; and SAVE, so these reach the real drive).
+; slice to the drive. A drive that answers JiffyDOS (SD2IEC) gets the slice with the
+; JiffyDOS protocol, about 6x faster (jiffy module at the end); any other drive gets it with
+; the KERNAL's CHKOUT/CHROUT (VDRIVE only takes over LOAD and SAVE, so these reach the real
+; drive).
 ;
 ; On the drive (all names and commands come from the server, patched in below):
 ;   MD:VDRIVE, CD:VDRIVE          its own folder
@@ -40,6 +42,19 @@ devnum  = $ba                  ; device of the LOAD that brought us here (VDRIVE
 ptr     = $fb                  ; slice: next byte to write
 buffer  = $1000                ; slices land here (up to 32K, to $8FFF)
 
+; jiffy module: copied up at start (its bytes sit where the first slice lands)
+PORT    = $dd00                ; serial bus: bit3 ATN, bit4 CLK, bit5 DATA out (1 = pull low),
+                               ; bit6 CLK, bit7 DATA in (1 = released)
+jtables = $9000                ; 4 bit-pair tables, page aligned ($9000-$93FF)
+jrun    = $9400                ; the module runs here
+base    = $02                  ; $DD00 bits 0-2 (VIC bank, RS232) with every line released
+to0     = $f7                  ; ready-wait timeout (3 bytes)
+to1     = $f8
+to2     = $f9
+peoi    = $fa                  ; written at +60: CLK low = more follows, released = last byte
+pend    = $fd                  ; written the moment a byte is acknowledged
+ysc     = $fe                  ; $D011 bits 0-2: which raster lines are bad lines
+
 * = $0801
 
     jmp start
@@ -73,6 +88,15 @@ s_run:      !fill 17, 0        ; $0AC9 the program to start: the first PRG in th
 p_prg:      !byte 0            ; $0ADA 1 = a single program, not a disk image: copied, nothing to mount or start
 
 start:
+    ldx #0                     ; the jiffy module up to $9400 (before a slice lands on it)
+-   lda jiffy_src,x
+    sta jrun,x
+    lda jiffy_src+$100,x
+    sta jrun+$100,x
+    lda jiffy_src+$200,x
+    sta jrun+$200,x
+    inx
+    bne -
     lda devnum
     sta vdev
     lda #0
@@ -217,8 +241,20 @@ slice_loop:
     jsr close
     jmp fail_drive
 
-    ; write the slice
-+   ldx #2
+    ; write the slice: JiffyDOS when the drive answers it, else CHKOUT/CHROUT
++   jsr jwrite
+    cmp #1
+    beq kernal_write
+    cmp #0
+    beq slice_sent
+    lda #2                     ; the drive stopped answering mid-slice
+    jsr close
+    ldx #<t_jiffy
+    ldy #>t_jiffy
+    jsr print
+    jmp done
+kernal_write:
+    ldx #2
     jsr chkout
     bcc +
     jsr clrchn                 ; the drive won't take the file: stop, don't print it on the screen
@@ -245,6 +281,7 @@ slice_loop:
     lda count
     ora count+1
     bne -
+slice_sent:
     jsr clrchn
     lda #2
     jsr close
@@ -412,13 +449,23 @@ r_mode:
     lda #1                     ; patched: 1 = RUN, 2 = READY
     cmp #1
     bne r_ready
-    jsr $a659                  ; CLR, start of program
-    jmp $a7ae                  ; RUN
+    ldx #3                     ; RUN typed into the keyboard buffer: READY. runs it, the way a
+-   lda r_keys,x               ; user would. An autostart loader (one that took over $0302 as
+    sta $0277,x                ; it loaded) gets control at READY. first, as on a real drive
+    dex
+    bpl -
+    lda #4
+    sta $c6
+r_ready:
+    lda #$76                   ; then end the way BASIC's own LOAD does in direct mode ($E1AB):
+    ldy #$a3                   ; READY., CLR, relink, and into the main loop through $0302. Not
+    jsr $ab1e                  ; the warm start ($A002): that goes through $0300 first, and an
+    jmp $a52a                  ; autostart loader may have loaded junk there (California Games)
 r_error:
     tax                        ; KERNAL error number
-    jmp ($0300)
-r_ready:
-    jmp ($a002)
+    jmp $a437                  ; BASIC: ?ERROR, READY. (not through $0300, see above)
+r_keys:
+    !byte $52, $55, $4e, $0d   ; R U N return
 r_name:
     !fill 16, 0                ; patched: the name
 }
@@ -556,11 +603,397 @@ t_mounted: !pet "mounted", 13, 0
 t_drive:  !pet 13, "?drive: ", 0
 t_load:   !pet 13, "?vdrive load error", 13, 0
 t_chkout: !pet 13, "?drive: file not open", 13, 0
+t_jiffy:  !pet 13, "?drive: jiffydos transfer stopped", 13, 0
 t_ready:  !pet "mounted. load", 34, "*", 34, ",8,1 to start", 13, 0
 
 vdev:        !byte 0
 count:       !word 0
 status_text: !fill 42, 0
 
+resident_end:
+!if resident_end > buffer { !error "stub runs into the slice buffer" }
+
+; --- jiffy module ----------------------------------------------------------------------
+; Copied to $9400 at start: these bytes sit at $1000+, where the first slice lands.
+;
+; JiffyDOS write, as the SD2IEC receives it (sd2iec iec.c, llfl-jiffydos.c):
+;  - Detection: during LISTEN under ATN the C64 holds CLK low for a while before the last
+;    bit. A JiffyDOS drive answers by pulling DATA low for about 101 us; it then takes the
+;    data bytes of this LISTEN with the JiffyDOS protocol (until the next ATN).
+;  - A byte: the drive releases DATA (ready). The C64 releases CLK at time 0, then puts two
+;    bits at a time on CLK and DATA (pulled low = 1):
+;       +10 us bit4 CLK, bit5 DATA    +23 us bit6 CLK, bit7 DATA
+;       +34 us bit3 CLK, bit1 DATA    +47 us bit2 CLK, bit0 DATA
+;       +60 us CLK low = more follows, CLK released = last byte (EOI)
+;    The drive samples each pair in the middle of its window and pulls DATA low at +73 us.
+;  - No handshake per bit: the loop below is cycle exact, with interrupts off and no byte
+;    started where the screen will steal cycles (a bad line).
+; The whole LISTEN/SECOND/UNLISTEN is done here, on the serial bus itself, not through the
+; KERNAL (the IDE64 hooks those routines). A drive that doesn't answer - a 1541 without
+; JiffyDOS, the IDE64's own drive number, nobody at all - gets the KERNAL path instead.
+
+jiffy_src:
+!pseudopc jrun {
+
+; write count bytes from buffer to file 2 (open, secondary 2) on p_dev
+; A = 0 sent, 1 = no JiffyDOS here (use CHKOUT/CHROUT), 2 = the drive stopped answering
+jwrite:
+    lda jmode
+    cmp #2
+    bne +
+    lda #1                     ; found out on an earlier slice
+    rts
++   cmp #0
+    bne +
+    jsr jtables_build          ; first slice
++   lda #0
+    sta jflag
+    sei
+    lda PORT
+    ora #$08                   ; ATN low
+    sta PORT
+    jsr bus_pre
+    lda p_dev
+    ora #$20                   ; LISTEN
+    sec                        ; ...watching for the JiffyDOS answer
+    jsr bus_tx
+    bcs jw_none
+    jsr bus_pre
+    lda #$62                   ; SECOND: data, secondary 2
+    clc
+    jsr bus_tx
+    bcs jw_none
+    lda PORT
+    and #$f7                   ; ATN released: data follows
+    sta PORT
+    lda jflag
+    beq jw_none                ; LISTEN wasn't answered: not JiffyDOS
+    lda #1
+    sta jmode
+    jsr jsend
+    pha
+    jsr bus_unlisten
+    cli
+    pla
+    rts
+jw_none:
+    jsr bus_unlisten           ; (harmless when nobody listened)
+    cli
+    lda #2
+    sta jmode
+    lda #1
+    rts
+
+jmode: !byte 0                 ; 0 = not tried yet, 1 = JiffyDOS, 2 = KERNAL
+jflag: !byte 0
+jdet:  !byte 0
+jbyte: !byte 0
+bitcnt: !byte 0
+endlo: !byte 0                 ; address of the last byte
+endhi: !byte 0
+save_d015: !byte 0
+
+; the slice, buffer .. buffer+count-1, JiffyDOS. A = 0 sent, 2 = no answer
+jsend:
+    lda #<buffer
+    sta ptr
+    clc
+    adc count
+    sta endlo
+    lda #>buffer
+    sta ptr+1
+    adc count+1
+    sta endhi
+    lda endlo                  ; minus one: the last byte
+    bne +
+    dec endhi
++   dec endlo
+    lda $d011
+    and #7
+    sta ysc
+    lda $d015
+    sta save_d015
+    lda #0
+    sta $d015                  ; sprites steal cycles too
+
+js_byte:
+    ldy #0
+    lda base
+    ora #$10
+    sta peoi                   ; CLK low at +60: more follows
+    sta pend
+    lda ptr+1
+    cmp endhi
+    bne +
+    lda ptr
+    cmp endlo
+    bne +
+    lda base
+    sta peoi                   ; last byte: CLK released at +60 = EOI
+    ora #$18
+    sta pend                   ; ...and at its ack CLK and ATN low at once: the drive loops
+                               ; straight back for another byte, and a released CLK would
+                               ; give it one more (it did: one byte too many)
++   lda (ptr),y
+    tax
+    sty to0
+    sty to1
+    lda #$f0
+    sta to2                    ; about 15 s for the drive to be ready
+
+js_rdy:                        ; drive ready: DATA released
+    bit PORT
+    bmi js_line
+    inc to0
+    bne js_rdy
+    inc to1
+    bne js_rdy
+    inc to2
+    bne js_rdy
+    jmp js_fail
+
+js_line:                       ; the byte needs about 1.3 raster lines free of bad lines
+    lda $d011
+    bmi js_safe                ; lines 256+: border
+    lda $d012
+    cmp #$f8
+    bcs js_safe                ; below the last bad line
+    cmp #$2d
+    bcc js_safe                ; above the first
+    sbc ysc                    ; (C = 1)
+    and #7
+    beq js_line                ; this line is a bad line
+    cmp #5
+    bcs js_line                ; one is coming within the next two
+js_safe:
+    lda base                   ; 3
+
+    ; ---- cycle exact: writes at 0, +10, +23, +34, +47, +60 cycles (~us)
+    sta PORT                   ; 4  time 0: CLK released
+    lda jtables,x              ; 4
+    nop                        ; 2
+    sta PORT                   ; 4  +10
+    lda jtables+$100,x         ; 4
+    nop                        ; 2
+    bit $ff                    ; 3
+    sta PORT                   ; 4  +23
+    lda jtables+$200,x         ; 4
+    bit $ff                    ; 3
+    sta PORT                   ; 4  +34
+    lda jtables+$300,x         ; 4
+    nop                        ; 2
+    bit $ff                    ; 3
+    sta PORT                   ; 4  +47
+    lda peoi                   ; 3
+    nop                        ; 2
+    nop                        ; 2
+    nop                        ; 2
+    sta PORT                   ; 4  +60
+    ; ---- the drive pulls DATA low at about +73
+    lda pend                   ; ready in A: answered the moment it comes
+    ldx #0
+-   bit PORT
+    bpl js_ack
+    dex
+    bne -
+    jmp js_fail
+js_ack:
+    sta PORT                   ; CLK low (and ATN low after the last byte)
+    lda ptr
+    cmp endlo
+    bne +
+    lda ptr+1
+    cmp endhi
+    beq js_done
++   inc ptr
+    bne +
+    inc ptr+1
++   jmp js_byte
+js_done:
+    lda save_d015
+    sta $d015
+    lda #0
+    rts
+js_fail:
+    lda base
+    ora #$10
+    sta PORT                   ; ATN released, CLK low
+    lda save_d015
+    sta $d015
+    lda #2
+    rts
+
+; bit-pair tables: what to write to $DD00 for each byte value, one table per step
+jtables_build:
+    lda PORT
+    and #$07
+    sta base
+    ldx #0
+-   txa
+    and #$10                   ; bit4 -> CLK
+    beq +
+    lda #$10
++   sta jbyte
+    txa
+    and #$20                   ; bit5 -> DATA
+    ora jbyte
+    ora base
+    sta jtables,x
+    txa
+    lsr
+    lsr
+    and #$30                   ; bit6 -> CLK, bit7 -> DATA
+    ora base
+    sta jtables+$100,x
+    txa
+    and #$08                   ; bit3 -> CLK
+    asl
+    sta jbyte
+    txa
+    and #$02                   ; bit1 -> DATA
+    asl
+    asl
+    asl
+    asl
+    ora jbyte
+    ora base
+    sta jtables+$200,x
+    txa
+    and #$04                   ; bit2 -> CLK
+    asl
+    asl
+    sta jbyte
+    txa
+    and #$01                   ; bit0 -> DATA
+    asl
+    asl
+    asl
+    asl
+    asl
+    ora jbyte
+    ora base
+    sta jtables+$300,x
+    inx
+    bne -
+    rts
+
+; --- the serial bus by hand (as KERNAL $ED36-$EDAC, $EDFE) ---
+bus_pre:                       ; CLK low, DATA released, 1 ms
+    jsr clk_lo
+    jsr dat_hi
+    txa
+    ldx #$b8
+-   dex
+    bne -
+    tax
+    rts
+
+; send A under ATN. C = 1: hold CLK low before the last bit and watch for the JiffyDOS
+; answer (jflag). C = 1 on return: nobody there, or no acknowledge
+bus_tx:
+    sta jbyte
+    lda #0
+    ror
+    sta jdet
+    jsr dat_hi
+    jsr dat_in
+    bcs bt_fail                ; DATA high: no device on the bus
+    jsr clk_hi
+-   jsr dat_in
+    bcc -                      ; every listener ready
+    jsr clk_lo
+    lda #8
+    sta bitcnt
+bt_bit:
+    lda bitcnt
+    cmp #1
+    bne bt_send
+    bit jdet
+    bpl bt_send
+    ldx #64                    ; about 700 us; the answer comes after 218 us, for 101 us
+-   lda PORT
+    bpl bt_seen
+    dex
+    bne -
+    beq bt_send
+bt_seen:
+    inc jflag
+-   lda PORT
+    bpl -                      ; until the drive lets go again
+bt_send:
+    jsr dat_in
+    bcc bt_fail
+    ror jbyte
+    bcs +
+    jsr dat_lo
+    jmp ++
++   jsr dat_hi
+++  jsr clk_hi
+    nop
+    nop
+    nop
+    nop
+    lda PORT
+    and #$df                   ; DATA released
+    ora #$10                   ; CLK low
+    sta PORT
+    dec bitcnt
+    bne bt_bit
+    ldx #100                   ; about 1 ms for the acknowledge
+-   lda PORT
+    bpl +
+    dex
+    bne -
+    beq bt_fail
++   clc
+    rts
+bt_fail:
+    sec
+    rts
+
+bus_unlisten:                  ; ATN, UNLISTEN, then every line released
+    lda PORT
+    ora #$08
+    sta PORT
+    jsr bus_pre
+    lda #$3f
+    clc
+    jsr bus_tx
+    lda PORT
+    and #$f7                   ; ATN released
+    sta PORT
+    ldx #10
+-   dex
+    bne -
+    lda PORT
+    and #$cf                   ; CLK and DATA released
+    sta PORT
+    rts
+
+clk_hi: lda PORT
+        and #$ef
+        sta PORT
+        rts
+clk_lo: lda PORT
+        ora #$10
+        sta PORT
+        rts
+dat_hi: lda PORT
+        and #$df
+        sta PORT
+        rts
+dat_lo: lda PORT
+        ora #$20
+        sta PORT
+        rts
+dat_in: lda PORT               ; C = DATA (1 = released)
+        cmp PORT
+        bne dat_in
+        asl
+        rts
+}
+jiffy_end:
+!if jiffy_end - jiffy_src > $300 { !error "jiffy module is more than the 768 bytes start copies" }
+!if jtables + $400 > jrun { !error "tables run into the module" }
+
 stub_end:
-!if stub_end > buffer { !error "stub runs into the slice buffer" }

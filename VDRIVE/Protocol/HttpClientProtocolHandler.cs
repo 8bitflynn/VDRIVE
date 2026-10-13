@@ -367,7 +367,21 @@ namespace VDRIVE.Protocol
                         return;
                     }
 
-                    // switch this session's floppy resolver ("source"): @LOCAL, @CS, @HVSC, @C64
+                    // @? (or @HELP): the commands, the same for every session
+                    if (searchTerm.Trim().Equals("@HELP", StringComparison.OrdinalIgnoreCase) || searchTerm.Trim() == "@?")
+                    {
+                        WriteSearchResponse(httpListenerResponse,
+                            "\r\nVDRIVE COMMANDS\r\n\r\n" +
+                            "@LOCAL      SEARCH THIS SERVER\r\n" +
+                            "@CS         SEARCH COMMODORE.SOFTWARE\r\n" +
+                            "@HVSC       SEARCH SID MUSIC (HVSC)\r\n" +
+                            "@NEW NAME   MAKE AN EMPTY DISK\r\n" +
+                            "+ OR -      NEXT OR PREVIOUS PAGE\r\n" +
+                            "@?          THIS LIST (OR @HELP)\r\n\0", session);
+                        return;
+                    }
+
+                    // switch this session's floppy resolver ("source"): @LOCAL, @CS, @HVSC (@C64 removed: its downloads were cracked releases)
                     // "@HVSC COMMANDO" switches and searches in one go; other sessions are not affected
                     if (searchTerm.StartsWith("@") && !searchTerm.StartsWith("@NEW", StringComparison.OrdinalIgnoreCase))
                     {
@@ -376,7 +390,7 @@ namespace VDRIVE.Protocol
 
                         if (resolverType == null)
                         {
-                            WriteSearchResponse(httpListenerResponse, "\r\nUNKNOWN SOURCE\r\n\r\nSOURCES: @LOCAL @CS @HVSC @C64\r\n\0", session);
+                            WriteSearchResponse(httpListenerResponse, "\r\nUNKNOWN SOURCE\r\n\r\nSOURCES: @LOCAL @CS @HVSC\r\n@? FOR ALL COMMANDS\r\n\0", session);
                             return;
                         }
 
@@ -1381,7 +1395,6 @@ namespace VDRIVE.Protocol
                 case "CS":
                 case "COMMODORESOFTWARE": return "CommodoreSoftware";
                 case "HVSC": return "HvscPsid";
-                case "C64": return "C64";
                 default: return null;
             }
         }

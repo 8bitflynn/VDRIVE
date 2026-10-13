@@ -148,27 +148,27 @@ init_vars:
     sta payload_len_hi
     rts
 
-; avoid ?OUT OF MEMORY errors by setting basic pointers to safe values
+; avoid ?OUT OF MEMORY errors by setting basic pointers to safe values: an empty BASIC program,
+; like NEW leaves it. Same size as before (32 bytes + rts), so nothing after this moves.
 cleanup_basic_pointers:
     lda #$01
-    sta $2B       ; TXTPTR low
+    sta $2B       ; TXTTAB low: BASIC program starts at $0801
     lda #$08
-    sta $2C       ; TXTPTR high
+    sta $2C       ; TXTTAB high
 
     lda #$03
-    sta $2D       ; VARTAB low
-    sta $31       ; ARYTAB low
-    sta $33       ; STREND low
-    sta $35       ; FRETOP low
-    sta $2F       ; ARYTAB low
-
+    sta $2D       ; VARTAB low:  variables start at $0803 (empty program)
+    sta $2F       ; ARYTAB low:  arrays start there too
+    sta $31       ; STREND low:  end of arrays
     lda #$08
     sta $2E       ; VARTAB high
-    
-    sta $32       ; ARYTAB high
-    sta $34       ; STREND high
-    sta $36       ; FRETOP high
-    sta $30       ; ARYTAB high → $0803
+    sta $30       ; ARYTAB high
+    sta $32       ; STREND high
+
+    lda $37       ; FRETOP = MEMSIZ: strings grow down from the top of BASIC memory
+    sta $33       ; (it was set to $0803 before, which left no room for strings
+    lda $38       ;  until the next RUN or CLR: ?OUT OF MEMORY on a string in direct mode)
+    sta $34
 
     rts
 
@@ -498,10 +498,8 @@ print_hex_nybble:
     jmp $ffd2
 
 vdrive_search_floppies:
-    ; Clear session for new search
-    lda #0
-    sta session_id
-    sta session_id+1
+    ; keep the session: a source picked with @CS / @HVSC / @LOCAL stays picked for the next SYS 49158
+    ; (it used to be cleared here, so every search started a new session on the LOCAL source)
     jsr get_user_input
     lda #1              ; flag: 1 = interactive (auto-mount after search)
     sta interactive_mode
