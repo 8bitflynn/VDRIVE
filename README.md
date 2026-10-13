@@ -90,6 +90,16 @@ LOAD "vdrive_wic64.prg",8,1
 
 - Search results show sequence numbers and filenames/descriptions.
 - Enter a number to mount a disk from the results; `+` / `-` page through them.
+- At the search prompt, `@` picks where to search. The choice stays with your session for the following searches:
+
+| At the search prompt | Does |
+|---|---|
+| `@LOCAL` | Search this server's own folders (the default) |
+| `@CS` | Search [Commodore.Software](https://commodore.software/) |
+| `@HVSC` | Search the HVSC SID music collection (each tune comes as a program that plays it) |
+| `@NEW NAME` | Make an empty disk to save to |
+| `@?` or `@HELP` | List these commands |
+
 - Previously found floppies can be mounted again by their sequence number.
 - `LOAD` and `SAVE` work as usual and are routed through VDRIVE.
 
@@ -120,9 +130,11 @@ Mount a D64 from a search, then:
 What happens, all from one stub the server sends:
 
 1. The disk goes into a `VDRIVE` folder on the card, with a short unique name (`THRUST-F531.D64`). The stub pulls it from VDRIVE in 32K slices and writes it slice by slice; it gets its real name only when complete.
-2. A disk that is already there is not written again: the first time takes about 4 minutes per disk with an IDE64 (longer on a stock C64), every time after that a few seconds.
+2. A disk that is already there is not written again: the first time takes about a minute per disk on an SD2IEC (see JiffyDOS below), every time after that a few seconds.
 3. **Multi-disk games:** every disk of the set is written (`MYGAME1-8920.D64`, `MYGAME2-9F83.D64`...) plus a swap list. The SD2IEC mounts disk 1, and its **NEXT** button changes disks when the game asks.
-4. The drive mounts the disk and the game is loaded from it and RUN. If the drive is on VDRIVE's own number, VDRIVE switches itself off, so the game's later loads go to the drive.
+4. The drive mounts the disk and the game is loaded from it and started the way BASIC's own `LOAD` ends (`READY.`, then BASIC's main loop through `$0302`), so autostart loaders take over just as they do from a real drive. If the drive is on VDRIVE's own number, VDRIVE switches itself off, so the game's later loads go to the drive.
+
+**JiffyDOS.** A drive that answers JiffyDOS (the SD2IEC does) gets each slice with the JiffyDOS protocol: two bits at a time on the serial bus' clock and data lines, at fixed moments 10, 23, 34 and 47 µs apart, with no handshake per bit. The stub drives the bus itself, cycle exact, and starts each byte only where no bad line (the VIC-II's stolen cycles) can hit it, so the screen stays on. A whole D64 takes about 70 seconds instead of about 3 minutes 40 with the KERNAL, download from VDRIVE included. Any other drive (a 1541 without JiffyDOS, the IDE64's own drive number) gets the KERNAL's normal serial routines, automatically.
 
 Tested on a real SD2IEC. The SD2IEC runs the fast loaders it knows (JiffyDOS, Final Cartridge 3, DreamLoad and others); a game with a loader it doesn't know fails on the SD2IEC with or without VDRIVE. The stub source is [`stubs/patch_write.asm`](stubs/patch_write.asm).
 
