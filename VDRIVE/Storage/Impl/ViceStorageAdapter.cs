@@ -100,7 +100,7 @@ namespace VDRIVE.Storage.Impl
                     }
                 }
 
-                string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
+                string fullPath = VDRIVE.Util.WorkFolders.Ensure(this.Configuration, this.WorkFolder);
                 if (!Directory.Exists(fullPath))
                     Directory.CreateDirectory(fullPath);
 
@@ -250,7 +250,7 @@ namespace VDRIVE.Storage.Impl
                 return null;
             }
 
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
+            string fullPath = VDRIVE.Util.WorkFolders.Ensure(this.Configuration, this.WorkFolder);
             if (!Directory.Exists(fullPath))
                 Directory.CreateDirectory(fullPath);
 
@@ -496,7 +496,7 @@ namespace VDRIVE.Storage.Impl
 
         private byte[] LoadDirectory(LoadRequest loadRequest, FloppyInfo floppyInfo, FloppyPointer floppyPointer, out byte responseCode)
         {
-            string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder, Thread.CurrentThread.ManagedThreadId.ToString());
+            string fullPath = VDRIVE.Util.WorkFolders.Ensure(this.Configuration, this.WorkFolder);
             string dirPrgPath = Path.Combine(fullPath, "dir.prg");
 
             // Ensure temp directory exists          

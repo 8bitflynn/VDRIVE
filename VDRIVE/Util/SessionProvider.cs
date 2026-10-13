@@ -50,6 +50,12 @@ namespace VDRIVE.Util
                 }
                 while (!VDriveClients.TryAdd(session.SessionId, session));
                 this.Logger.LogMessage($"Created new session with SessionId: {session.SessionId}", VDRIVE_Contracts.Enums.LogSeverity.Info);
+
+                // the session's own scratch folder (Util/WorkFolders.cs). An ID can come round again, so start it empty.
+                WorkFolders.DeleteSession(this.Configuration, session.SessionId, this.Logger);
+                string workFolder = WorkFolders.ForSession(this.Configuration, session.SessionId);
+                session.FloppyResolver.WorkFolder = workFolder;
+                session.StorageAdapter.WorkFolder = workFolder;
             }
             else
             {             
@@ -77,6 +83,7 @@ namespace VDRIVE.Util
                         if (VDriveClients.TryRemove(session.Key, out removedSession))
                         {
                             this.Logger.LogMessage($"*** Expired session with SessionId: {session.Key}", VDRIVE_Contracts.Enums.LogSeverity.Info);
+                            WorkFolders.DeleteSession(this.Configuration, session.Key, this.Logger);   // its downloads and converted files
                         }
                     }
                 }

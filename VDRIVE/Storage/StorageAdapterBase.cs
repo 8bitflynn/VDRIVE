@@ -9,6 +9,8 @@ namespace VDRIVE.Drive
         protected IConfiguration Configuration;
         protected ILogger Logger;
 
+        public string WorkFolder { get; set; }   // the session's folder (Util/WorkFolders.cs)
+
         protected byte[] BuildDirectoryPrg(string[] rawLines, string diskName = "")
         {
             // Workaround: c1541.exe outputs "Empty image" when image is empty

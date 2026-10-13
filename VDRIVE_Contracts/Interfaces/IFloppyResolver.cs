@@ -14,5 +14,8 @@ namespace VDRIVE_Contracts.Interfaces
         // New lookup methods - return default(struct) if not found
         FloppyIdentifier FindFloppyIdentifierByName(string name);
         FloppyInfo FindFloppyInfoByIdentifier(FloppyIdentifier floppyIdentifier);
+
+        // the session's own folder for downloads and converted files (VDRIVE_Scratch\sessions\<id>); null = one per thread
+        string WorkFolder { get; set; }
     }
 }

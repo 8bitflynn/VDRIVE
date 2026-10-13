@@ -119,9 +119,9 @@ Mount a D64 from a search, then:
 
 What happens, all from one stub the server sends:
 
-1. The disk goes into a `VDRIVE` folder on the card, with a short unique name (`MORDONS-F531.D64`). The stub pulls it from VDRIVE in 32K slices and writes it slice by slice; it gets its real name only when complete.
+1. The disk goes into a `VDRIVE` folder on the card, with a short unique name (`THRUST-F531.D64`). The stub pulls it from VDRIVE in 32K slices and writes it slice by slice; it gets its real name only when complete.
 2. A disk that is already there is not written again: the first time takes about 4 minutes per disk with an IDE64 (longer on a stock C64), every time after that a few seconds.
-3. **Multi-disk games:** every disk of the set is written (`CALIFO1-8920.D64`, `CALIFO2-9F83.D64`...) plus a swap list. The SD2IEC mounts disk 1, and its **NEXT** button changes disks when the game asks.
+3. **Multi-disk games:** every disk of the set is written (`MYGAME1-8920.D64`, `MYGAME2-9F83.D64`...) plus a swap list. The SD2IEC mounts disk 1, and its **NEXT** button changes disks when the game asks.
 4. The drive mounts the disk and the game is loaded from it and RUN. If the drive is on VDRIVE's own number, VDRIVE switches itself off, so the game's later loads go to the drive.
 
 Tested on a real SD2IEC. The SD2IEC runs the fast loaders it knows (JiffyDOS, Final Cartridge 3, DreamLoad and others); a game with a loader it doesn't know fails on the SD2IEC with or without VDRIVE. The stub source is [`stubs/patch_write.asm`](stubs/patch_write.asm).

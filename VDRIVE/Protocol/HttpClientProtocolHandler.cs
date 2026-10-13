@@ -381,6 +381,7 @@ namespace VDRIVE.Protocol
                         }
 
                         session.FloppyResolver = FloppyResolverFactory.CreateFloppyResolver(resolverType, this.Configuration, this.Logger, session.ProcessRunner);
+                        session.FloppyResolver.WorkFolder = VDRIVE.Util.WorkFolders.ForSession(this.Configuration, session.SessionId);
                         session.CachedSearchResults = null;
                         session.LastSearchTerm = null;
                         session.CurrentSearchPage = 0;

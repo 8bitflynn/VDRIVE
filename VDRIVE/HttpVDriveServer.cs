@@ -22,6 +22,8 @@ namespace VDRIVE
 
         public void Start()
         {
+            WorkFolders.CleanupAtStartup(this.Configuration, this.Logger);   // session folders from the last run
+
             HttpListener httpListener = new HttpListener();
             httpListener.Prefixes.Add($"{this.Configuration.ServerListenAddress}{this.Configuration.ServerPort}/"); // WiC64 requires port 80 or 443
             httpListener.Start();

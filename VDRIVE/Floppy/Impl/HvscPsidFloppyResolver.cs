@@ -135,7 +135,7 @@ namespace VDRIVE.Floppy.Impl
 
                     if (httpResponseMessage.IsSuccessStatusCode)
                     {
-                        string fullPath = Path.Combine(Configuration.TempPath, Configuration.TempFolder,  Thread.CurrentThread.ManagedThreadId.ToString());
+                        string fullPath = VDRIVE.Util.WorkFolders.Ensure(this.Configuration, this.WorkFolder);
                         if (!Directory.Exists(fullPath))
                             Directory.CreateDirectory(fullPath);
 
