@@ -2,8 +2,6 @@
   <img src="docs/images/vdrive-logo.svg" alt="VDRIVE: a pixel skull and the word VDRIVE" width="360"/>
 </p>
 
-<h1 align="center">VDRIVE</h1>
-
 <p align="center">
   <b>Wirelessly SEARCH/MOUNT disk images and LOAD/SAVE data to/from your Commodore 64.</b><br/>
   A C64 client over the <a href="https://wic64.net/web/">WiC64</a> and a C# .NET server.
