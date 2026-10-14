@@ -22,7 +22,9 @@
 ;
 ; Built with ACME; the bytes go into VDRIVE PatchStubs.cs - rebuild that array
 ; whenever this file changes:
-;   acme -f cbm -o patch_run.prg -l patch_run.sym patch_run.asm
+;   powershell -ExecutionPolicy Bypass -File stubs\build_stubs.ps1   (from the solution folder: assembles
+;   both stubs and updates their arrays; -Check only compares. Needs only ACME.)
+; by hand: acme -f plain -o patch_run.bin patch_run.asm  (-f plain: this ACME's -f cbm writes Intel HEX)
 ; ---------------------------------------------------------------------------
 
 vdrive_disable      = $c003    ; VDRIVE jump table: puts back the LOAD/SAVE vectors it saved
