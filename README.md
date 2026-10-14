@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://8bitflynn.io/Resources/Images/VDRIVE.png" alt="VDRIVE logo" width="180"/>
+  <img src="docs/images/vdrive-logo.svg" alt="VDRIVE: a pixel skull and the word VDRIVE" width="360"/>
 </p>
 
 <h1 align="center">VDRIVE</h1>
