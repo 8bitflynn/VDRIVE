@@ -429,7 +429,8 @@ namespace VDRIVE.Protocol
             if (slices < 1 || slices > 26) throw new ArgumentException("program size not supported");
             int lastLength = prg.Length - (slices - 1) * WriteSliceSize;
 
-            string name = driveName ?? PrgDriveName(fileName);
+            // always NAME.PRG: on a FAT card (SD2IEC, IDE64) a file without the extension isn't a program to LOAD
+            string name = PrgFileName(driveName ?? PrgDriveName(fileName));
             var bytes = new List<byte> { (byte)(WriteStubAddress & 0xFF), (byte)(WriteStubAddress >> 8) };
             bytes.AddRange(WriteStub);
             byte[] stub = bytes.ToArray();
@@ -454,8 +455,18 @@ namespace VDRIVE.Protocol
             return stub;
         }
 
+        // The program's file on the drive: its name (at most 12 characters) + ".PRG" - 16 in all, the most a C64 file
+        // name holds, like the disk images' "CALIFOR-37FD.D64". "GOBLIN POND SOFT" -> "GOBLIN POND.PRG"
+        public static string PrgFileName(string driveName)
+        {
+            string name = (driveName ?? "").Trim();
+            if (name.Length > 12) name = name.Substring(0, 12).TrimEnd();
+            return (name.Length == 0 ? "PROGRAM" : name) + ".PRG";
+        }
+
         // A program's name on the drive: its file name without the extension, in capitals, only characters every DOS
         // takes in a name (no , : * ? = @ / or quotes), at most 16 - "Larry-WiC64meX - Demo.prg" -> "LARRY-WIC64MEX -"
+        // (written as PrgFileName: the first 12 + ".PRG")
         public static string PrgDriveName(string fileName)
         {
             string name = Path.GetFileNameWithoutExtension(fileName ?? "").ToUpperInvariant();
@@ -471,9 +482,9 @@ namespace VDRIVE.Protocol
         }
 
         // A program made on the server (a SID converted by psid64: always "c64sid.prg") is named after what it is:
-        // up to 11 characters of its title, then 4 hex digits of the whole title, like the D64 names - every song
-        // gets its own file and the "already there?" check only skips one written before.
-        // "COMMANDO - ROB HUBBARD" -> "COMMANDO-1A2B"
+        // up to 7 characters of its title, then 4 hex digits of the whole title, like the D64 names - every song
+        // gets its own file and the "already there?" check only skips one written before. 12 in all, so ".PRG" fits.
+        // "COMMANDO - ROB HUBBARD" -> "COMMAND-1A2B" (on the drive: COMMAND-1A2B.PRG)
         public static string TitleDriveName(string title)
         {
             string upper = (title ?? "").ToUpperInvariant();
@@ -485,7 +496,7 @@ namespace VDRIVE.Protocol
                 else if (c == '-') kept.Append(' ');                  // the dash belongs to the code
             }
             string baseName = System.Text.RegularExpressions.Regex.Replace(kept.ToString(), " {2,}", " ").Trim();
-            if (baseName.Length > 11) baseName = baseName.Substring(0, 11).TrimEnd();
+            if (baseName.Length > 7) baseName = baseName.Substring(0, 7).TrimEnd();
             if (baseName.Length == 0) baseName = "PROGRAM";
             uint hash = 2166136261;                                    // FNV-1a over the whole title
             foreach (char c in upper)

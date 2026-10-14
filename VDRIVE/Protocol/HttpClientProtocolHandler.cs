@@ -158,7 +158,7 @@ namespace VDRIVE.Protocol
                             }
                             responsePayload = PatchStubs.BuildWritePrgStub(imagePath, writeDevice, prg, writeForce, this.Configuration.WriteFolder, driveName);
                             loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
-                            this.Logger.LogMessage($"[WRITE] Stub for program {Path.GetFileName(imagePath)} ({prg.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{driveName ?? PatchStubs.PrgDriveName(imagePath)}{(writeForce ? " (write again: @)" : "")}");
+                            this.Logger.LogMessage($"[WRITE] Stub for program {Path.GetFileName(imagePath)} ({prg.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.PrgFileName(driveName ?? PatchStubs.PrgDriveName(imagePath))}{(writeForce ? " (write again: @)" : "")}");
                         }
                         else if (writeSlice < 0)
                         {
