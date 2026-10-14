@@ -147,7 +147,7 @@ namespace VDRIVE.Protocol
                         }
                         else if (writeSlice < 0 && writePrg)
                         {
-                            byte[] prg = File.ReadAllBytes(imagePath);
+                            byte[] prg = SharedFile.ReadAllBytes(imagePath);
                             // a SID converted on the server is always "c64sid.prg": name it after the song instead
                             string driveName = null;
                             if (Path.GetFileName(imagePath).Equals("c64sid.prg", StringComparison.OrdinalIgnoreCase))
@@ -162,15 +162,15 @@ namespace VDRIVE.Protocol
                         }
                         else if (writeSlice < 0)
                         {
-                            byte[] image = File.ReadAllBytes(writeSet[writeDisk - 1]);
-                            byte[] first = writeDisk == 1 ? image : File.ReadAllBytes(writeSet[0]);
+                            byte[] image = SharedFile.ReadAllBytes(writeSet[writeDisk - 1]);
+                            byte[] first = writeDisk == 1 ? image : SharedFile.ReadAllBytes(writeSet[0]);
                             responsePayload = PatchStubs.BuildWriteStub(writeSet, writeDisk, writeDevice, image, first, writeForce, this.Configuration.WriteFolder);
                             loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
                             this.Logger.LogMessage($"[WRITE] Stub for disk {writeDisk}/{writeSet.Count}: {Path.GetFileName(writeSet[writeDisk - 1])} ({image.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.DiskDriveName(writeSet, writeDisk - 1)}.D64{(writeForce ? " (write again: @)" : "")}");
                         }
                         else
                         {
-                            byte[] slice = PatchStubs.BuildWriteSlice(File.ReadAllBytes(writeSet[writeDisk - 1]), writeSlice);
+                            byte[] slice = PatchStubs.BuildWriteSlice(SharedFile.ReadAllBytes(writeSet[writeDisk - 1]), writeSlice);
                             if (slice != null)
                             {
                                 responsePayload = slice;
@@ -691,7 +691,7 @@ namespace VDRIVE.Protocol
                         WriteResponse(response, "\r\nERROR: IMAGE TOO LARGE\0", session);
                         return;
                     }
-                    imageBytes = File.ReadAllBytes(imagePath);
+                    imageBytes = SharedFile.ReadAllBytes(imagePath);
                 }
 
                 if (imageBytes.Length > MAX_IMAGE_SIZE)
@@ -898,7 +898,10 @@ namespace VDRIVE.Protocol
                 {
                     foreach (string diskPath in diskPaths)
                     {
-                        archive.CreateEntryFromFile(diskPath, Path.GetFileName(diskPath), CompressionLevel.Fastest);
+                        byte[] disk = SharedFile.ReadAllBytes(diskPath);       // not blocked by VICE having it open
+                        ZipArchiveEntry entry = archive.CreateEntry(Path.GetFileName(diskPath), CompressionLevel.Fastest);
+                        entry.LastWriteTime = File.GetLastWriteTime(diskPath);
+                        using (Stream stream = entry.Open()) stream.Write(disk, 0, disk.Length);
                     }
                 }
                 return buffer.ToArray();

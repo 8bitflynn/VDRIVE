@@ -119,7 +119,7 @@ A plain `LOAD` of a program that would land on `$C000-$CFFF` uses the stub autom
 
 ### Writing Disks to a Real Drive: `,W`
 
-Mount a D64 from a search, then:
+Mount a D64 (or a single program) from a search, then:
 
 | Command | Does |
 |---|---|
@@ -133,6 +133,9 @@ What happens, all from one stub the server sends:
 2. A disk that is already there is not written again: the first time takes about a minute per disk on an SD2IEC (see JiffyDOS below), every time after that a few seconds.
 3. **Multi-disk games:** every disk of the set is written (`MYGAME1-8920.D64`, `MYGAME2-9F83.D64`...) plus a swap list. The SD2IEC mounts disk 1, and its **NEXT** button changes disks when the game asks.
 4. The drive mounts the disk and the game is loaded from it and started the way BASIC's own `LOAD` ends (`READY.`, then BASIC's main loop through `$0302`), so autostart loaders take over just as they do from a real drive. If the drive is on VDRIVE's own number, VDRIVE switches itself off, so the game's later loads go to the drive.
+5. **A single program** (a `.PRG` mounted instead of a D64) is written as `NAME.PRG` (up to 12 characters of its name, so the whole name fits in 16) and nothing is mounted or started: `VDRIVE: SAVED ON #8`, then `READY.` The stub that did the writing is still at `$0801`, so `LIST` shows nonsense there; the program itself is on the drive. VDRIVE stays on, and it answers every `LOAD` on device 8 while it's on, so to load the program back from drive 8, switch VDRIVE off first (`SYS 49155`). On any other device number (an IDE64 on 12) just load it.
+
+**IDE64.** Put its device number after the `W` (`LOAD "*,W12",8`). Disks and programs are written the same way, through the KERNAL (IDEDOS takes the bytes straight to its card, so a whole disk takes about 45 seconds, nearly all of it the download). The IDE64 can't mount disk images, so a disk ends with `SAVED ON #12, NOT MOUNTED`.
 
 **JiffyDOS.** A drive that answers JiffyDOS (the SD2IEC does) gets each slice with the JiffyDOS protocol: two bits at a time on the serial bus' clock and data lines, at fixed moments 10, 23, 34 and 47 µs apart, with no handshake per bit. The stub drives the bus itself, cycle exact, and starts each byte only where no bad line (the VIC-II's stolen cycles) can hit it, so the screen stays on. A whole D64 takes about 70 seconds instead of about 3 minutes 40 with the KERNAL, download from VDRIVE included. Any other drive (a 1541 without JiffyDOS, the IDE64's own drive number) gets the KERNAL's normal serial routines, automatically.
 
@@ -142,7 +145,7 @@ Tested on a real SD2IEC. The SD2IEC runs the fast loaders it knows (JiffyDOS, Fi
 
 - After a program has loaded over `$C000` (with `,P` or automatically), VDRIVE is gone until it is loaded again, so a game that loads more files later can't get them that way: use `,W` to put the disk on a real drive.
 - With `,P`, bytes for `$DD00-$DDFF` (CIA 2, which talks to the WiC64) go into the RAM under I/O instead of the chip. The rest of `$D000-$DFFF` (VIC-II, SID, color RAM, CIA 1) is written like a real drive's LOAD.
-- `,W` writes D64 images (up to 9 disks per set) and is tested with SD2IEC; writing to a real 1541 floppy is not supported yet.
+- `,W` writes D64 images (up to 9 disks per set) and single programs, and is tested with SD2IEC and IDE64; writing to a real 1541 floppy is not supported yet.
 
 ### Building On VDRIVE
 

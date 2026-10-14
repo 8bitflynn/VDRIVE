@@ -35,7 +35,7 @@ namespace VDRIVE.Drive.Impl
                     FloppyPointer floppyPointer = floppyResolver.GetInsertedFloppyPointer();
                     if (!floppyPointer.Equals(default(FloppyPointer)) && floppyPointer.ImagePath.ToLower().EndsWith(".prg"))
                     {
-                        payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath); // load PRG
+                        payload = VDRIVE.Util.SharedFile.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath); // load PRG
                     }
                     else
                     {

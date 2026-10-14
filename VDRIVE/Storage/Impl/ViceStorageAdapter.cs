@@ -187,7 +187,7 @@ namespace VDRIVE.Storage.Impl
 
                     if (!floppyPointer.Equals(default) && floppyPointer.ImagePath.ToLower().EndsWith(".prg"))
                     {
-                        payload = File.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath);
+                        payload = VDRIVE.Util.SharedFile.ReadAllBytes(floppyResolver.GetInsertedFloppyPointer().ImagePath);
                     }
                     else
                     {
