@@ -141,6 +141,8 @@ What happens, all from one stub the server sends:
 
 Tested on a real SD2IEC. The SD2IEC runs the fast loaders it knows (JiffyDOS, Final Cartridge 3, DreamLoad and others); a game with a loader it doesn't know fails on the SD2IEC with or without VDRIVE. The stub source is [`stubs/patch_write.asm`](stubs/patch_write.asm).
 
+After changing a stub (`patch_write.asm` or `patch_run.asm`), run `powershell -ExecutionPolicy Bypass -File stubs\build_stubs.ps1` from the solution folder: it assembles both with ACME and updates their bytes in `PatchStubs.cs` (`-Check` only compares).
+
 ### Known Limitations
 
 - After a program has loaded over `$C000` (with `,P` or automatically), VDRIVE is gone until it is loaded again, so a game that loads more files later can't get them that way: use `,W` to put the disk on a real drive.
