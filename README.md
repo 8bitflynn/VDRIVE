@@ -135,7 +135,7 @@ What happens, all from one stub the server sends:
 
 **Afterwards** the SD2IEC stays where `,W` left it: in the `VDRIVE` folder, or inside the mounted disk, even through a reset of the C64. To get back to the card's root, press the drive's reset button, switch it off and on, or send `CD//` (`OPEN15,8,15,"CD//":CLOSE15`).
 
-**IDE64.** Put its device number after the `W` (`LOAD "*,W12",8`). Disks and programs are written the same way, through the KERNAL (IDEDOS takes the bytes straight to its card, so a whole disk takes about 45 seconds, nearly all of it the download). The IDE64 can't mount disk images, so a disk ends with `SAVED ON #12, NOT MOUNTED`.
+**IDE64.** Put its device number after the `W` (`LOAD "*,W12",8`). Disks and programs are written the same way, each slice handed to IDEDOS in one call (its `WRITE` at `$DEF1`, instead of a `CHROUT` per byte), so a whole disk takes about 18 seconds, most of it the download. The IDE64 can't mount disk images, so a disk ends with `SAVED ON #12, NOT MOUNTED`.
 
 **JiffyDOS.** A drive that answers JiffyDOS (the SD2IEC does) gets each slice with the JiffyDOS protocol: two bits at a time on the serial bus' clock and data lines, at fixed moments 10, 23, 34 and 47 µs apart, with no handshake per bit. The stub drives the bus itself, cycle exact. While a slice is written the screen is off: then the VIC-II has no bad lines to steal cycles with, so bytes go out back to back, and the loop between them is kept to a few instructions. The screen comes back between slices. A whole D64 takes about 40 seconds instead of about 3 minutes 40 with the KERNAL, download from VDRIVE included. Any other drive (a 1541 without JiffyDOS, the IDE64's own drive number) gets the KERNAL's normal serial routines, automatically.
 

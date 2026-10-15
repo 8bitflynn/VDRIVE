@@ -60,7 +60,7 @@ buffer  = $1000                ; slices land here (up to 32K, to $8FFF)
 PORT    = $dd00                ; serial bus: bit3 ATN, bit4 CLK, bit5 DATA out (1 = pull low),
                                ; bit6 CLK, bit7 DATA in (1 = released)
 jtables = $9000                ; 4 bit-pair tables, page aligned ($9000-$93FF)
-jrun    = $9400                ; the module runs here (up to 5 pages, to $98FF)
+jrun    = $9400                ; the module runs here (up to 6 pages, to $99FF)
 base    = $02                  ; $DD00 bits 0-2 (VIC bank, RS232) with every line released
 to0     = $f7                  ; ready-wait timeout (3 bytes)
 to1     = $f8
@@ -114,6 +114,8 @@ start:
     sta jrun+$300,x
     lda jiffy_src+$400,x
     sta jrun+$400,x
+    lda jiffy_src+$500,x
+    sta jrun+$500,x
     inx
     bne -
     lda devnum
@@ -288,23 +290,7 @@ kernal_write:
     ldy #>t_chkout
     jsr print
     jmp done
-+   lda #<buffer
-    sta ptr
-    lda #>buffer
-    sta ptr+1
--   ldy #0                     ; (Y again each time: don't count on CHROUT keeping it)
-    lda (ptr),y
-    jsr chrout
-    inc ptr
-    bne +
-    inc ptr+1
-+   lda count
-    bne +
-    dec count+1
-+   dec count
-    lda count
-    ora count+1
-    bne -
++   jsr kwrite                 ; the slice to file 2: IDEDOS's block WRITE, or byte by byte (in the module)
 slice_sent:
     jsr t_write                ; (stopwatch: WRIT)
     jsr clrchn
@@ -1153,6 +1139,66 @@ u_next:
     bne u_sector
     rts
 
+; The slice (buffer, count bytes) to file 2, CHKOUT already done (any drive without JiffyDOS). An IDE64 takes
+; it in one call: IDEDOS's WRITE ($DEF1), "much faster than calling CHROUT a lot of times" (IDE64 user's guide
+; 13.2.2: A = zero page address of a pointer to the data, X/Y = how many bytes). On a serial bus drive (a 1541,
+; even with an IDE64 in the C64) WRITE gives an error without writing (C = 1): then byte by byte as before.
+kwrite:
+    lda #<buffer
+    sta ptr
+    lda #>buffer
+    sta ptr+1
+    jsr is_ide64
+    bcs kw_bytes
+    lda #ptr
+    ldx count
+    ldy count+1
+    jsr $def1
+    bcc kw_done                ; written
+    lda #<buffer               ; not here: byte by byte (ptr from the start again)
+    sta ptr
+    lda #>buffer
+    sta ptr+1
+kw_bytes:
+-   ldy #0                     ; (Y again each time: don't count on CHROUT keeping it)
+    lda (ptr),y
+    jsr chrout
+    inc ptr
+    bne +
+    inc ptr+1
++   lda count
+    bne +
+    dec count+1
++   dec count
+    lda count
+    ora count+1
+    bne -
+kw_done:
+    rts
+
+; C = 0: an IDE64 is in the C64 (IDE64 user's guide 13.2.1: "IDE" at $DE60-$DE62, each read twice; first make
+; sure there's no old Action Replay there, which crashes when $DExx is read)
+is_ide64:
+    lda $df09
+    cmp $df09
+    bne +                      ; not steady: no Action Replay
+    cmp #$78
+    beq ide_no                 ; maybe one: leave $DExx alone
++   ldx #2
+-   lda $de60,x
+    cmp $de60,x
+    bne ide_no
+    cmp ide_sig,x
+    bne ide_no
+    dex
+    bpl -
+    clc
+    rts
+ide_no:
+    sec
+    rts
+ide_sig: !byte $49, $44, $45   ; "IDE"
+
 ; Back to BASIC without starting a game: this stub is still at $0801 and BASIC's pointers still take it
 ; for the program (LIST showed nonsense, RUN would run it). So first a NEW: an empty program at $0801,
 ; variables and strings gone. (Where the stub starts a game, that LOAD replaces it anyway.)
@@ -1338,7 +1384,7 @@ jwait:  !fill 3, 0             ; rounds of js_rdy (the drive not ready yet)
 }
 }
 jiffy_end:
-!if jiffy_end - jiffy_src > $500 { !error "jiffy module is more than the 5 pages start copies" }
+!if jiffy_end - jiffy_src > $600 { !error "jiffy module is more than the 6 pages start copies" }
 !if jtables + $400 > jrun { !error "tables run into the module" }
 
 stub_end:
