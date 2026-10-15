@@ -1069,6 +1069,31 @@ dat_in: lda PORT               ; C = DATA (1 = released)
 ; [16 bytes, a bit per sector, 1 = empty][the sectors in order] from $0FF0 + 255 x A. Expanded forward to $1000:
 ; every empty sector frees 255 bytes, so the output never reaches data that hasn't been read yet.
 unpack:
+    pha
+    ldx #uk-ubits              ; BASIC's zero page that unpack borrows: kept and put back after, as it was
+-   lda ubits,x                ; (a game's loader can depend on it - Racing Destruction Set's EA loader
+    sta u_saved+2,x            ; failed with unpack's leftovers there)
+    dex
+    bpl -
+    lda usrc
+    sta u_saved
+    lda usrc+1
+    sta u_saved+1
+    pla
+    jsr u_run
+    ldx #uk-ubits
+-   lda u_saved+2,x
+    sta ubits,x
+    dex
+    bpl -
+    lda u_saved
+    sta usrc
+    lda u_saved+1
+    sta usrc+1
+    rts
+u_saved: !fill 2 + uk - ubits + 1, 0
+
+u_run:
     sta uk
     lda #$f0                   ; usrc = $0FF0 + 256 x A - A
     sec
