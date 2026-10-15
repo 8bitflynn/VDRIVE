@@ -172,9 +172,9 @@ start:
     jsr print_head             ; VDRIVE: DISK 1/2 ALREADY ON #8
     lda #13
     jsr chrout
-    lda p_prg                  ; a program: that's all
+    lda p_prg                  ; a program: loaded from the drive (prg_start)
     beq +
-    jmp done
+    jmp prg_start
 +   jmp finish
 
 write:
@@ -356,7 +356,7 @@ last_disk:
     jsr print_head
     lda #13
     jsr chrout
-    jmp done
+    jmp prg_start              ; then loaded from the drive (and RUN if it's BASIC)
 +   lda p_listlen
     beq mount
     ldx #<s_listopen           ; a set: write the swap list (XS below mounts its first disk)
@@ -416,6 +416,7 @@ start_game:
     ldx #<t_mounted
     ldy #>t_mounted
     jsr print
+start_load:                    ; (a single program comes in here: nothing was mounted)
     jsr clrchn
     lda #15
     jsr close
@@ -1198,6 +1199,20 @@ ide_no:
     sec
     rts
 ide_sig: !byte $49, $44, $45   ; "IDE"
+
+; A single program, written (or already on the drive): loaded back from the drive like a disk's game - the
+; server put its name in s_run and p_run = 1 (RUN: a BASIC program) or 2 (LOAD,1 and READY.: its SYS is the
+; user's). p_run 0 (an older server): just stop. On VDRIVE's own drive number VDRIVE goes off first, so the
+; LOAD reaches the drive.
+prg_start:
+    lda p_run
+    bne +
+    jmp done
++   lda p_dev
+    cmp vdev
+    bne +
+    jsr vdrive_disable
++   jmp start_load
 
 ; Back to BASIC without starting a game: this stub is still at $0801 and BASIC's pointers still take it
 ; for the program (LIST showed nonsense, RUN would run it). So first a NEW: an empty program at $0801,
