@@ -170,12 +170,16 @@ namespace VDRIVE.Protocol
                         }
                         else
                         {
-                            byte[] slice = PatchStubs.BuildWriteSlice(SharedFile.ReadAllBytes(writeSet[writeDisk - 1]), writeSlice);
+                            // disk images go packed (empty sectors as one byte: the disk stub expands them), a program as it is
+                            byte[] image = SharedFile.ReadAllBytes(writeSet[writeDisk - 1]);
+                            byte[] slice = PatchStubs.BuildWriteSlice(image, writeSlice, pack: !writePrg);
                             if (slice != null)
                             {
                                 responsePayload = slice;
                                 loadResponse.ResponseCode = 0xff;
-                                this.Logger.LogMessage($"[WRITE] Disk {writeDisk} slice {(char)('A' + writeSlice)}: {slice.Length - 2} bytes");
+                                int sliceLength = Math.Min(PatchStubs.WriteSliceSize, image.Length - writeSlice * PatchStubs.WriteSliceSize);
+                                this.Logger.LogMessage($"[WRITE] Disk {writeDisk} slice {(char)('A' + writeSlice)}: {sliceLength} bytes"
+                                    + (slice.Length - 2 < sliceLength ? $", sent packed as {slice.Length - 2}" : ""));
                             }
                         }
                         WriteLoadResponse(this.HttpListenerContext, responsePayload, loadResponse, session);

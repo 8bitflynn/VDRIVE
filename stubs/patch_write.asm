@@ -27,6 +27,11 @@
 
 vdrive_disable = $c003         ; VDRIVE jump table: puts back the LOAD/SAVE vectors it saved
 
+BLANK = 1                      ; 1: the screen is off while a slice is written (no bad lines: the jiffy
+                               ; loop needn't wait for them); 0: it stays on, bytes wait for clear lines
+TIMING = 0                     ; 1: a stopwatch prints where the time went after the last slice and waits
+                               ; for a key (LOAD UNPK OPEN WRIT CLOS, 1/100 s); 0: none of it
+
 setnam = $ffbd
 setlfs = $ffba
 open   = $ffc0
@@ -42,13 +47,20 @@ msgflag = $9d                  ; KERNAL message mode ($80 = direct: SEARCHING/LO
 devnum  = $ba                  ; device of the LOAD that brought us here (VDRIVE's)
 
 ptr     = $fb                  ; slice: next byte to write
+; unpack (packed slices), in BASIC's zero page: BASIC isn't running, and nothing else runs while it unpacks
+usrc    = $22                  ; next packed byte (2 bytes)
+ubits   = $57                  ; the slice's bit table, copied here: the output runs over it (16 bytes, to $66)
+ubyte   = $67                  ; the bits of the current 8 sectors, shifted out one at a time
+usn     = $68                  ; sector number in the slice
+usect   = $69                  ; sectors in the slice
+uk      = $6a                  ; its empty sectors
 buffer  = $1000                ; slices land here (up to 32K, to $8FFF)
 
 ; jiffy module: copied up at start (its bytes sit where the first slice lands)
 PORT    = $dd00                ; serial bus: bit3 ATN, bit4 CLK, bit5 DATA out (1 = pull low),
                                ; bit6 CLK, bit7 DATA in (1 = released)
 jtables = $9000                ; 4 bit-pair tables, page aligned ($9000-$93FF)
-jrun    = $9400                ; the module runs here
+jrun    = $9400                ; the module runs here (up to 5 pages, to $98FF)
 base    = $02                  ; $DD00 bits 0-2 (VIC bank, RS232) with every line released
 to0     = $f7                  ; ready-wait timeout (3 bytes)
 to1     = $f8
@@ -88,15 +100,20 @@ slice_name: !text "*,W1A"      ; $0AC4 slice request to VDRIVE: disk (patched), 
 s_run:      !fill 17, 0        ; $0AC9 the program to start: the first PRG in the directory ("*" when none;
                                ; LOAD"*" would take a USR/SEQ separator line that comes before it)
 p_prg:      !byte 0            ; $0ADA 1 = a single program, not a disk image: copied, nothing to mount or start
+p_fills:    !fill 26, 0        ; $0ADB empty sectors in each slice: 0 = it comes as it is, else packed (unpack)
 
 start:
-    ldx #0                     ; the jiffy module up to $9400 (before a slice lands on it)
+    ldx #0                     ; the jiffy module (and unpack) up to $9400 (before a slice lands on it)
 -   lda jiffy_src,x
     sta jrun,x
     lda jiffy_src+$100,x
     sta jrun+$100,x
     lda jiffy_src+$200,x
     sta jrun+$200,x
+    lda jiffy_src+$300,x
+    sta jrun+$300,x
+    lda jiffy_src+$400,x
+    sta jrun+$400,x
     inx
     bne -
     lda devnum
@@ -164,6 +181,7 @@ write:
     jsr print_head             ; VDRIVE: DISK 1/2 WRITING TO #8, then a dot per slice (fits 40 columns)
     lda #' '
     jsr chrout
+    jsr t_start                ; (stopwatch: from here)
     jmp slice_loop
 
 not_mounted:
@@ -183,7 +201,7 @@ no_drive:
     lda #$80
     sta msgflag
     ldx #5                     ; ?DEVICE NOT PRESENT ERROR
-    jmp ($0300)
+    jmp new_error              ; (NEW first: see new_ready)
 
 fail_drive:
     ldx #<t_drive
@@ -227,6 +245,9 @@ slice_loop:
     lda p_lastlen+1
     sta count+1
 
+    ; a packed slice (its empty sectors came as one byte each): expanded to the buffer (stopwatch: LOAD, UNPK)
++   jsr t_slice
+
     ; open the file: new for the first slice, append for the rest (it stays closed while VDRIVE
     ; loads: the drive lost an open file across those loads)
 +   ldx #<s_append
@@ -244,7 +265,8 @@ slice_loop:
     jmp fail_drive
 
     ; write the slice: JiffyDOS when the drive answers it, else CHKOUT/CHROUT
-+   jsr jwrite
++   jsr t_open                 ; (stopwatch: OPEN)
+    jsr jwrite
     cmp #1
     beq kernal_write
     cmp #0
@@ -284,13 +306,15 @@ kernal_write:
     ora count+1
     bne -
 slice_sent:
+    jsr t_write                ; (stopwatch: WRIT)
     jsr clrchn
     lda #2
     jsr close
     jsr status_ok
     beq +
     jmp fail_drive
-+   lda #'.'                   ; progress: one dot per slice
++   jsr t_close                ; (stopwatch: CLOS)
+    lda #'.'                   ; progress: one dot per slice
     jsr chrout
 
     inc slice_name+4
@@ -300,10 +324,10 @@ slice_sent:
     cmp p_slices
     beq +
     jmp slice_loop
-+
++   jsr t_print                ; (stopwatch: the times, then a key)
     lda #13
     jsr chrout
-    ldx #<s_scratch            ; an old copy (,W@) goes first: R: won't overwrite
+    ldx #<s_scratch           ; an old copy (,W@) goes first: R: won't overwrite
     ldy #>s_scratch
     jsr command
     jsr status_ok              ; (01 FILES SCRATCHED, or 01 with 0 files: fine either way)
@@ -399,7 +423,7 @@ done:
     jsr close
     lda #$80
     sta msgflag
-    jmp ($a002)                ; BASIC warm start: READY.
+    jmp new_ready              ; NEW, then BASIC's warm start: READY.
 
 ; LOAD"*",8,1 (+ RUN) from the drive: from the stack page, since the game loads over this stub
 start_game:
@@ -691,25 +715,41 @@ jflag: !byte 0
 jdet:  !byte 0
 jbyte: !byte 0
 bitcnt: !byte 0
-endlo: !byte 0                 ; address of the last byte
-endhi: !byte 0
+jm:     !word 0                ; bytes before the last one (count - 1)
+jchunks: !byte 0               ; 256-byte chunks still to go (the first one shorter)
+jy0:    !byte 0                ; Y at the start: the first chunk ends when Y wraps
 save_d015: !byte 0
+save_d011: !byte 0
 
 ; the slice, buffer .. buffer+count-1, JiffyDOS. A = 0 sent, 2 = no answer
+; All bytes but the last go out in one tight loop: Y indexes 256-byte chunks, the first one the short one,
+; so each chunk ends when Y wraps (nothing to compare per byte). Then the last byte goes through the same
+; loop once more with EOI. The cycle-exact part is the same for every byte.
 jsend:
-    lda #<buffer
-    sta ptr
+    lda count                  ; jm = count - 1: the bytes before the last
+    sec
+    sbc #1
+    sta jm
+    lda count+1
+    sbc #0
+    sta jm+1
+    lda jm                     ; chunks = (jm + 255) / 256
     clc
-    adc count
-    sta endlo
+    adc #$ff
+    lda jm+1
+    adc #0
+    sta jchunks
+    lda #0                     ; Y starts at -jm (low byte), ptr = buffer - that: ptr + Y = buffer
+    sec
+    sbc jm
+    sta jy0
+    lda #<buffer
+    sec
+    sbc jy0
+    sta ptr
     lda #>buffer
+    sbc #0
     sta ptr+1
-    adc count+1
-    sta endhi
-    lda endlo                  ; minus one: the last byte
-    bne +
-    dec endhi
-+   dec endlo
     lda $d011
     and #7
     sta ysc
@@ -717,43 +757,37 @@ jsend:
     sta save_d015
     lda #0
     sta $d015                  ; sprites steal cycles too
+!if BLANK {
+    lda $d011
+    sta save_d011
+    and #$6f                   ; screen off (bit 4)
+    sta $d011
+-   bit $d011                  ; bad lines only stop from the next frame on: wait for its start
+    bpl -                      ; (down into lines 256+,
+-   bit $d011
+    bmi -                      ; then over the top: line 0, before the first bad line)
+}
 
-js_byte:
-    ldy #0
     lda base
     ora #$10
     sta peoi                   ; CLK low at +60: more follows
     sta pend
-    lda ptr+1
-    cmp endhi
-    bne +
-    lda ptr
-    cmp endlo
-    bne +
-    lda base
-    sta peoi                   ; last byte: CLK released at +60 = EOI
-    ora #$18
-    sta pend                   ; ...and at its ack CLK and ATN low at once: the drive loops
-                               ; straight back for another byte, and a released CLK would
-                               ; give it one more (it did: one byte too many)
-+   lda (ptr),y
+    ldy jy0
+    lda jchunks
+    beq js_last                ; a single byte: only the last one
+
+js_next:
+    lda (ptr),y
     tax
-    sty to0
-    sty to1
-    lda #$f0
-    sta to2                    ; about 15 s for the drive to be ready
-
-js_rdy:                        ; drive ready: DATA released
-    bit PORT
-    bmi js_line
-    inc to0
-    bne js_rdy
-    inc to1
-    bne js_rdy
-    inc to2
-    bne js_rdy
-    jmp js_fail
-
+    bit PORT                   ; drive ready (DATA released)? Mostly yes, straight away
+!if BLANK {
+    bpl js_wait
+} else {
+    bmi js_go                  ; (the bad line check in between: js_wait too far for a branch)
+    jmp js_wait
+}
+js_go:
+!if BLANK = 0 {
 js_line:                       ; the byte needs about 1.3 raster lines free of bad lines
     lda $d011
     bmi js_safe                ; lines 256+: border
@@ -768,6 +802,7 @@ js_line:                       ; the byte needs about 1.3 raster lines free of b
     cmp #5
     bcs js_line                ; one is coming within the next two
 js_safe:
+}                              ; (BLANK: the screen is off, there are no bad lines)
     lda base                   ; 3
 
     ; ---- cycle exact: writes at 0, +10, +23, +34, +47, +60 cycles (~us)
@@ -801,28 +836,76 @@ js_safe:
     jmp js_fail
 js_ack:
     sta PORT                   ; CLK low (and ATN low after the last byte)
-    lda ptr
-    cmp endlo
-    bne +
-    lda ptr+1
-    cmp endhi
-    beq js_done
-+   inc ptr
-    bne +
+    iny
+    bne js_next
+    inc ptr+1                  ; the next chunk
+    dec jchunks
+    bne js_next
+
+js_last:                       ; all but the last sent - or the last one too
+    lda peoi
+    cmp base
+    beq js_done                ; (EOI was set: the last byte is out)
+    lda base
+    sta peoi                   ; last byte: CLK released at +60 = EOI
+    ora #$18
+    sta pend                   ; ...and at its ack CLK and ATN low at once: the drive loops
+                               ; straight back for another byte, and a released CLK would
+                               ; give it one more (it did: one byte too many)
+    inc ptr                    ; it's at ptr + Y (Y = 0 here): once more through the loop as Y = 255,
+    bne +                      ; so ptr - 255 (then the loop ends right here again)
     inc ptr+1
-+   jmp js_byte
++   dec ptr+1
+    ldy #$ff
+    lda #1
+    sta jchunks
+    jmp js_next
+
+js_wait:                       ; the drive isn't ready yet: wait for it, about 15 s at most
+    lda #0
+    sta to0
+    sta to1
+    lda #$f0
+    sta to2
+jw_loop:
+!if TIMING {
+    inc jwait                  ; stopwatch: rounds spent waiting for the drive (23 cycles each)
+    bne jw_count
+    inc jwait+1
+    bne jw_count
+    inc jwait+2
+jw_count:
+}
+    bit PORT
+    bpl jw_more
+    jmp js_go                  ; ready (too far back for a branch)
+jw_more:
+    inc to0
+    bne jw_loop
+    inc to1
+    bne jw_loop
+    inc to2
+    bne jw_loop
+    jmp js_fail
 js_done:
-    lda save_d015
-    sta $d015
+    jsr js_screen
     lda #0
     rts
 js_fail:
     lda base
     ora #$10
     sta PORT                   ; ATN released, CLK low
+    jsr js_screen
+    lda #2
+    rts
+js_screen:                     ; sprites (and the screen) back as they were
     lda save_d015
     sta $d015
-    lda #2
+!if BLANK {
+    lda save_d011
+    and #$7f
+    sta $d011
+}
     rts
 
 ; bit-pair tables: what to write to $DD00 for each byte value, one table per step
@@ -993,9 +1076,269 @@ dat_in: lda PORT               ; C = DATA (1 = released)
         bne dat_in
         asl
         rts
+
+; Expand a packed slice (A = its empty sectors, count = its length): the server sent each empty sector - 256
+; bytes of one value - as that one byte (PatchStubs.BuildWriteSlice). In memory it ends where the slice ends:
+; [16 bytes, a bit per sector, 1 = empty][the sectors in order] from $0FF0 + 255 x A. Expanded forward to $1000:
+; every empty sector frees 255 bytes, so the output never reaches data that hasn't been read yet.
+unpack:
+    sta uk
+    lda #$f0                   ; usrc = $0FF0 + 256 x A - A
+    sec
+    sbc uk
+    sta usrc
+    lda #$0f
+    sbc #0
+    clc
+    adc uk
+    sta usrc+1
+    ldy #15                    ; the bit table first: the output runs over it
+-   lda (usrc),y
+    sta ubits,y
+    dey
+    bpl -
+    lda usrc
+    clc
+    adc #16
+    sta usrc
+    bcc +
+    inc usrc+1
++   lda #<buffer
+    sta ptr
+    lda #>buffer
+    sta ptr+1
+    lda count+1                ; sectors: count / 256, rounded up
+    ldx count
+    beq +
+    clc
+    adc #1
++   sta usect
+    lda #0
+    sta usn
+u_sector:
+    lda usn                    ; every 8 sectors: the next bit table byte
+    and #7
+    bne u_bit
+    lda usn
+    lsr
+    lsr
+    lsr
+    tax
+    lda ubits,x
+    sta ubyte
+u_bit:
+    ldy #0
+    lsr ubyte
+    bcc u_copy
+    lda (usrc),y               ; empty: its one byte, 256 times
+    inc usrc
+    bne u_fill
+    inc usrc+1
+u_fill:
+    sta (ptr),y
+    iny
+    bne u_fill
+    beq u_next                 ; (always)
+u_copy:
+    lda (usrc),y               ; the others: 256 bytes, forward (a short last sector: the bytes
+    sta (ptr),y                ; after it are never written to the drive)
+    iny
+    bne u_copy
+    inc usrc+1
+u_next:
+    inc ptr+1
+    inc usn
+    lda usn
+    cmp usect
+    bne u_sector
+    rts
+
+; Back to BASIC without starting a game: this stub is still at $0801 and BASIC's pointers still take it
+; for the program (LIST showed nonsense, RUN would run it). So first a NEW: an empty program at $0801,
+; variables and strings gone. (Where the stub starts a game, that LOAD replaces it anyway.)
+new_ready:
+    jsr basic_new
+    jmp ($a002)                ; BASIC warm start: READY.
+new_error:                     ; X = the error number
+    jsr basic_new
+    jmp ($0300)                ; BASIC error: ?... ERROR, READY.
+basic_new:
+    lda #0
+    sta $0801                  ; the end of the program right at the start
+    sta $0802
+    lda #<$0803
+    sta $2d                    ; variables, arrays, end of arrays: just after it
+    sta $2f
+    sta $31
+    lda #>$0803
+    sta $2e
+    sta $30
+    sta $32
+    lda $37                    ; strings: none (their bottom = the top of BASIC memory)
+    sta $33
+    lda $38
+    sta $34
+    rts
+
+t_slice:                       ; right after a slice's LOAD: unpack it if packed (and stopwatch: LOAD, UNPK)
+!if TIMING {
+    ldx #0
+    jsr tadd
+}
+    lda slice_name+4
+    sec
+    sbc #'A'
+    tax
+    lda p_fills,x
+    beq +
+    jsr unpack
+!if TIMING {
+    ldx #2
+    jmp tadd
+}
++   rts
+
+; --- stopwatch (TIMING = 1): where a slice's time goes ----------------------------------------------
+; CIA 2's two timers chained: A underflows every 1/100 s, B counts those down from $FFFF. They keep
+; running with interrupts off (the jiffy write); nothing else here uses them (the WiC64 only reads $DD0D).
+; Each mark adds the time since the previous mark to one of five totals, printed after the last slice.
+!if TIMING = 0 {
+t_start:
+t_open:
+t_write:
+t_close:
+t_print:
+    rts
+} else {
+t_start:
+    lda #0
+    sta $dd0e                  ; both timers stopped
+    sta $dd0f
+    ldx #<10227                ; NTSC: 1.0227 MHz / 100
+    ldy #>10227
+    lda $02a6                  ; KERNAL: 1 = PAL
+    beq +
+    ldx #<9852                 ; PAL: 0.9852 MHz / 100
+    ldy #>9852
++   stx $dd04
+    sty $dd05
+    lda #$ff
+    sta $dd06
+    sta $dd07
+    sta tlast
+    sta tlast+1
+    lda #%01010001             ; B: counts A's underflows, loaded, running
+    sta $dd0f
+    lda #%00010001             ; A: continuous, loaded, running
+    sta $dd0e
+    lda #0
+    ldx #9
+-   sta tacc,x
+    dex
+    bpl -
+    sta jwait
+    sta jwait+1
+    sta jwait+2
+    rts
+
+t_open:  ldx #4                ; the file opened (append), status read
+         jmp tadd
+t_write: ldx #6                ; the slice written
+         jmp tadd
+t_close: ldx #8                ; closed, status read
+                               ; (falls through)
+tadd:                          ; total X += time since the last mark
+-   ldy $dd07                  ; B, read again if its high byte changed in between
+    lda $dd06
+    cpy $dd07
+    bne -
+    sta tnow
+    sty tnow+1
+    sec                        ; the timer counts down: elapsed = last - now
+    lda tlast
+    sbc tnow
+    sta tdif
+    lda tlast+1
+    sbc tnow+1
+    sta tdif+1
+    clc
+    lda tacc,x
+    adc tdif
+    sta tacc,x
+    lda tacc+1,x
+    adc tdif+1
+    sta tacc+1,x
+    lda tnow
+    sta tlast
+    lda tnow+1
+    sta tlast+1
+    rts
+
+t_print:                       ; LOAD 1234 UNPK 56 OPEN 789 WRIT 1234 CLOS 567 (1/100 S)
+    jsr clrchn
+    lda #0                     ; BASIC's number work area back to zeros: unpack used it, and the print
+    ldx #$70-$57               ; routine's normalising took unpack's count from $68 as the number's
+-   sta $57,x                  ; fraction (LOAD came out as 1167.29099)
+    dex
+    bpl -
+    sta tix
+-   ldx tix
+    lda t_labels,x
+    tax
+    ldy #>t_lab0
+    jsr print_raw
+    lda tix
+    asl
+    tax
+    lda tacc,x
+    pha
+    lda tacc+1,x
+    tay
+    pla
+    tax
+    tya
+    jsr $bdcd                  ; BASIC: print A (high) / X (low) as a number
+    inc tix
+    lda tix
+    cmp #5
+    bne -
+    ldx #<t_lab6               ; WAIT: rounds spent waiting for the drive, / 256 (one = 5888 cycles, ~5.8 ms)
+    ldy #>t_lab6
+    jsr print_raw
+    lda #0
+    sta $68
+    sta $70
+    ldx jwait+1
+    lda jwait+2
+    jsr $bdcd
+    ldx #<t_lab5
+    ldy #>t_lab5
+    jsr print_raw
+    lda #0
+    sta $c6                    ; empty keyboard buffer, then wait for a key
+-   jsr $ffe4
+    beq -
+    rts
+
+tlast:  !word 0
+tnow:   !word 0
+tdif:   !word 0
+tacc:   !fill 10, 0            ; LOAD, UNPK, OPEN, WRIT, CLOS: 1/100 s each
+tix:    !byte 0
+t_labels: !byte <t_lab0, <t_lab1, <t_lab2, <t_lab3, <t_lab4
+t_lab0: !pet 13, "load ", 0
+t_lab1: !pet " unpk ", 0
+t_lab2: !pet " open ", 0
+t_lab3: !pet " writ ", 0
+t_lab4: !pet " clos ", 0
+t_lab5: !pet 13, "press a key", 13, 0
+t_lab6: !pet " (1/100 s) wait ", 0
+jwait:  !fill 3, 0             ; rounds of js_rdy (the drive not ready yet)
+!if >t_lab0 != >t_lab4 { !error "stopwatch labels cross a page" }
+}
 }
 jiffy_end:
-!if jiffy_end - jiffy_src > $300 { !error "jiffy module is more than the 768 bytes start copies" }
+!if jiffy_end - jiffy_src > $500 { !error "jiffy module is more than the 5 pages start copies" }
 !if jtables + $400 > jrun { !error "tables run into the module" }
 
 stub_end:
