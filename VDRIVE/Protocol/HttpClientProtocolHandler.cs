@@ -167,6 +167,16 @@ namespace VDRIVE.Protocol
                             responsePayload = PatchStubs.BuildWriteStub(writeSet, writeDisk, writeDevice, image, first, writeForce, this.Configuration.WriteFolder);
                             loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
                             this.Logger.LogMessage($"[WRITE] Stub for disk {writeDisk}/{writeSet.Count}: {Path.GetFileName(writeSet[writeDisk - 1])} ({image.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.DiskDriveName(writeSet, writeDisk - 1)}.D64{(writeForce ? " (write again: @)" : "")}");
+                            if (writeDisk == 1 && session.FloppyResolver is CommodoreSoftwareFloppyResolver commodoreSoftware)
+                            {
+                                var leftOut = commodoreSoftware.InsertedDiskSet
+                                    .Where(p => Path.GetExtension(p).Equals(".d64", StringComparison.OrdinalIgnoreCase))
+                                    .Skip(writeSet.Count).Select(Path.GetFileName).ToList();
+                                if (writeSet.Count > 1 && leftOut.Count > 0)
+                                {
+                                    this.Logger.LogMessage($"[WRITE] Only the first {writeSet.Count} disks of this download are written (left out: {string.Join(", ", leftOut)})");
+                                }
+                            }
                         }
                         else
                         {
@@ -874,6 +884,18 @@ namespace VDRIVE.Protocol
                     && set.All(p => Path.GetExtension(p).Equals(".d64", StringComparison.OrdinalIgnoreCase)))
                 {
                     return set;
+                }
+            }
+            // a Commodore.Software download: every D64 in it (the mounted one first, the rest A-Z, see
+            // CommodoreSoftwareFloppyResolver), at most 9 - the stub's chain name and swap list hold no more
+            if (session.FloppyResolver is CommodoreSoftwareFloppyResolver commodoreSoftware)
+            {
+                List<string> set = commodoreSoftware.InsertedDiskSet
+                    .Where(p => Path.GetExtension(p).Equals(".d64", StringComparison.OrdinalIgnoreCase) && File.Exists(p))
+                    .ToList();
+                if (set.Count > 1 && string.Equals(set[0], imagePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return set.Take(9).ToList();
                 }
             }
             return new[] { imagePath };

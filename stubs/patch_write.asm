@@ -118,6 +118,7 @@ start:
     sta jrun+$500,x
     inx
     bne -
+    jsr rs_save                ; the RS232 pointers, before the jiffy write uses them (see rs_save)
     lda devnum
     sta vdev
     lda #0
@@ -331,6 +332,7 @@ finish:
     jsr clrchn
     lda #15
     jsr close
+    jsr rs_restore             ; the next stub saves them again, so give it the real ones
     lda s_chain                ; LOAD the next stub: VDRIVE jumps to it, this one is gone
     ldx #<(s_chain+1)
     ldy #>(s_chain+1)
@@ -435,6 +437,7 @@ start_load:                    ; (a single program comes in here: nothing was mo
     sta r_dev+1
     lda p_run
     sta r_mode+1
+    jsr rs_restore             ; the RS232 pointers as they were (see rs_save)
     ldx #$ff                   ; never comes back here
     txs
     lda #$80
@@ -1239,6 +1242,26 @@ prg_start:
     jsr vdrive_disable
 +   jmp start_load
 
+; $F7-$FA are the KERNAL's RS232 buffer pointers ($F8/$FA = 0: no buffers yet), borrowed by the jiffy write
+; as to0-to2/peoi. Saved at the start, put back on every way out (READY., an error, a game started, the next
+; disk's stub), or a later OPEN of device 2 (a modem program) would use "buffers" at junk addresses.
+; Y only: new_error's X is the error number.
+rs_save:
+    ldy #3
+-   lda $f7,y
+    sta rs_saved,y
+    dey
+    bpl -
+    rts
+rs_restore:
+    ldy #3
+-   lda rs_saved,y
+    sta $f7,y
+    dey
+    bpl -
+    rts
+rs_saved: !fill 4, 0
+
 ; Back to BASIC without starting a game: this stub is still at $0801 and BASIC's pointers still take it
 ; for the program (LIST showed nonsense, RUN would run it). So first a NEW: an empty program at $0801,
 ; variables and strings gone. (Where the stub starts a game, that LOAD replaces it anyway.)
@@ -1249,6 +1272,7 @@ new_error:                     ; X = the error number
     jsr basic_new
     jmp ($0300)                ; BASIC error: ?... ERROR, READY.
 basic_new:
+    jsr rs_restore
     lda #0
     sta $0801                  ; the end of the program right at the start
     sta $0802
