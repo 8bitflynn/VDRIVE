@@ -76,7 +76,7 @@ The file offset is the address minus `$C000`, plus 2 for the PRG's load address.
 From your Commodore 64 (real hardware or VICE with WiC64 emulation):
 
 ```text
-LOAD "vdrive_wic64.prg",8,1
+LOAD "vdrivewic64.prg",8,1
 ```
 
 | Command | Does |

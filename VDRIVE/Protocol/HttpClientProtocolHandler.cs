@@ -196,6 +196,29 @@ namespace VDRIVE.Protocol
                         return;
                     }
 
+                    // a SID for a program's own player (Util/SidTune.cs): "*,H" -> its header for $CF70, "*,N" -> the tune
+                    // alone at its own address. Read from the SID file the mount downloaded (raw.sid, next to psid64's PRG)
+                    if (SidTune.TryGetPart(fileName, out bool sidHeader))
+                    {
+                        string mounted = session.FloppyResolver.GetInsertedFloppyPointer().ImagePath;
+                        string rawSid = string.IsNullOrEmpty(mounted) ? null : Path.Combine(Path.GetDirectoryName(mounted) ?? "", "raw.sid");
+                        SidTune tune = rawSid != null && File.Exists(rawSid) ? SidTune.Parse(SharedFile.ReadAllBytes(rawSid)) : null;
+                        if (tune == null)
+                        {
+                            this.Logger.LogMessage($"[SID] '{fileName}': no SID tune mounted", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        }
+                        else
+                        {
+                            responsePayload = sidHeader ? tune.HeaderPrg() : tune.TunePrg();
+                            loadResponse.ResponseCode = 0xff;
+                            this.Logger.LogMessage(sidHeader
+                                ? $"[SID] Header: load ${tune.LoadAddress:X4}-${tune.LoadAddress + tune.Data.Length - 1:X4}, init ${tune.InitAddress:X4}, play ${tune.PlayAddress:X4}, {tune.Songs} song(s), start {tune.StartSong}, flags {tune.Flags}"
+                                : $"[SID] Tune only: {tune.Data.Length} bytes at ${tune.LoadAddress:X4}");
+                        }
+                        WriteLoadResponse(this.HttpListenerContext, responsePayload, loadResponse, session);
+                        return;
+                    }
+
                     // patch switches (PatchStubs): "NAME,P" -> the run stub, "NAME,P2" -> the stub's data
                     string runDataName = PatchStubs.GetRunDataName(fileName);
                     string runName = runDataName == null ? PatchStubs.GetRunName(fileName) : null;
