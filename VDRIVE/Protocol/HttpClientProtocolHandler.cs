@@ -278,7 +278,7 @@ namespace VDRIVE.Protocol
                             ushort dest_ptr_start = (ushort)(fullFile[0] | (fullFile[1] << 8));
                             this.Logger.LogMessage($"Start Address: 0x{dest_ptr_start:X4}");
 
-                            int endAddress = dest_ptr_start + fullFile.Length - 1;
+                            int endAddress = dest_ptr_start + (fullFile.Length - 2) - 1;    // the last byte loaded (the first 2 bytes are the address)
                             this.Logger.LogMessage($"End Address: 0x{endAddress:X4}");
 
                             responsePayload = fullFile;
@@ -1189,7 +1189,7 @@ namespace VDRIVE.Protocol
 
             if (end_dest_ptr >= 0xc000) // VDRIVE memory area (make this check configurable?)
             {
-                logger.LogMessage($"Load end 0x{end_dest_ptr:X4} overlaps VDRIVE memory, rejecting", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                logger.LogMessage($"Load end 0x{end_dest_ptr:X4} overlaps VDRIVE memory (loading anyway)", VDRIVE_Contracts.Enums.LogSeverity.Warning);
             }
 
             return true;
