@@ -18,7 +18,7 @@ namespace VDRIVE_Contracts.Structures.Http
             if (data.Length < 3) throw new ArgumentException("Invalid data");
 
             ushort sessionId = (ushort)(data[0] | (data[1] << 8));
-            byte searchTermLength = data[2];
+            byte searchTermLength = Math.Min(data[2], (byte)32); // (the term's limit: a longer one is cut, it used to throw)
 
             var request = new HttpSearchFloppyRequest();
             request.SessionId = sessionId;
