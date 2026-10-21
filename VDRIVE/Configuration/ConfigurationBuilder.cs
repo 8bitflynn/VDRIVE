@@ -288,6 +288,7 @@ namespace VDRIVE.Configuration
                 this.Logger.LogMessage($"  StorageAdapterSettings:");
                 this.Logger.LogMessage($"   Readonly: {configuration.StorageAdapterSettings.Readonly}");
                 this.Logger.LogMessage($"   NewFloppyPath: {configuration.StorageAdapterSettings.NewFloppyPath}");
+                this.Logger.LogMessage($"   GameSavePath: {configuration.StorageAdapterSettings.GameSavePath}");
                 this.Logger.LogMessage($"   LockTimeoutSeconds: {configuration.StorageAdapterSettings.LockTimeoutSeconds}");
                 
                 if (configuration.StorageAdapterSettings.DirMaster != null && configuration.StorageAdapter == "DirMaster")
@@ -323,17 +324,19 @@ namespace VDRIVE.Configuration
                         this.Logger.LogMessage($"    Local CompanionDiskNames: {string.Join(", ", configuration.FloppyResolverSettings.Local.CompanionDiskNames)}");
                     }
                 }
-                if (configuration.FloppyResolver == "CommodoreSoftware" && configuration.FloppyResolverSettings.CommodoreSoftware != null)
+                if (configuration.FloppyResolverSettings.CommodoreSoftware != null)    // @CS works whatever the default resolver is
                 {
                     this.Logger.LogMessage($"    CommodoreSoftware BaseURL: {configuration.FloppyResolverSettings.CommodoreSoftware.BaseURL}");
                     this.Logger.LogMessage($"    CommodoreSoftware MediaExtensionsAllowed: {string.Join(',', configuration.FloppyResolverSettings.CommodoreSoftware.MediaExtensionsAllowed)}");
                     this.Logger.LogMessage($"    CommodoreSoftware IgnoredSearchKeywords: {string.Join(',', configuration.FloppyResolverSettings.CommodoreSoftware.IgnoredSearchKeywords)}");
                 }
-                if (configuration.FloppyResolver == "HvscPsid" && configuration.FloppyResolverSettings.HvscPsid != null)
+                if (configuration.FloppyResolverSettings.HvscPsid != null)    // @HVSC too
                 {
                     this.Logger.LogMessage($"    Hvsc BaseURL: {configuration.FloppyResolverSettings.HvscPsid.BaseURL}");
+                    this.Logger.LogMessage($"    Hvsc LocalPath: {configuration.FloppyResolverSettings.HvscPsid.LocalPath}");
                     this.Logger.LogMessage($"    Hvsc ExecutablePath: {string.Join(',', configuration.FloppyResolverSettings.HvscPsid.ExecutablePath)}");
                     this.Logger.LogMessage($"    Hvsc Arguments: {configuration.FloppyResolverSettings.HvscPsid.Arguments}");
+                    this.Logger.LogMessage($"    Hvsc SidRelocPath: {configuration.FloppyResolverSettings.HvscPsid.SidRelocPath}");
                 }
             }
         }

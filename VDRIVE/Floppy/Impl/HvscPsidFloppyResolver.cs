@@ -42,6 +42,24 @@ namespace VDRIVE.Floppy.Impl
 
             Logger.LogMessage($"Searching High Voltage Sid Collection for description '{searchTerm}' and media type '{mediaTypeCSV}'");
 
+            // the local copy first (HvscPsid.LocalPath): faster, and works when the web is down. Nothing there
+            // (a tune newer than the copy, or the index still building) - the web, as before.
+            List<VDRIVE.Util.HvscIndex.Entry> index = VDRIVE.Util.HvscIndex.Get(LocalPath, Logger);
+            if (index != null)
+            {
+                List<VDRIVE.Util.HvscIndex.Entry> hits = VDRIVE.Util.HvscIndex.Search(index, searchTerm);
+                if (hits.Count > 0)
+                {
+                    Logger.LogMessage($"HVSC: {hits.Count} local result(s) for '{searchTerm}'");
+                    ushort localId = 1;
+                    List<FloppyInfo> localInfos = hits.Select(e => AddResult(e.Title, e.Author, e.Path, localId++)).ToList();
+                    SearchFloppyResponse localResponse = BuildSearchFloppyResponse(0x1000, (byte)0xff, (byte)localInfos.Count);
+                    foundFloppyInfos = localInfos.Take(Configuration.MaxSearchResults).ToArray();
+                    localResponse.ResultCount = (byte)foundFloppyInfos.Length;
+                    return localResponse;
+                }
+            }
+
             using (HttpClient client = new HttpClient())
             {
                 string searchUrl = BuildHcsvSearchUrl(searchTerm);
@@ -81,39 +99,56 @@ namespace VDRIVE.Floppy.Impl
             ushort searchResultIndexId = 1;
             foreach (Match match in matches)
             {
-                string imageName = match.Groups[2].Value.Trim() + " - " + match.Groups[3].Value.Trim();             
+                string title = JsonText(match.Groups[2].Value);
+                string author = JsonText(match.Groups[3].Value);
+                string released = JsonText(match.Groups[4].Value);
 
-                FloppyInfo floppyInfo = new FloppyInfo();
-                floppyInfo.IdLo = (byte)searchResultIndexId;
-                floppyInfo.IdHi = (byte)(searchResultIndexId >> 8);
-
-                if (imageName.Length > 64)
-                {
-                    imageName = imageName.Substring(0, 64);
-                }
-                floppyInfo.ImageNameLength = (byte)imageName.Length;
-                floppyInfo.ImageName = new char[64];
-                imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
-
-                // strip html
-                string description = Regex.Replace(match.Groups[3].Value, @"<.*?>", "").Trim();
-                // strip non-ascii
-                description = Regex.Replace(description, @"[^\x20-\x7E]", "");
-                floppyInfos.Add(floppyInfo);
-
-                // floppy pointers hold Id and long path and are looked up when "inserted"
-                FloppyPointer floppyPointer = new FloppyPointer();
-                floppyPointer.Id = searchResultIndexId;
-                floppyPointer.ImagePath = match.Groups[1].Value.Trim();
-
-                // results stored in resolver for lookup if "inserted"
-                FloppyInfos.Add(floppyInfo);
-                FloppyPointers.Add(floppyPointer);
-
+                // a web result that is in the local copy loads from it (no download); else by its web id
+                string imagePath = VDRIVE.Util.HvscIndex.Find(LocalPath, title, author, released, Logger) ?? match.Groups[1].Value.Trim();
+                floppyInfos.Add(AddResult(title, author, imagePath, searchResultIndexId));
                 searchResultIndexId++;
             }
 
             return floppyInfos;
+        }
+
+        private string LocalPath => this.Configuration.FloppyResolverSettings.HvscPsid.LocalPath;
+
+        // a JSON string's text (é -> é), as the SID's own header has it
+        private static string JsonText(string raw)
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>("\"" + raw + "\"").Trim(); }
+            catch (Exception) { return raw.Trim(); }
+        }
+
+        // one result: "TITLE - AUTHOR" (as the C64 and the website cards know it) and where it comes from -
+        // a web id, or a local file's full path
+        private FloppyInfo AddResult(string title, string author, string imagePath, ushort searchResultIndexId)
+        {
+            string imageName = title + " - " + author;
+
+            FloppyInfo floppyInfo = new FloppyInfo();
+            floppyInfo.IdLo = (byte)searchResultIndexId;
+            floppyInfo.IdHi = (byte)(searchResultIndexId >> 8);
+
+            if (imageName.Length > 64)
+            {
+                imageName = imageName.Substring(0, 64);
+            }
+            floppyInfo.ImageNameLength = (byte)imageName.Length;
+            floppyInfo.ImageName = new char[64];
+            imageName.ToUpper().ToCharArray().CopyTo(floppyInfo.ImageName, 0);
+
+            // floppy pointers hold Id and long path and are looked up when "inserted"
+            FloppyPointer floppyPointer = new FloppyPointer();
+            floppyPointer.Id = searchResultIndexId;
+            floppyPointer.ImagePath = imagePath;
+
+            // results stored in resolver for lookup if "inserted"
+            FloppyInfos.Add(floppyInfo);
+            FloppyPointers.Add(floppyPointer);
+
+            return floppyInfo;
         }
 
         public override FloppyInfo InsertFloppy(FloppyIdentifier floppyIdentifier)
@@ -129,11 +164,13 @@ namespace VDRIVE.Floppy.Impl
             {
                 using (HttpClient client = new HttpClient())
                 {
-                    string downloadPageUrl = BuildHsvDownloadUrl(InsertedFloppyPointer.ImagePath);
-                    HttpResponseMessage httpResponseMessage = client.GetAsync(downloadPageUrl).Result;
-                    byte[] rawBytes = httpResponseMessage.Content.ReadAsByteArrayAsync().Result;
+                    // a local file (full path, HvscIndex) or a web id
+                    bool local = Path.IsPathRooted(InsertedFloppyPointer.ImagePath);
+                    HttpResponseMessage httpResponseMessage = local ? null : client.GetAsync(BuildHsvDownloadUrl(InsertedFloppyPointer.ImagePath)).Result;
+                    byte[] rawBytes = local ? File.ReadAllBytes(InsertedFloppyPointer.ImagePath) : httpResponseMessage.Content.ReadAsByteArrayAsync().Result;
+                    if (local) Logger.LogMessage($"HVSC: local {InsertedFloppyPointer.ImagePath}");
 
-                    if (httpResponseMessage.IsSuccessStatusCode)
+                    if (local || httpResponseMessage.IsSuccessStatusCode)
                     {
                         string fullPath = VDRIVE.Util.WorkFolders.Ensure(this.Configuration, this.WorkFolder);
                         if (!Directory.Exists(fullPath))

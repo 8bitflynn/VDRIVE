@@ -85,7 +85,8 @@ s_write:    !fill 40, 0        ; $0880 @:NAME.TMP,P,W
 s_rename:   !fill 40, 0        ; $08A8 R:NAME.D64=NAME.TMP
 s_cdimg:    !fill 40, 0        ; $08D0 CD:NAME.D64
 s_append:   !fill 40, 0        ; $08F8 NAME.TMP,P,A
-p_run:      !byte 0            ; $0920 after mounting: 0 = stop, 1 = LOAD"*",8,1 + RUN, 2 = LOAD"*",8,1
+p_run:      !byte 0            ; $0920 after mounting: 0 = stop, 1 = LOAD"*",8,1 + RUN, 2 = LOAD"*",8,1,
+                               ; 3 = LOAD"NAME",8,1 typed for BASIC (a program that loads into the stack page)
 p_next:     !byte 0            ; $0921 multi-disk: 0 = last disk, else the stub for the next disk...
 s_chain:    !fill 40, 0        ; $0922 ...is LOADed with this name ("*,W8D2"); VDRIVE runs it in our place
 s_label:    !fill 40, 0        ; $094A "DISK 1/2 " on screen (empty for one disk)
@@ -422,27 +423,7 @@ start_load:                    ; (a single program comes in here: nothing was mo
     jsr clrchn
     lda #15
     jsr close
-    ldx #runner_end - runner_src - 1
--   lda runner_src,x
-    sta $0100,x
-    dex
-    bpl -
-    ldx s_run                  ; the name, into the copy
-    stx r_len+1
--   lda s_run,x
-    sta r_name-1,x
-    dex
-    bne -
-    lda p_dev                  ; patched into the copy
-    sta r_dev+1
-    lda p_run
-    sta r_mode+1
-    jsr rs_restore             ; the RS232 pointers as they were (see rs_save)
-    ldx #$ff                   ; never comes back here
-    txs
-    lda #$80
-    sta msgflag                ; the drive's SEARCHING/LOADING show again
-    jmp $0100
+    jmp start_runner           ; (in the module at $9400: the slices never reach it, and here it didn't fit)
 
 runner_src:
 !pseudopc $0100 {
@@ -466,10 +447,11 @@ r_mode:
     cmp #1
     bne r_ready
     ldx #3                     ; RUN typed into the keyboard buffer: READY. runs it, the way a
--   lda r_keys,x               ; user would. An autostart loader (one that took over $0302 as
-    sta $0277,x                ; it loaded) gets control at READY. first, as on a real drive
+r_kloop:                       ; user would. An autostart loader (one that took over $0302 as
+    lda r_keys,x               ; it loaded) gets control at READY. first, as on a real drive
+    sta $0277,x
     dex
-    bpl -
+    bpl r_kloop
     lda #4
     sta $c6
 r_ready:
@@ -486,6 +468,7 @@ r_name:
     !fill 16, 0                ; patched: the name
 }
 runner_end:
+!if runner_end - runner_src > 128 { !error "the starter must fit 128 bytes (the stack page's bottom half)" }
 
 ; --- drive helpers ------------------------------------------------------------------
 
@@ -650,6 +633,92 @@ resident_end:
 
 jiffy_src:
 !pseudopc jrun {
+
+; the game's starter (runner) into the stack page, then started - from here in the module: the stub at $0801
+; had no room left for it. A program that loads into the stack page itself gets mode 3 instead (no starter).
+start_runner:
+    lda p_run                  ; 3: a program that loads into the stack page (GEOS's boot file, $0110-): it takes
+    cmp #3                     ; over by overwriting LOAD's return addresses, and only with BASIC's own stack under
+    bne sr_copy                ; the LOAD - called from the starter it hung. So BASIC loads it, as typed by a user:
+    jsr rs_restore             ; LOAD"NAME",8,1 on screen, then cursor up twice and RETURN in the keyboard buffer
+    lda #13                    ; (READY. comes in between), into READY. with BASIC's stack
+    jsr chrout
+    ldx #0
+sr_load:
+    lda t_typed,x
+    beq sr_name
+    jsr chrout
+    inx
+    bne sr_load
+sr_name:
+    ldx #0
+sr_nch:
+    cpx s_run
+    beq sr_tail
+    lda s_run+1,x
+    jsr chrout
+    inx
+    bne sr_nch
+sr_tail:
+    lda #$22                   ; ",8,1 - the drive's number (8-11)
+    jsr chrout
+    lda #$2c
+    jsr chrout
+    lda p_dev
+    cmp #10
+    bcc sr_one
+    pha
+    lda #$31
+    jsr chrout
+    pla
+    sec
+    sbc #10
+sr_one:
+    ora #$30
+    jsr chrout
+    lda #$2c
+    jsr chrout
+    lda #$31
+    jsr chrout
+    lda #13
+    jsr chrout
+    lda #$91                   ; cursor up, up, RETURN: READY. comes out on the line below, so two up
+    sta $0277
+    sta $0278
+    lda #13
+    sta $0279
+    lda #3
+    sta $c6
+    lda #$80
+    sta msgflag                ; (SEARCHING/LOADING as for a user)
+    ldx #$fa                   ; BASIC's own stack, as after an error or READY
+    txs
+    jmp $a474                  ; READY. - then the keys
+t_typed: !pet "load", $22, 0
+sr_copy:
+    ldx #runner_end - runner_src - 1
+sr_cp:
+    lda runner_src,x
+    sta $0100,x
+    dex
+    bpl sr_cp
+    ldx s_run                  ; the name, into the copy
+    stx r_len+1
+sr_nm:
+    lda s_run,x
+    sta r_name-1,x
+    dex
+    bne sr_nm
+    lda p_dev                  ; patched into the copy
+    sta r_dev+1
+    lda p_run
+    sta r_mode+1
+    jsr rs_restore             ; the RS232 pointers as they were (see rs_save)
+    ldx #$ff                   ; never comes back here
+    txs
+    lda #$80
+    sta msgflag                ; the drive's SEARCHING/LOADING show again
+    jmp $0100
 
 ; write count bytes from buffer to file 2 (open, secondary 2) on p_dev
 ; A = 0 sent, 1 = no JiffyDOS here (use CHKOUT/CHROUT), 2 = the drive stopped answering

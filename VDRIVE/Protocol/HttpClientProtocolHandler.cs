@@ -81,7 +81,8 @@ namespace VDRIVE.Protocol
                 }
 
                 // Single entry log including remote addresses
-                this.Logger.LogMessage($"[{remoteAddr}] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+                // (without a query string: whatever a client might add there stays out of the log)
+                this.Logger.LogMessage($"[{remoteAddr}] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url.GetLeftPart(UriPartial.Path)}");
 
                 // If any tokens are configured, require valid token
                 if (this.Configuration.AllowedAuthTokens.Any()) 
@@ -164,9 +165,10 @@ namespace VDRIVE.Protocol
                         {
                             byte[] image = SharedFile.ReadAllBytes(writeSet[writeDisk - 1]);
                             byte[] first = writeDisk == 1 ? image : SharedFile.ReadAllBytes(writeSet[0]);
-                            responsePayload = PatchStubs.BuildWriteStub(writeSet, writeDisk, writeDevice, image, first, writeForce, this.Configuration.WriteFolder);
+                            string writeIdentity = WriteIdentity(session, writeSet[0]);
+                            responsePayload = PatchStubs.BuildWriteStub(writeSet, writeDisk, writeDevice, image, first, writeForce, this.Configuration.WriteFolder, writeIdentity);
                             loadResponse.ResponseCode = PatchStubs.RunAfterLoad;
-                            this.Logger.LogMessage($"[WRITE] Stub for disk {writeDisk}/{writeSet.Count}: {Path.GetFileName(writeSet[writeDisk - 1])} ({image.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.DiskDriveName(writeSet, writeDisk - 1)}.D64{(writeForce ? " (write again: @)" : "")}");
+                            this.Logger.LogMessage($"[WRITE] Stub for disk {writeDisk}/{writeSet.Count}: {Path.GetFileName(writeSet[writeDisk - 1])} ({image.Length} bytes) to drive {writeDevice} as {PatchStubs.WriteFolderOrDefault(this.Configuration.WriteFolder)}/{PatchStubs.DiskDriveName(writeSet, writeDisk - 1, writeIdentity)}.D64{(writeForce ? " (write again: @)" : "")}");
                             if (writeDisk == 1 && session.FloppyResolver is CommodoreSoftwareFloppyResolver commodoreSoftware)
                             {
                                 var leftOut = commodoreSoftware.InsertedDiskSet
@@ -203,6 +205,8 @@ namespace VDRIVE.Protocol
                         string mounted = session.FloppyResolver.GetInsertedFloppyPointer().ImagePath;
                         string rawSid = string.IsNullOrEmpty(mounted) ? null : Path.Combine(Path.GetDirectoryName(mounted) ?? "", "raw.sid");
                         SidTune tune = rawSid != null && File.Exists(rawSid) ? SidTune.Parse(SharedFile.ReadAllBytes(rawSid)) : null;
+                        tune = SidTune.RelocateIfNeeded(tune, rawSid, this.Configuration.FloppyResolverSettings?.HvscPsid?.SidRelocPath,
+                            m => this.Logger.LogMessage(m));      // (to $1000 when it would fit there: the jukebox's room)
                         if (tune == null)
                         {
                             this.Logger.LogMessage($"[SID] '{fileName}': no SID tune mounted", VDRIVE_Contracts.Enums.LogSeverity.Warning);
@@ -337,6 +341,37 @@ namespace VDRIVE.Protocol
                     if (fileData == null || fileData.Length < 2)
                     {
                         WriteSaveResponse(httpListenerResponse, "ERROR: Invalid file data", new SaveResponse { ResponseCode = 0x04 }, session);
+                        return;
+                    }
+
+                    // a game's own save (SAM's Place: SAV-<the WiC64's MAC>): its own small file in GameSavePath, by its
+                    // name - also with ReadOnly on. (The adapters would write a loose PRG over whatever PRG is mounted.)
+                    // Found again with @LOCAL SAV-<id> when GameSavePath is in (or under) a local search path.
+                    string gameSavePath = this.Configuration.StorageAdapterSettings?.GameSavePath;
+                    if (!string.IsNullOrWhiteSpace(gameSavePath) && System.Text.RegularExpressions.Regex.IsMatch(fileName, "^SAV-[0-9A-F]{1,12}$",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    {
+                        bool saved = false;
+                        if (fileData.Length <= GameSaveMaxBytes + 2)
+                        {
+                            try
+                            {
+                                Directory.CreateDirectory(gameSavePath);
+                                File.WriteAllBytes(Path.Combine(gameSavePath, fileName.ToUpperInvariant() + ".PRG"), fileData);
+                                saved = true;
+                                this.Logger.LogMessage($"[Save] Game save {fileName.ToUpperInvariant()}.PRG: {fileData.Length - 2} bytes at ${fileData[0] | (fileData[1] << 8):X4}");
+                            }
+                            catch (Exception ex)
+                            {
+                                this.Logger.LogMessage($"[Save] Game save {fileName} failed: {ex.Message}", VDRIVE_Contracts.Enums.LogSeverity.Error);
+                            }
+                        }
+                        else
+                        {
+                            this.Logger.LogMessage($"[Save] Game save {fileName} refused: {fileData.Length - 2} bytes (at most {GameSaveMaxBytes})", VDRIVE_Contracts.Enums.LogSeverity.Warning);
+                        }
+                        WriteSaveResponse(httpListenerResponse, "\r\n" + (saved ? "SAVE OK" : "SAVE FAILED") + "\r\n\0",
+                            new SaveResponse { ResponseCode = saved ? (byte)0xff : (byte)0x04 }, session);
                         return;
                     }
 
@@ -634,7 +669,7 @@ namespace VDRIVE.Protocol
                 }
 
                 // --- Default 404 ---
-                this.Logger.LogMessage($"[404] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url}");
+                this.Logger.LogMessage($"[404] {httpListenerRequest.HttpMethod} {httpListenerRequest.Url.GetLeftPart(UriPartial.Path)}");
                 httpListenerResponse.StatusCode = 404;
                 WriteResponse(httpListenerResponse, "\r\nERROR: UNKNOWN REQUEST\0");
             }
@@ -922,6 +957,20 @@ namespace VDRIVE.Protocol
                 }
             }
             return new[] { imagePath };
+        }
+
+        // What a written disk's name is made from (PatchStubs.DriveName): a disk downloaded into a session's work
+        // folder (Commodore.Software, HVSC...) is known by the mounted item - its resolver and title - so it gets the
+        // same name in every session and a second ,W finds it on the drive. A library file (outside the work
+        // folders): null - its path is already the same every time.
+        private static string WriteIdentity(Session session, string imagePath)
+        {
+            string path = (imagePath ?? "").Replace('/', '\\');
+            if (path.IndexOf("\\sessions\\", StringComparison.OrdinalIgnoreCase) < 0) return null;
+            var info = session.FloppyResolver.GetInsertedFloppyInfo();
+            string title = info.ImageName == null ? "" : new string(info.ImageName, 0, Math.Min((int)info.ImageNameLength, info.ImageName.Length)).TrimEnd('\0').Trim();
+            if (title.Length == 0) return null;
+            return session.FloppyResolver.GetType().Name + "|" + title;
         }
 
         private static string WriteFolderName(string imagePath)
@@ -1248,6 +1297,8 @@ namespace VDRIVE.Protocol
                 try { httpListenerContext.Response?.Close(); } catch { }
             }
         }
+
+        private const int GameSaveMaxBytes = 1024;     // a game's SAV- file: small (settings; SAM's Place loads it into 1 KB)
 
         private void WriteSaveResponse(HttpListenerResponse response, string text, SaveResponse saveResponse, Session session = null)
         {

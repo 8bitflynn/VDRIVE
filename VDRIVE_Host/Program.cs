@@ -37,6 +37,9 @@ namespace VDRIVE_Host
 
             configBuilder.DumpConfiguration(configuration);
 
+            // the local HVSC index (HvscPsid.LocalPath), in the background: ready before the first @HVSC search
+            VDRIVE.Util.HvscIndex.Get(configuration.FloppyResolverSettings?.HvscPsid?.LocalPath, logger);
+
             switch (configuration.ServerOrClientMode)
             {
                 case "Server":
