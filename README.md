@@ -1,3 +1,5 @@
+**VDRIVE is now on GitLab: [gitlab.com/8bitflynn/vdrive](https://gitlab.com/8bitflynn/vdrive)**
+
 <p align="center">
   <img src="docs/images/vdrive-logo.svg" alt="VDRIVE: a pixel skull and the word VDRIVE" width="360"/>
 </p>
