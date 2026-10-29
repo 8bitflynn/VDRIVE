@@ -48,7 +48,7 @@ In the browser, a C64 with an emulated WiC64 runs the real `vdrivewic64.prg`. On
 
 ## Quickstart
 
-Ready‑to‑run binaries are in the [v1.0.0‑beta release](https://github.com/8bitflynn/VDRIVE/releases/tag/v1.0.0-beta).
+Ready‑to‑run binaries are in the [v1.0.0 release](https://gitlab.com/8bitflynn/vdrive/-/releases/v1.0.0)
 
 > [!TIP]
 > No real Commodore 64 or WiC64? Use [VICE 3.10](https://vice-emu.sourceforge.io/index.html#download) with WiC64 emulation turned on, under **Settings → Userport devices**.
